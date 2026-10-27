@@ -3,6 +3,12 @@
 All notable changes are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.2.1] - 2026-10-27
+
+### Fixed
+- A new sidebar folder is now created when the name field loses focus (not only on Return); previously an unconfirmed name vanished when switching sections, and the folder could not be opened, renamed, deleted or receive files.
+- Clicking a folder row anywhere expands or collapses it.
+
 ## [0.2.0] - 2026-10-27
 
 ### Added
@@ -27,5 +33,6 @@ First public release.
 - Russian and English interface.
 - Builds: macOS Apple Silicon (`.dmg`), macOS Intel (`.dmg`), Windows x64 portable (`.exe`).
 
+[0.2.1]: https://github.com/Slipcast-dev/Grizzly/releases/tag/v0.2.1
 [0.2.0]: https://github.com/Slipcast-dev/Grizzly/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Slipcast-dev/Grizzly/releases/tag/v0.1.0

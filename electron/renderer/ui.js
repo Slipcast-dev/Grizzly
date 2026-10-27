@@ -375,8 +375,9 @@ function nameField() {
         oninput: (e) => { SidebarUI.newName = e.target.value; },
         onkeydown: (e) => {
           if (e.key === 'Enter') commitNew();
-          else if (e.key === 'Escape') { cancelNaming(); App.render(['sidebar']); }
+          else if (e.key === 'Escape') { SidebarUI.newName = ''; cancelNaming(); App.render(['sidebar']); }
         },
+        onblur: () => { if (SidebarUI.isNaming && !SidebarUI.nameError) commitNew(); },
       })),
     SidebarUI.nameError ? h('div', { class: 'name-error' }, SidebarUI.nameError) : null);
 }
@@ -398,6 +399,7 @@ function cancelNaming() {
 }
 
 function commitNew() {
+  if (!SidebarUI.isNaming) return;
   const name = SidebarUI.newName.trim();
   if (!name) { cancelNaming(); App.render(['sidebar']); return; }
   if (Library.folderExists(name)) {

@@ -17,7 +17,7 @@ Russian and English UI.
 The result is `dist/Grizzly-<version>-portable.exe`. It needs no installation: settings and the library
 are stored in a `GrizzlyData` folder next to the .exe (or in `%APPDATA%` if that folder is read-only).
 
-Command line: `Grizzly-0.2.0-portable.exe file1.md file2.csv` opens the files; a second launch hands its
+Command line: `Grizzly-0.2.1-portable.exe file1.md file2.csv` opens the files; a second launch hands its
 files to the running window.
 
 `npm run strings` regenerates the English table from `../resources/en.lproj/Localizable.strings`.

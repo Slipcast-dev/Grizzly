@@ -85,7 +85,13 @@ struct SidebarView: View {
             // Option-click opens the file in the right pane.
             state.openLibraryFile(id, inRight: NSEvent.modifierFlags.contains(.option))
         }
-        .onChange(of: section) { _ in cancelNaming() }
+        .onChange(of: section) { _ in finishNaming() }
+        // A name typed but never confirmed with Return still creates the folder when focus leaves the field.
+        .onChange(of: nameFocused) { focused in
+            guard !focused else { return }
+            if isNaming { commitNew() }
+            else if let id = renamingID, let folder = library.folders.first(where: { $0.id == id }) { commitRename(folder) }
+        }
         .quickLookPreview($previewURL)
         .onAppear(perform: installSpaceMonitor)
         .onDisappear(perform: removeSpaceMonitor)
@@ -225,6 +231,7 @@ struct SidebarView: View {
                     .fill(targetedFolder == folder.id ? Color.accentColor.opacity(0.28) : .clear)
             )
             .contentShape(Rectangle())
+            .onTapGesture { library.setExpanded(folder.id, !folder.isExpanded) }
             .dropDestination(for: String.self) { items, _ in
                 drop(items, into: folder.id)
             } isTargeted: { targeted in
@@ -360,7 +367,15 @@ struct SidebarView: View {
         pendingMove = nil
     }
 
+    /// Creates the folder if a name was typed, otherwise just closes the field.
+    private func finishNaming() {
+        guard isNaming else { return }
+        commitNew()
+        if isNaming { cancelNaming() }
+    }
+
     private func commitNew() {
+        guard isNaming else { return }
         let name = newName.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty else { cancelNaming(); return }
         guard !library.folderExists(name) else {
