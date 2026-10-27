@@ -34,8 +34,8 @@
 
 | Платформа | Файл | Примечание |
 |---|---|---|
-| macOS 13+, Apple Silicon | `Grizzly-0.3.0-arm64.dmg` | Перетащите *Grizzly* в *Программы* |
-| macOS 13+, Intel | `Grizzly-0.3.0-x64.dmg` | Перетащите *Grizzly* в *Программы* |
+| macOS 13+, Apple Silicon | `Grizzly-0.3.1-arm64.dmg` | Перетащите *Grizzly* в *Программы* |
+| macOS 13+, Intel | `Grizzly-0.3.1-x64.dmg` | Перетащите *Grizzly* в *Программы* |
 | Windows 10/11, x64 | `Grizzly-0.2.1-portable.exe` | Без установки |
 
 > [!IMPORTANT]

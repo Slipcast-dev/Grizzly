@@ -1,11 +1,11 @@
 # Installation
 
-Grizzly ships as three downloads (macOS 0.3.0, Windows 0.2.1) on the [Releases page](https://github.com/Slipcast-dev/Grizzly/releases).
+Grizzly ships as three downloads (macOS 0.3.1, Windows 0.2.1) on the [Releases page](https://github.com/Slipcast-dev/Grizzly/releases).
 
 | Platform | Asset | Requires |
 |---|---|---|
-| macOS, Apple Silicon (M1 and later) | `Grizzly-0.3.0-arm64.dmg` | macOS 13 Ventura or newer |
-| macOS, Intel | `Grizzly-0.3.0-x64.dmg` | macOS 13 Ventura or newer |
+| macOS, Apple Silicon (M1 and later) | `Grizzly-0.3.1-arm64.dmg` | macOS 13 Ventura or newer |
+| macOS, Intel | `Grizzly-0.3.1-x64.dmg` | macOS 13 Ventura or newer |
 | Windows x64 | `Grizzly-0.2.1-portable.exe` | Windows 10 or 11, 64-bit |
 
 Not sure which Mac you have? Apple menu → *About This Mac*: "Chip: Apple M…" means Apple Silicon, "Processor: Intel…" means Intel.
@@ -16,7 +16,7 @@ The release notes list a SHA-256 checksum for every file. Compare it with your d
 
 ```bash
 # macOS
-shasum -a 256 ~/Downloads/Grizzly-0.3.0-arm64.dmg
+shasum -a 256 ~/Downloads/Grizzly-0.3.1-arm64.dmg
 ```
 
 ```powershell
@@ -47,6 +47,10 @@ Or do it in Grizzly: *Settings → File types* — click an extension (or *Make 
 ### Quick Look (preview with Space)
 
 Grizzly ships a Quick Look extension that previews Markdown, YAML, CSV/TSV and log files in Finder without opening the app. Put `Grizzly.app` in `/Applications`, launch it once, then enable *Grizzly Quick Look* in *System Settings → General → Login Items & Extensions → Quick Look* (older macOS: *Privacy & Security → Extensions*). If the preview does not appear, run `qlmanage -r`.
+
+Troubleshooting:
+- *Grizzly* appears twice in the Quick Look list: macOS found more than one copy of the app. Keep only `/Applications/Grizzly.app` (delete other copies, e.g. from the Downloads folder or the mounted disk image), then run `qlmanage -r`.
+- The preview does not appear or never loads: make sure you run version 0.3.1 or later, the extension is switched on, then run `qlmanage -r` and press Space again.
 
 ## 3. Windows
 
