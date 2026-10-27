@@ -109,3 +109,13 @@
 "Обновить из папки" = "Refresh from Folder";
 "Открыть папку…" = "Open Folder…";
 "Быстрый просмотр" = "Quick Look";
+"не выбрано" = "not set";
+"Не удалось назначить: %@" = "Could not set for: %@";
+"Сейчас: %@" = "Currently: %@";
+"Открывается в Grizzly" = "Opens in Grizzly";
+"Сделать Grizzly приложением по умолчанию для всех" = "Make Grizzly the default app for all";
+"Нажмите на расширение, чтобы открывать такие файлы в Grizzly. macOS может запросить подтверждение." = "Click an extension to open such files in Grizzly. macOS may ask you to confirm.";
+"Другое расширение, например py" = "Another extension, e.g. py";
+"Добавить" = "Add";
+"Убрать из списка" = "Remove from list";
+"Типы файлов" = "File types";

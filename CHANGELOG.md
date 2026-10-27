@@ -3,6 +3,16 @@
 All notable changes are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-10-28
+
+### Added
+- macOS: **Quick Look extension** — press Space on Markdown, YAML, CSV/TSV and log files in Finder to see them formatted, without opening Grizzly. Enable it in System Settings → Login Items & Extensions → Quick Look.
+- macOS: **Settings → File types** — make Grizzly the default app for any supported extension with one click (or for all of them), and add your own extensions.
+- macOS: Grizzly declares generic text and source-code types, so it can be chosen as the default app for extensions beyond the built-in list.
+
+### Notes
+- This release is macOS-only. The Windows portable build is unchanged and stays at 0.2.1.
+
 ## [0.2.1] - 2026-10-27
 
 ### Fixed
@@ -33,6 +43,7 @@ First public release.
 - Russian and English interface.
 - Builds: macOS Apple Silicon (`.dmg`), macOS Intel (`.dmg`), Windows x64 portable (`.exe`).
 
+[0.3.0]: https://github.com/Slipcast-dev/Grizzly/releases/tag/v0.3.0
 [0.2.1]: https://github.com/Slipcast-dev/Grizzly/releases/tag/v0.2.1
 [0.2.0]: https://github.com/Slipcast-dev/Grizzly/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Slipcast-dev/Grizzly/releases/tag/v0.1.0

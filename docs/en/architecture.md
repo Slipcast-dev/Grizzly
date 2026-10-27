@@ -10,6 +10,8 @@ Sources/Grizzly/          macOS app (SwiftUI, ~2.8k lines)
   Features/   Tab bar, panes, source view, editor, find bar, sidebar, settings
   Render/     Markdown and CSV table views
   Library/    Virtual library (folders / recents / favorites) persisted as JSON
+QuickLook/    Quick Look preview extension (.appex): HTML rendering of Markdown, CSV, YAML and logs;
+              reuses Core/FileLoader, FileType, CSVTable and MarkdownParser
 resources/    App icon and Localizable.strings (ru, en)
 electron/     Windows port
   main.js       Main process: window, menu, file I/O, single-instance handoff, portable data dir
