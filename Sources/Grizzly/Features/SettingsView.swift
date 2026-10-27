@@ -44,6 +44,8 @@ struct SettingsView: View {
                 Toggle("Обновлять файл автоматически, когда он изменился на диске", isOn: $settings.autoReload)
             }
 
+            section("Типы файлов") { FileAssociationsView() }
+
             preview(theme)
         }
         .padding(22)

@@ -57,6 +57,11 @@ references — it never moves, copies or changes your files.
   *Refresh from folder* in its menu to pick up new files). Dropping a folder into the window does the same.
 - **Quick Look**: select a file in the sidebar and press Space (or use the context menu) to preview it without opening a tab.
 
+## Preview in Finder and default app (macOS)
+
+- **Finder preview**: with the *Grizzly Quick Look* extension enabled (see the installation guide), pressing Space on a Markdown, YAML, CSV/TSV or log file shows it formatted without opening Grizzly.
+- **Default app**: *Settings → File types* lists the supported extensions. Click one to open such files in Grizzly by default, use *Make Grizzly the default app for all*, or type your own extension (e.g. `py`). A checkmark means Grizzly is already the default; macOS may ask you to confirm.
+
 Where it is stored:
 
 | Platform | Location |

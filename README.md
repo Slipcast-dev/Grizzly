@@ -34,8 +34,8 @@ Get the files from the **[latest release](https://github.com/Slipcast-dev/Grizzl
 
 | Platform | File | Notes |
 |---|---|---|
-| macOS 13+, Apple Silicon | `Grizzly-0.2.1-arm64.dmg` | Drag *Grizzly* to *Applications* |
-| macOS 13+, Intel | `Grizzly-0.2.1-x64.dmg` | Drag *Grizzly* to *Applications* |
+| macOS 13+, Apple Silicon | `Grizzly-0.3.0-arm64.dmg` | Drag *Grizzly* to *Applications* |
+| macOS 13+, Intel | `Grizzly-0.3.0-x64.dmg` | Drag *Grizzly* to *Applications* |
 | Windows 10/11, x64 | `Grizzly-0.2.1-portable.exe` | Portable, no installer |
 
 > [!IMPORTANT]
@@ -57,6 +57,8 @@ Get the files from the **[latest release](https://github.com/Slipcast-dev/Grizzl
 - **Live reload** — a banner appears when the file changes on disk (handy for files written by scripts or AI tools).
 - **7 themes** (Xcode, GitHub, Solarized, Dracula, Monokai, Nord, One Dark), light / dark / follow system,
   font and size choices.
+- **Quick Look in Finder** (macOS) — press Space on Markdown, YAML, CSV or log files to preview them without opening Grizzly.
+- **Default app picker** (macOS) — Settings → File types makes Grizzly the default app for chosen extensions.
 - **English and Russian** interface.
 
 Supported extensions: `md markdown mdown txt text log json yaml yml csv tsv xml html htm ini conf toml tex rtf`.

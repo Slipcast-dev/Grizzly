@@ -37,7 +37,7 @@ cat > "$APP/Contents/Info.plist" <<EOF
   <key>CFBundleLocalizations</key><array><string>ru</string><string>en</string></array>
   <key>CFBundleExecutable</key><string>Grizzly</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.2.1</string>
+  <key>CFBundleShortVersionString</key><string>0.3.0</string>
   <key>CFBundleVersion</key><string>1</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>NSHighResolutionCapable</key><true/>
@@ -50,10 +50,30 @@ cat > "$APP/Contents/Info.plist" <<EOF
       <key>CFBundleTypeExtensions</key>
       <array>$EXTS</array>
     </dict>
+    <dict>
+      <key>CFBundleTypeName</key><string>Text and source files</string>
+      <key>CFBundleTypeRole</key><string>Viewer</string>
+      <key>LSHandlerRank</key><string>Alternate</string>
+      <key>LSItemContentTypes</key>
+      <array><string>public.text</string><string>public.plain-text</string><string>public.source-code</string><string>public.data</string></array>
+    </dict>
   </array>
 </dict>
 </plist>
 EOF
+
+# Quick Look extension (Space in Finder). Sandboxed, as the system requires for app extensions.
+APPEX="$APP/Contents/PlugIns/GrizzlyQuickLook.appex"
+mkdir -p "$APPEX/Contents/MacOS"
+swiftc -O -parse-as-library -application-extension -target "$ARCH-apple-macos13.0" \
+    -module-name GrizzlyQuickLook -Xlinker -e -Xlinker _NSExtensionMain \
+    -framework QuickLookUI \
+    -o "$APPEX/Contents/MacOS/GrizzlyQuickLook" \
+    QuickLook/*.swift Sources/Grizzly/Core/FileLoader.swift Sources/Grizzly/Core/FileType.swift \
+    Sources/Grizzly/Core/CSVTable.swift Sources/Grizzly/Core/MarkdownParser.swift
+VERSION=$(sed -n 's|.*<key>CFBundleShortVersionString</key><string>\(.*\)</string>.*|\1|p' "$APP/Contents/Info.plist")
+sed "s|__VERSION__|$VERSION|" QuickLook/Info.plist > "$APPEX/Contents/Info.plist"
+codesign --force --sign - --entitlements QuickLook/QuickLook.entitlements "$APPEX" >/dev/null
 
 codesign --force --sign - "$APP" >/dev/null
 # A fresh mtime makes Finder drop its cached (generic) icon for a rebuilt bundle.
