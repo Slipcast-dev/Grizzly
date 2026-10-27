@@ -37,7 +37,7 @@ cat > "$APP/Contents/Info.plist" <<EOF
   <key>CFBundleLocalizations</key><array><string>ru</string><string>en</string></array>
   <key>CFBundleExecutable</key><string>Grizzly</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.1.0</string>
+  <key>CFBundleShortVersionString</key><string>0.2.0</string>
   <key>CFBundleVersion</key><string>1</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>NSHighResolutionCapable</key><true/>
@@ -56,4 +56,6 @@ cat > "$APP/Contents/Info.plist" <<EOF
 EOF
 
 codesign --force --sign - "$APP" >/dev/null
+# A fresh mtime makes Finder drop its cached (generic) icon for a rebuilt bundle.
+touch "$APP"
 echo "Built $APP"

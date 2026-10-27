@@ -18,6 +18,16 @@ struct ContentView: View {
         .navigationTitle(state.current?.name ?? "Grizzly")
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
+                Menu {
+                    Button("Открыть файл…") { state.presentOpenPanel() }
+                    Button("Добавить папку с диска…") { state.presentFolderPanel() }
+                } label: {
+                    Label("Открыть", systemImage: "folder.badge.plus")
+                } primaryAction: {
+                    state.presentOpenPanel()
+                }
+                .help("Открыть файл (⌘O)")
+
                 Picker("Режим", selection: $state.mode) {
                     Text("Чтение").tag(ReadMode.reading)
                     Text("Исходник").tag(ReadMode.source)

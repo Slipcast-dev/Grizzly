@@ -23,7 +23,7 @@ const Library = {
             id: f.id, path: f.path, name: f.name || baseName(f.path), folderID: f.folderID || null,
             isFavorite: !!f.isFavorite, lastOpened: f.lastOpened || null, bookmarks: f.bookmarks || [],
           })),
-          folders: (parsed.folders || []).map((f) => ({ id: f.id, name: f.name, isExpanded: f.isExpanded !== false })),
+          folders: (parsed.folders || []).map((f) => ({ id: f.id, name: f.name, isExpanded: f.isExpanded !== false, sourcePath: f.sourcePath || null })),
         };
       }
     } catch { /* a damaged library starts empty */ }
@@ -123,6 +123,18 @@ const Library = {
     this.mutate((d) => d.folders.push(folder));
     return folder;
   },
+  /** Finds or creates the library folder that mirrors a directory on disk. */
+  folderForDirectory(dir) {
+    const same = (a, b) => (this.caseInsensitive ? a.toLowerCase() === b.toLowerCase() : a === b);
+    const existing = this.data.folders.find((f) => f.sourcePath && same(f.sourcePath, dir));
+    if (existing) return existing;
+    let name = baseName(dir) || dir;
+    const base = name;
+    for (let n = 2; this.folderExists(name); n++) name = `${base} (${n})`;
+    const folder = { id: crypto.randomUUID(), name, isExpanded: true, sourcePath: dir };
+    this.mutate((d) => d.folders.push(folder));
+    return folder;
+  },
   renameFolder(id, name) { this.mutate((d) => { const f = d.folders.find((x) => x.id === id); if (f) f.name = name; }); },
   setExpanded(id, expanded) { this.mutate((d) => { const f = d.folders.find((x) => x.id === id); if (f) f.isExpanded = expanded; }); },
   /** Files from the deleted folder go back to the root of the library. */
@@ -176,6 +188,26 @@ const App = {
       const entry = Library.add(path);
       await this.show(entry.id, path, inRight ? 'right' : null);
     }
+  },
+
+  /** Mirrors a directory into the library: supported files become entries, subdirectories become folders. */
+  async importFolder(root, rootID = null) {
+    const files = await window.api.scanDir(root);
+    if (!files) return false;
+    const rootFolder = rootID ? Library.data.folders.find((f) => f.id === rootID) : Library.folderForDirectory(root);
+    for (const { path, dir } of files) {
+      const folder = dir === root ? rootFolder : Library.folderForDirectory(dir);
+      const entry = Library.add(path);
+      if (!entry.folderID) Library.move(entry.id, folder.id);
+    }
+    return true;
+  },
+
+  /** Opens files and folders from disk; a folder is added to the sidebar with its files. */
+  async openPaths(paths, inRight = false) {
+    const files = [];
+    for (const p of paths) if (!(await this.importFolder(p))) files.push(p);
+    if (files.length) await this.open(files, inRight);
   },
 
   /** Opens a file that is already in the library (sidebar click). */

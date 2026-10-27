@@ -37,6 +37,8 @@ struct LibraryFolder: Identifiable, Codable, Hashable {
     var id = UUID()
     var name: String
     var isExpanded = true
+    /// Directory on disk this folder mirrors; nil for a purely virtual folder.
+    var sourcePath: String?
 }
 
 private struct LibraryData: Codable {
@@ -191,6 +193,25 @@ final class LibraryStore: ObservableObject {
     }
 
     // MARK: Folders
+
+    func folderURL(_ id: UUID) -> URL? {
+        guard let path = data.folders.first(where: { $0.id == id })?.sourcePath,
+              FileManager.default.fileExists(atPath: path) else { return nil }
+        return URL(fileURLWithPath: path)
+    }
+
+    /// Finds or creates the library folder that mirrors a directory on disk.
+    func folder(forDirectory url: URL, name: String) -> LibraryFolder {
+        let path = url.standardizedFileURL.path
+        if let existing = data.folders.first(where: { $0.sourcePath == path }) { return existing }
+        var unique = name
+        var n = 2
+        while folderExists(unique) { unique = "\(name) (\(n))"; n += 1 }
+        var folder = LibraryFolder(name: unique)
+        folder.sourcePath = path
+        mutate { $0.folders.append(folder) }
+        return folder
+    }
 
     @discardableResult
     func createFolder(_ name: String) -> LibraryFolder {

@@ -258,3 +258,6 @@ mark.current { background: var(--current); color: #000; }
 .edit-bar button:disabled { opacity: .4; cursor: default; }
 .edit-bar .strong { font-weight: 600; }
 .editor-text { flex: 1; min-height: 0; width: 100%; resize: none; border: 0; outline: 0; margin: 0; padding: 12px 20px; box-sizing: border-box; background: var(--bg); color: var(--text); font-family: var(--mono-font); line-height: 1.5; tab-size: 4; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.dialog.preview { width: min(820px, 92vw); height: min(640px, 86vh); }
+.preview-body { margin: 0; padding: 10px 18px 18px; overflow: auto; flex: 1; white-space: pre-wrap; word-break: break-word; user-select: text; font: 12.5px/1.5 ui-monospace, Menlo, Consolas, monospace; }

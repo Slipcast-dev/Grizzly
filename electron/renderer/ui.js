@@ -189,6 +189,13 @@ function renderToolbar() {
 
   bar.replaceChildren(
     btn('sidebar', t('Боковая панель'), () => { App.ui.sidebarVisible = !App.ui.sidebarVisible; applySidebarVisibility(); }),
+    h('button', {
+      class: 'tb', title: t('Открыть файл (⌘O)'),
+      onclick: (e) => Menus.below(e.currentTarget, [
+        { label: t('Открыть файл…'), action: () => openFiles() },
+        { label: t('Добавить папку с диска…'), action: () => openFolders() },
+      ]),
+    }, icon('folderPlus', 17)),
     h('div', { class: 'title' }, (App.current || {}).name || 'Grizzly'),
     h('div', { class: 'seg', title: t('Режим просмотра') },
       ...[['reading', 'Чтение'], ['source', 'Исходник'], ['edit', 'Правка']].map(([mode, label]) => h('button', {
@@ -440,6 +447,10 @@ function folderRow(folder) {
       onclick: () => Library.setExpanded(folder.id, !folder.isExpanded),
       oncontextmenu: (e) => Menus.at(e, [
         { label: t('Переименовать'), action: () => { SidebarUI.renameText = folder.name; SidebarUI.renamingID = folder.id; App.render(['sidebar']); } },
+        ...(folder.sourcePath ? [
+          { label: t('Показать в проводнике'), action: () => window.api.reveal(folder.sourcePath) },
+          { label: t('Обновить из папки'), action: () => App.importFolder(folder.sourcePath, folder.id) },
+        ] : []),
         { label: t('Удалить папку'), danger: true, action: () => Library.deleteFolder(folder.id) },
       ]),
       ondragover: (e) => {
@@ -495,6 +506,7 @@ function fileMenu(file) {
   return [
     { label: t('Открыть'), action: () => App.openLibraryFile(file.id) },
     { label: t('Открыть справа'), action: () => App.openLibraryFile(file.id, true) },
+    { label: t('Быстрый просмотр'), action: () => quickLook(file.id) },
     { label: file.isFavorite ? t('Убрать из избранного') : t('Добавить в избранное'), action: () => Library.toggleFavorite(file.id) },
     {
       label: t('Переместить в…'),
@@ -978,6 +990,26 @@ function renderErrorDialog() {
       h('div', { class: 'dialog-actions' }, h('button', { class: 'btn primary', autofocus: true, onclick: close }, 'OK')))));
 }
 
+// ---- Quick look: preview a file without opening it -----------------------------
+
+const PREVIEW_LIMIT = 200000;
+
+function closeQuickLook() { document.querySelectorAll('.modal-preview').forEach((n) => n.remove()); }
+
+async function quickLook(id) {
+  const file = Library.file(id);
+  if (!file) return;
+  closeQuickLook();
+  const res = await window.api.readFile(file.path);
+  if (!res.ok) { Library.setMissing(id, true); App.errorMessage = t('Не удалось открыть «%@».').replace('%@', file.name); renderErrorDialog(); return; }
+  const text = res.text.length > PREVIEW_LIMIT ? res.text.slice(0, PREVIEW_LIMIT) + '\n…' : res.text;
+  $('overlay-root').append(h('div', { class: 'modal-back modal-preview', onmousedown: (e) => { if (e.target === e.currentTarget) closeQuickLook(); } },
+    h('div', { class: 'dialog preview' },
+      h('div', { class: 'dialog-head' }, h('div', { class: 'dialog-title ellipsis' }, file.name),
+        h('button', { class: 'plain', onclick: closeQuickLook }, icon('x', 16))),
+      h('pre', { class: 'preview-body' }, text))));
+}
+
 let settingsRefresh = null;
 
 function openSettings() {
@@ -1062,6 +1094,11 @@ function openSettings() {
 
 // ---- Commands shared by menu, toolbar and boot ------------------------------
 
+async function openFolders() {
+  const dirs = await window.api.openFolderDialog();
+  for (const d of dirs || []) await App.importFolder(d);
+}
+
 async function openFiles() {
   const paths = await window.api.openDialog();
   if (paths && paths.length) App.open(paths);
@@ -1101,12 +1138,17 @@ function initDragAndDrop() {
     if (!external(e)) return;
     e.preventDefault();
     const paths = Array.from(e.dataTransfer.files).map((f) => window.api.pathForFile(f)).filter(Boolean);
-    if (paths.length) App.open(paths);
+    if (paths.length) App.openPaths(paths);
   });
 }
 
 document.addEventListener('keydown', (e) => {
+  if (e.key === ' ' && !e.ctrlKey && !e.metaKey && !e.altKey && !/^(INPUT|TEXTAREA|BUTTON)$/.test(document.activeElement && document.activeElement.tagName)) {
+    if (document.querySelector('.modal-preview')) { e.preventDefault(); closeQuickLook(); return; }
+    if (App.selectedFileID && !document.querySelector('.modal-back')) { e.preventDefault(); quickLook(App.selectedFileID); return; }
+  }
   if (e.key !== 'Escape') return;
+  if (document.querySelector('.modal-preview')) { closeQuickLook(); return; }
   if (Menus.el || Popover.el) { Menus.close(); Popover.close(); return; }
   const settings = document.querySelector('.modal-settings');
   if (settings) { settings.remove(); settingsRefresh = null; return; }
