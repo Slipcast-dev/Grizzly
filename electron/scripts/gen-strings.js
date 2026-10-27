@@ -14,6 +14,7 @@ for (const line of fs.readFileSync(src, 'utf8').split('\n')) {
 // Strings that exist only in the Windows port.
 Object.assign(table, {
   'Файл': 'File',
+  'Показать в проводнике': 'Show in Explorer',
   'Правка': 'Edit',
   'Настройки': 'Settings',
   'Настройки…': 'Settings…',

@@ -1,3 +1,4 @@
+import QuickLook
 import SwiftUI
 
 enum SidebarSection: String, CaseIterable, Identifiable {
@@ -35,6 +36,8 @@ struct SidebarView: View {
     @State private var renameText = ""
     @State private var targetedFolder: UUID?
     @FocusState private var nameFocused: Bool
+    @State private var previewURL: URL?
+    @State private var spaceMonitor: Any?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -83,6 +86,9 @@ struct SidebarView: View {
             state.openLibraryFile(id, inRight: NSEvent.modifierFlags.contains(.option))
         }
         .onChange(of: section) { _ in cancelNaming() }
+        .quickLookPreview($previewURL)
+        .onAppear(perform: installSpaceMonitor)
+        .onDisappear(perform: removeSpaceMonitor)
     }
 
     // MARK: Sections
@@ -184,6 +190,20 @@ struct SidebarView: View {
         } label: {
             folderLabel(folder, count: files.count)
         }
+        .contextMenu {
+            Button("Переименовать") {
+                renameText = folder.name
+                renamingID = folder.id
+                nameFocused = true
+            }
+            Button("Показать в Finder") {
+                if let url = library.folderURL(folder.id) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+            }
+            .disabled(library.folderURL(folder.id) == nil)
+            Button("Обновить из папки") { state.syncFolder(folder.id) }
+                .disabled(library.folderURL(folder.id) == nil)
+            Button("Удалить папку", role: .destructive) { library.deleteFolder(folder.id) }
+        }
     }
 
     @ViewBuilder
@@ -210,14 +230,6 @@ struct SidebarView: View {
             } isTargeted: { targeted in
                 targetedFolder = targeted ? folder.id : (targetedFolder == folder.id ? nil : targetedFolder)
             }
-            .contextMenu {
-                Button("Переименовать") {
-                    renameText = folder.name
-                    renamingID = folder.id
-                    nameFocused = true
-                }
-                Button("Удалить папку", role: .destructive) { library.deleteFolder(folder.id) }
-            }
         }
     }
 
@@ -242,6 +254,16 @@ struct SidebarView: View {
         .contentShape(Rectangle())
         .tag(file.id)
         .draggable(file.id.uuidString)
+        // Hit-testing of a draggable row is flaky near its edges; handle the click on the whole row ourselves.
+        .simultaneousGesture(TapGesture().onEnded {
+            let inRight = NSEvent.modifierFlags.contains(.option)
+            if state.selectedFileID == file.id {
+                state.openLibraryFile(file.id, inRight: inRight)
+            } else {
+                state.selectedFileID = file.id
+            }
+        })
+        .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
         .contextMenu { fileMenu(file) }
     }
 
@@ -249,6 +271,7 @@ struct SidebarView: View {
     private func fileMenu(_ file: LibraryFile) -> some View {
         Button("Открыть") { state.openLibraryFile(file.id) }
         Button("Открыть справа") { state.openLibraryFile(file.id, inRight: true) }
+        Button("Быстрый просмотр") { quickLook(file.id) }
         Button(LocalizedStringKey(file.isFavorite ? "Убрать из избранного" : "Добавить в избранное")) {
             library.toggleFavorite(file.id)
         }
@@ -288,6 +311,37 @@ struct SidebarView: View {
                 Text(nameError).font(.caption).foregroundColor(.red)
             }
         }
+    }
+
+    // MARK: Quick Look
+
+    /// Previews the file in the system Quick Look panel without opening it in a tab.
+    private func quickLook(_ id: UUID?) {
+        guard let id, library.file(id) != nil else { return }
+        guard let url = library.resolve(id) else {
+            state.errorMessage = L("Файл «%@» не найден. Возможно, он перемещён или удалён.", library.file(id)?.name ?? "")
+            return
+        }
+        previewURL = url
+    }
+
+    /// Space previews the selected sidebar file, unless text is being typed somewhere.
+    private func installSpaceMonitor() {
+        guard spaceMonitor == nil else { return }
+        spaceMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.keyCode == 49,
+                  event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty,
+                  !(NSApp.keyWindow?.firstResponder is NSText),
+                  NSApp.keyWindow?.identifier?.rawValue.contains("QLPreview") != true,
+                  state.selectedFileID != nil else { return event }
+            if previewURL != nil { previewURL = nil } else { quickLook(state.selectedFileID) }
+            return nil
+        }
+    }
+
+    private func removeSpaceMonitor() {
+        if let spaceMonitor { NSEvent.removeMonitor(spaceMonitor) }
+        spaceMonitor = nil
     }
 
     // MARK: Actions

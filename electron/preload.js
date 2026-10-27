@@ -3,6 +3,8 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 contextBridge.exposeInMainWorld('api', {
   info: () => ipcRenderer.invoke('app:info'),
   openDialog: () => ipcRenderer.invoke('dialog:open'),
+  openFolderDialog: () => ipcRenderer.invoke('dialog:openFolder'),
+  scanDir: (dir) => ipcRenderer.invoke('fs:scanDir', dir),
   readFile: (file) => ipcRenderer.invoke('file:read', file),
   writeFile: (file, text, encoding) => ipcRenderer.invoke('file:write', file, text, encoding),
   confirmSave: (name) => ipcRenderer.invoke('dialog:confirmSave', name),

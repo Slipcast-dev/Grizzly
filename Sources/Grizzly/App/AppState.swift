@@ -54,6 +54,10 @@ final class AppState: ObservableObject {
     /// Opens files from disk (Open panel, drag and drop, Finder) and adds them to the library.
     func open(urls: [URL], inRight: Bool = false) {
         for url in urls {
+            if (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
+                importFolder(url)
+                continue
+            }
             let entry = library.add(url: url)
             show(entry.id, url: url, pane: inRight ? .right : nil)
         }
@@ -101,6 +105,39 @@ final class AppState: ObservableObject {
         panel.canChooseDirectories = false
         panel.allowedContentTypes = FileType.allExtensions.compactMap { UTType(filenameExtension: $0) }
         if panel.runModal() == .OK { open(urls: panel.urls) }
+    }
+
+    func presentFolderPanel() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = true
+        if panel.runModal() == .OK { for url in panel.urls { importFolder(url) } }
+    }
+
+    /// Mirrors a directory into the library: its supported files (subfolders too) become entries in folders named after the directories.
+    func importFolder(_ url: URL) {
+        let root = library.folder(forDirectory: url, name: url.lastPathComponent)
+        syncFolder(root.id, root: url)
+    }
+
+    /// Re-scans a folder that was added from disk and adds files that appeared since.
+    func syncFolder(_ id: UUID, root: URL? = nil) {
+        guard let rootURL = root ?? library.folderURL(id) else { return }
+        let fm = FileManager.default
+        let supported = Set(FileType.allExtensions)
+        guard let walker = fm.enumerator(at: rootURL, includingPropertiesForKeys: [.isRegularFileKey],
+                                         options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { return }
+        for case let file as URL in walker {
+            guard supported.contains(file.pathExtension.lowercased()),
+                  (try? file.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { continue }
+            let dir = file.deletingLastPathComponent()
+            let target = dir.standardizedFileURL == rootURL.standardizedFileURL
+                ? id
+                : library.folder(forDirectory: dir, name: dir.lastPathComponent).id
+            let entry = library.add(url: file)
+            if entry.folderID == nil { library.move(entry.id, to: target) }
+        }
     }
 
     // MARK: File watching

@@ -302,6 +302,29 @@ ipcMain.handle('dialog:open', async () => {
   return result.canceled ? [] : result.filePaths;
 });
 
+ipcMain.handle('dialog:openFolder', async () => {
+  const result = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'multiSelections'] });
+  return result.canceled ? [] : result.filePaths;
+});
+
+/** Supported files under a directory (subfolders included), grouped by their directory. Null if the path is not a directory. */
+ipcMain.handle('fs:scanDir', (_e, root) => {
+  try { if (!fs.statSync(root).isDirectory()) return null; } catch { return null; }
+  const out = [];
+  const walk = (dir, depth) => {
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const ent of entries) {
+      if (ent.name.startsWith('.')) continue;
+      const full = path.join(dir, ent.name);
+      if (ent.isDirectory()) { if (depth < 8) walk(full, depth + 1); }
+      else if (ent.isFile() && EXTENSIONS.includes(path.extname(ent.name).slice(1).toLowerCase())) out.push({ path: full, dir });
+    }
+  };
+  walk(root, 0);
+  return out;
+});
+
 ipcMain.handle('file:read', (_e, file) => {
   try {
     const { text, encoding } = readText(file);
