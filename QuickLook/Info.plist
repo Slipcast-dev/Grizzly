@@ -24,6 +24,7 @@
         <string>public.tab-separated-values-text</string>
         <string>com.apple.log</string>
       </array>
+      <key>QLIsDataBasedPreview</key><true/>
       <key>QLSupportsSearchableItems</key><false/>
     </dict>
   </dict>
