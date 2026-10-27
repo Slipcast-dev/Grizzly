@@ -52,6 +52,7 @@ The line-number gutter can be turned off in Settings.
 The sidebar holds a **virtual library**: your own folders, recents and favorites (⭐). It is only a list of
 references — it never moves, copies or changes your files.
 
+- **New folder** (the folder button in the sidebar header): type a name and press Return (leaving the field also saves it). Drag files onto a folder to move them; right-click a folder to rename or delete it.
 - **Open** in the toolbar opens a file or adds a whole folder from disk (subfolders become sidebar folders; use
   *Refresh from folder* in its menu to pick up new files). Dropping a folder into the window does the same.
 - **Quick Look**: select a file in the sidebar and press Space (or use the context menu) to preview it without opening a tab.
