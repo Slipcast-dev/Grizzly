@@ -1,0 +1,1128 @@
+/* Views: sidebar, toolbar, tabs, panes, find bar, dialogs. Port of Features/*.swift and Render/*.swift. */
+
+// ---- Helpers ---------------------------------------------------------------
+
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  if (attrs) {
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v == null || v === false) continue;
+      if (k === 'class') el.className = v;
+      else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
+      else if (k === 'dataset') Object.assign(el.dataset, v);
+      else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+      else if (k in el) el[k] = v;
+      else el.setAttribute(k, v === true ? '' : v);
+    }
+  }
+  for (const kid of kids.flat(Infinity)) {
+    if (kid == null || kid === false) continue;
+    el.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+  }
+  return el;
+}
+
+const ICONS = {
+  search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  folderPlus: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 10.5v5M9.5 13h5"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  star: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>',
+  bookmark: '<path d="M6 3h12v18l-6-4-6 4z"/>',
+  split: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/>',
+  rightPane: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4h7a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-7z" fill="currentColor"/>',
+  sidebar: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/>',
+  x: '<path d="M6 6l12 12M18 6 6 18"/>',
+  xCircle: '<circle cx="12" cy="12" r="9" fill="currentColor" stroke="none"/><path d="M9 9l6 6M15 9l-6 6" stroke="var(--bg)"/>',
+  up: '<path d="m6 15 6-6 6 6"/>',
+  down: '<path d="m6 9 6 6 6-6"/>',
+  right: '<path d="m9 6 6 6-6 6"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>',
+  docRich: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>',
+  doc: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
+  docPlain: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 12h6M9 15h6M9 18h4"/>',
+  docSearch: '<path d="M13 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4"/><path d="M13 3l5 5v2"/><circle cx="16" cy="16" r="3.5"/><path d="m21 21-2.5-2.5"/>',
+  docPlus: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 11v6M9 14h6"/>',
+  braces: '<path d="M8 4c-2 0-3 1-3 3v2c0 1-1 3-2 3 1 0 2 2 2 3v2c0 2 1 3 3 3M16 4c2 0 3 1 3 3v2c0 1 1 3 2 3-1 0-2 2-2 3v2c0 2-1 3-3 3"/>',
+  table: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16M15 4v16"/>',
+  list: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h.01M7 12h.01M7 15h.01M11 9h6M11 12h6M11 15h6"/>',
+  warning: '<path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/>',
+  refresh: '<path d="M20 11a8 8 0 0 0-14-4L4 9M4 4v5h5M4 13a8 8 0 0 0 14 4l2-2M20 20v-5h-5"/>',
+};
+
+function icon(name, size = 16, fill = false) {
+  const span = document.createElement('span');
+  span.className = 'ico';
+  span.innerHTML = `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="${fill ? 'currentColor' : 'none'}" `
+    + `stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg>`;
+  return span;
+}
+
+const typeIcon = (type, size = 15) => icon(TYPE_ICONS[type] || 'docPlain', size);
+const $ = (id) => document.getElementById(id);
+
+function relativeTime(iso) {
+  const diff = (Date.parse(iso) - Date.now()) / 1000;
+  const rtf = new Intl.RelativeTimeFormat(LANG === 'ru' ? 'ru' : 'en', { numeric: 'auto', style: 'short' });
+  const units = [['year', 31536000], ['month', 2592000], ['day', 86400], ['hour', 3600], ['minute', 60]];
+  for (const [unit, secs] of units) if (Math.abs(diff) >= secs) return rtf.format(Math.round(diff / secs), unit);
+  return rtf.format(Math.round(diff), 'second');
+}
+
+// ---- Context menus and popovers -------------------------------------------
+
+const Menus = {
+  el: null,
+
+  close() {
+    if (this.el) { this.el.remove(); this.el = null; }
+  },
+
+  build(items) {
+    const menu = h('div', { class: 'menu' });
+    for (const item of items) {
+      if (item.separator) { menu.append(h('div', { class: 'sep' })); continue; }
+      const row = h('div', {
+        class: 'mi' + (item.disabled ? ' disabled' : '') + (item.danger ? ' danger' : ''),
+        onclick: () => {
+          if (item.disabled || item.submenu) return;
+          Menus.close();
+          item.action();
+        },
+      }, h('span', null, item.label), item.submenu ? icon('right', 12) : null);
+      if (item.submenu) row.append(Object.assign(this.build(item.submenu), { className: 'menu sub' }));
+      menu.append(row);
+    }
+    return menu;
+  },
+
+  show(x, y, items) {
+    this.close();
+    const menu = this.build(items);
+    menu.classList.add('ctx');
+    $('overlay-root').append(menu);
+    const r = menu.getBoundingClientRect();
+    menu.style.left = Math.max(4, Math.min(x, innerWidth - r.width - 4)) + 'px';
+    menu.style.top = Math.max(4, Math.min(y, innerHeight - r.height - 4)) + 'px';
+    this.el = menu;
+  },
+
+  at(event, items) {
+    event.preventDefault();
+    this.show(event.clientX, event.clientY, items);
+  },
+
+  below(anchor, items) {
+    const r = anchor.getBoundingClientRect();
+    this.show(r.left, r.bottom + 2, items);
+  },
+};
+
+const Popover = {
+  el: null,
+  close() {
+    if (this.el) { this.el.remove(); this.el = null; }
+  },
+  show(anchor, content) {
+    this.close();
+    const pop = h('div', { class: 'popover' }, content);
+    $('overlay-root').append(pop);
+    const a = anchor.getBoundingClientRect();
+    const r = pop.getBoundingClientRect();
+    pop.style.left = Math.max(8, Math.min(a.right - r.width, innerWidth - r.width - 8)) + 'px';
+    pop.style.top = a.bottom + 6 + 'px';
+    this.el = pop;
+  },
+};
+
+document.addEventListener('mousedown', (e) => {
+  if (Menus.el && !Menus.el.contains(e.target)) Menus.close();
+  if (Popover.el && !Popover.el.contains(e.target) && !e.target.closest('[data-popover-anchor]')) Popover.close();
+}, true);
+window.addEventListener('blur', () => { Menus.close(); });
+
+// ---- Render scheduling -----------------------------------------------------
+
+const pendingParts = new Set();
+let flushScheduled = false;
+
+App.render = (parts) => {
+  parts.forEach((p) => pendingParts.add(p));
+  if (!flushScheduled) { flushScheduled = true; setTimeout(flush, 0); }
+};
+
+function flush() {
+  flushScheduled = false;
+  const has = (p) => pendingParts.has('all') || pendingParts.has(p);
+  const sidebar = has('sidebar');
+  const toolbar = has('toolbar') || has('main');
+  const main = has('main');
+  const tabs = !main && has('tabs');
+  const dialogs = has('dialogs');
+  pendingParts.clear();
+
+  if (sidebar) renderSidebar();
+  if (toolbar) renderToolbar();
+  if (main) renderMain();
+  else if (tabs) { renderTabs(); updatePaneFocus(); }
+  if (dialogs) renderErrorDialog();
+  if (main || toolbar) {
+    const cur = App.current;
+    document.title = cur ? `${cur.name} — Grizzly` : 'Grizzly';
+  }
+}
+
+Library.onChange = () => App.render(['sidebar', 'toolbar']);
+
+// ---- Toolbar ---------------------------------------------------------------
+
+function renderToolbar() {
+  const bar = $('toolbar');
+  const noDocs = App.documents.length === 0;
+  const btn = (name, title, onclick, extra = {}) => h('button', { class: 'tb', title, onclick, ...extra }, icon(name, 17));
+
+  const bookmarkLines = Library.bookmarks((App.current || {}).libraryID);
+  const bmBtn = h('button', {
+    class: 'tb', title: t('Закладки'), disabled: !App.current, 'data-popover-anchor': '1',
+    onclick: (e) => toggleBookmarksPopover(e.currentTarget),
+  }, icon('bookmark', 17, bookmarkLines.length > 0));
+
+  bar.replaceChildren(
+    btn('sidebar', t('Боковая панель'), () => { App.ui.sidebarVisible = !App.ui.sidebarVisible; applySidebarVisibility(); }),
+    h('div', { class: 'title' }, (App.current || {}).name || 'Grizzly'),
+    h('div', { class: 'seg', title: t('Режим просмотра') },
+      ...[['reading', 'Чтение'], ['source', 'Исходник'], ['edit', 'Правка']].map(([mode, label]) => h('button', {
+        class: App.mode === mode ? 'on' : '', onclick: () => App.setMode(mode),
+      }, t(label)))),
+    btn(App.isSplit ? 'rightPane' : 'split', t('Два файла рядом (⌘\\)'), () => App.toggleSplit(), { disabled: noDocs, class: 'tb' + (App.isSplit ? ' active' : '') }),
+    btn('search', t('Найти (⌘F)'), () => App.showFind(), { disabled: noDocs }),
+    bmBtn,
+    h('button', { class: 'tb text', title: t('Уменьшить текст'), onclick: () => Prefs.resizeFont(-1) }, 'A−'),
+    h('button', { class: 'tb text big', title: t('Увеличить текст'), onclick: () => Prefs.resizeFont(1) }, 'A+'),
+    btn('gear', t('Настройки'), () => openSettings()),
+  );
+}
+
+function toggleBookmarksPopover(anchor) {
+  if (Popover.el) { Popover.close(); return; }
+  const doc = App.current;
+  if (!doc) return;
+
+  const content = h('div', { class: 'bookmarks' });
+  const fill = () => {
+    const lines = Library.bookmarks(doc.libraryID);
+    content.replaceChildren(h('div', { class: 'pop-title' }, t('Закладки')));
+    if (!lines.length) {
+      content.append(h('div', { class: 'muted' }, t('Пока нет закладок. В режиме «Исходник» нажмите на номер строки, чтобы поставить закладку.')));
+      return;
+    }
+    const list = h('div', { class: 'bm-list' });
+    for (const line of lines) {
+      const preview = doc.lines[line - 1] ?? '';
+      list.append(h('div', { class: 'bm-row' },
+        h('button', {
+          class: 'bm-go',
+          onclick: () => { Popover.close(); App.goToLine(line - 1); },
+        }, h('span', { class: 'bm-num' }, line),
+        h('span', { class: 'bm-text' }, preview.trim() ? preview : t('(пустая строка)'))),
+        h('button', {
+          class: 'bm-del', title: t('Убрать закладку'),
+          onclick: () => { Library.toggleBookmark(doc.libraryID, line); syncBookmarks(); fill(); },
+        }, icon('xCircle', 15))));
+    }
+    content.append(list);
+  };
+  fill();
+  Popover.show(anchor, content);
+}
+
+/** Repaints bookmark markers in the source view without rebuilding it. */
+function syncBookmarks() {
+  document.querySelectorAll('.pane').forEach((paneEl) => {
+    const doc = App.doc(paneEl.dataset.pane);
+    if (!doc) return;
+    const set = new Set(Library.bookmarks(doc.libraryID));
+    paneEl.querySelectorAll('.gutter').forEach((g) => {
+      const on = set.has(Number(g.dataset.line));
+      g.classList.toggle('bookmarked', on);
+      g.title = on ? t('Убрать закладку') : t('Поставить закладку');
+    });
+  });
+  renderToolbar();
+}
+
+// ---- Sidebar ---------------------------------------------------------------
+
+const SidebarUI = {
+  query: '',
+  isNaming: false,
+  newName: '',
+  nameError: null,
+  pendingMove: null,
+  renamingID: null,
+  renameText: '',
+  targetedFolder: null,
+  focusName: false,
+};
+
+const SECTIONS = [
+  { id: 'files', icon: 'folder', title: () => t('Файлы') },
+  { id: 'recent', icon: 'clock', title: () => t('Недавние') },
+  { id: 'favorites', icon: 'star', title: () => t('Избранное') },
+];
+
+function buildSidebarFrame() {
+  const side = $('sidebar');
+  side.replaceChildren(
+    h('div', { class: 'side-seg', id: 'side-seg' }),
+    h('div', { class: 'filter' },
+      icon('search', 14),
+      h('input', {
+        id: 'filter-input', type: 'text', placeholder: t('Фильтр файлов'), spellcheck: false,
+        oninput: (e) => { SidebarUI.query = e.target.value; renderSidebarList(); renderFilterClear(); },
+      }),
+      h('button', { id: 'filter-clear', class: 'plain', hidden: true, onclick: () => {
+        SidebarUI.query = ''; $('filter-input').value = ''; renderSidebarList(); renderFilterClear();
+      } }, icon('xCircle', 14))),
+    h('div', { id: 'side-list', class: 'side-list' }),
+  );
+  const list = $('side-list');
+  list.addEventListener('dragover', (e) => {
+    if (App.ui.sidebarSection === 'files' && e.dataTransfer.types.includes('application/x-grizzly-file')) e.preventDefault();
+  });
+  list.addEventListener('drop', (e) => {
+    const id = e.dataTransfer.getData('application/x-grizzly-file');
+    if (id && App.ui.sidebarSection === 'files' && !e.defaultPrevented) { e.preventDefault(); dropFile(id, null); }
+  });
+}
+
+function renderFilterClear() { $('filter-clear').hidden = !SidebarUI.query; }
+
+function renderSidebar() {
+  const seg = $('side-seg');
+  seg.replaceChildren(...SECTIONS.map((s) => h('button', {
+    class: App.ui.sidebarSection === s.id ? 'on' : '', title: s.title(),
+    onclick: () => { App.ui.sidebarSection = s.id; cancelNaming(); App.render(['sidebar']); },
+  }, icon(s.icon, 16))));
+  renderSidebarList();
+}
+
+const matchesQuery = (file) => !SidebarUI.query || file.name.toLowerCase().includes(SidebarUI.query.toLowerCase());
+const filtered = (files) => files.filter(matchesQuery);
+
+function renderSidebarList() {
+  const list = $('side-list');
+  const scroll = list.scrollTop;
+  const section = App.ui.sidebarSection;
+  const frag = document.createDocumentFragment();
+
+  if (section === 'files') {
+    const head = h('div', { class: 'sec-head' }, h('span', null, t('Файлы')),
+      h('button', {
+        class: 'plain', title: t('Новая папка'),
+        onclick: () => { SidebarUI.pendingMove = null; beginNaming(); },
+      }, icon('folderPlus', 16)));
+    frag.append(head);
+    if (SidebarUI.isNaming) frag.append(nameField());
+    const folders = SidebarUI.query
+      ? Library.folders.filter((f) => filtered(Library.filesIn(f.id)).length)
+      : Library.folders;
+    folders.forEach((f) => frag.append(folderRow(f)));
+    filtered(Library.filesIn(null)).forEach((f) => frag.append(fileRow(f)));
+    if (!Library.folders.length && !Library.filesIn(null).length && !SidebarUI.isNaming) {
+      frag.append(hint('docPlus', t('Откройте файл (⌘O) или перетащите его в окно.')));
+    }
+  } else if (section === 'recent') {
+    const items = filtered(Library.recents);
+    if (items.length) {
+      frag.append(h('div', { class: 'sec-head' }, h('span', null, t('Недавно открытые')),
+        h('button', { class: 'plain link', onclick: () => Library.clearRecents() }, t('Очистить'))));
+      items.forEach((f) => frag.append(fileRow(f, true)));
+    }
+    if (!Library.recents.length) frag.append(hint('clock', t('Здесь появятся файлы, которые вы открывали.')));
+  } else {
+    const items = filtered(Library.favorites);
+    if (items.length) {
+      frag.append(h('div', { class: 'sec-head' }, h('span', null, t('Избранное'))));
+      items.forEach((f) => frag.append(fileRow(f)));
+    }
+    if (!Library.favorites.length) frag.append(hint('star', t('Добавьте файл в избранное через контекстное меню.')));
+  }
+
+  list.replaceChildren(frag);
+  list.scrollTop = scroll;
+  if (SidebarUI.focusName) {
+    SidebarUI.focusName = false;
+    const input = list.querySelector('input.inline-name');
+    if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
+  }
+}
+
+const hint = (iconName, text) => h('div', { class: 'hint' }, icon(iconName, 26), h('div', null, text));
+
+function nameField() {
+  return h('div', { class: 'name-field' },
+    h('div', { class: 'name-row' }, icon('folder', 15),
+      h('input', {
+        class: 'inline-name', type: 'text', value: SidebarUI.newName, placeholder: t('Название папки'), spellcheck: false,
+        oninput: (e) => { SidebarUI.newName = e.target.value; },
+        onkeydown: (e) => {
+          if (e.key === 'Enter') commitNew();
+          else if (e.key === 'Escape') { cancelNaming(); App.render(['sidebar']); }
+        },
+      })),
+    SidebarUI.nameError ? h('div', { class: 'name-error' }, SidebarUI.nameError) : null);
+}
+
+function beginNaming() {
+  SidebarUI.newName = '';
+  SidebarUI.nameError = null;
+  SidebarUI.isNaming = true;
+  SidebarUI.focusName = true;
+  App.ui.sidebarSection = 'files';
+  App.render(['sidebar']);
+}
+
+function cancelNaming() {
+  SidebarUI.isNaming = false;
+  SidebarUI.newName = '';
+  SidebarUI.nameError = null;
+  SidebarUI.pendingMove = null;
+}
+
+function commitNew() {
+  const name = SidebarUI.newName.trim();
+  if (!name) { cancelNaming(); App.render(['sidebar']); return; }
+  if (Library.folderExists(name)) {
+    SidebarUI.nameError = t('Папка с таким именем уже есть.');
+    SidebarUI.focusName = true;
+    App.render(['sidebar']);
+    return;
+  }
+  const folder = Library.createFolder(name);
+  if (SidebarUI.pendingMove) Library.move(SidebarUI.pendingMove, folder.id);
+  cancelNaming();
+  App.render(['sidebar']);
+}
+
+function commitRename(folder) {
+  const name = SidebarUI.renameText.trim();
+  if (name && name !== folder.name && !Library.folderExists(name)) Library.renameFolder(folder.id, name);
+  SidebarUI.renamingID = null;
+  App.render(['sidebar']);
+}
+
+function dropFile(fileID, folderID) {
+  if (Library.file(fileID)) Library.move(fileID, folderID);
+}
+
+function folderRow(folder) {
+  const files = filtered(Library.filesIn(folder.id));
+  const wrap = h('div', { class: 'folder' });
+  const expanded = folder.isExpanded;
+
+  let head;
+  if (SidebarUI.renamingID === folder.id) {
+    head = h('div', { class: 'folder-head' }, icon(expanded ? 'down' : 'right', 12), icon('folder', 15),
+      h('input', {
+        class: 'inline-name', type: 'text', value: SidebarUI.renameText, spellcheck: false,
+        oninput: (e) => { SidebarUI.renameText = e.target.value; },
+        onkeydown: (e) => {
+          if (e.key === 'Enter') commitRename(folder);
+          else if (e.key === 'Escape') { SidebarUI.renamingID = null; App.render(['sidebar']); }
+        },
+        onblur: () => { if (SidebarUI.renamingID === folder.id) commitRename(folder); },
+      }));
+    SidebarUI.focusName = true;
+  } else {
+    head = h('div', {
+      class: 'folder-head' + (SidebarUI.targetedFolder === folder.id ? ' targeted' : ''),
+      onclick: () => Library.setExpanded(folder.id, !folder.isExpanded),
+      oncontextmenu: (e) => Menus.at(e, [
+        { label: t('Переименовать'), action: () => { SidebarUI.renameText = folder.name; SidebarUI.renamingID = folder.id; App.render(['sidebar']); } },
+        { label: t('Удалить папку'), danger: true, action: () => Library.deleteFolder(folder.id) },
+      ]),
+      ondragover: (e) => {
+        if (!e.dataTransfer.types.includes('application/x-grizzly-file')) return;
+        e.preventDefault();
+        e.currentTarget.classList.add('targeted');
+      },
+      ondragleave: (e) => e.currentTarget.classList.remove('targeted'),
+      ondrop: (e) => {
+        const id = e.dataTransfer.getData('application/x-grizzly-file');
+        if (!id) return;
+        e.preventDefault();
+        e.stopPropagation();
+        dropFile(id, folder.id);
+      },
+    }, icon(expanded ? 'down' : 'right', 12), icon('folder', 15),
+    h('span', { class: 'grow ellipsis' }, folder.name), h('span', { class: 'count' }, files.length));
+  }
+  wrap.append(head);
+  if (expanded) {
+    const body = h('div', { class: 'folder-body' }, files.map((f) => fileRow(f)));
+    if (!files.length && !SidebarUI.query) body.append(h('div', { class: 'muted small pad' }, t('Пусто. Перетащите сюда файл.')));
+    wrap.append(body);
+  }
+  return wrap;
+}
+
+function fileRow(file, showsDate = false) {
+  const missing = Library.isMissing(file.id);
+  return h('div', {
+    class: 'file' + (App.selectedFileID === file.id ? ' selected' : '') + (missing ? ' missing' : ''),
+    draggable: true,
+    title: file.path,
+    ondragstart: (e) => {
+      e.dataTransfer.setData('application/x-grizzly-file', file.id);
+      e.dataTransfer.effectAllowed = 'move';
+    },
+    onclick: (e) => {
+      App.selectedFileID = file.id;
+      App.openLibraryFile(file.id, e.altKey);
+      document.querySelectorAll('.file.selected').forEach((n) => n.classList.remove('selected'));
+      e.currentTarget.classList.add('selected');
+    },
+    oncontextmenu: (e) => Menus.at(e, fileMenu(file)),
+  },
+  missing ? icon('warning', 15) : typeIcon(file.type, 15),
+  h('span', { class: 'grow ellipsis' }, file.name),
+  showsDate && file.lastOpened ? h('span', { class: 'small muted' }, relativeTime(file.lastOpened)) : null,
+  file.isFavorite ? h('span', { class: 'fav' }, icon('star', 12, true)) : null);
+}
+
+function fileMenu(file) {
+  return [
+    { label: t('Открыть'), action: () => App.openLibraryFile(file.id) },
+    { label: t('Открыть справа'), action: () => App.openLibraryFile(file.id, true) },
+    { label: file.isFavorite ? t('Убрать из избранного') : t('Добавить в избранное'), action: () => Library.toggleFavorite(file.id) },
+    {
+      label: t('Переместить в…'),
+      submenu: [
+        ...Library.folders.map((f) => ({ label: f.name, disabled: file.folderID === f.id, action: () => Library.move(file.id, f.id) })),
+        ...(file.folderID ? [{ separator: true }, { label: t('Вне папки'), action: () => Library.move(file.id, null) }] : []),
+        { separator: true },
+        { label: t('Новая папка…'), action: () => { SidebarUI.pendingMove = file.id; beginNaming(); } },
+      ],
+    },
+    { separator: true },
+    { label: t('Показать в проводнике'), action: () => window.api.reveal(file.path) },
+    { label: t('Убрать из библиотеки'), danger: true, action: () => App.removeFromLibrary(file.id) },
+  ];
+}
+
+function applySidebarVisibility() {
+  document.body.classList.toggle('no-sidebar', !App.ui.sidebarVisible);
+}
+
+function initResizer() {
+  const saved = Number(localStorage.getItem('grizzly.sidebarW') || localStorage.getItem('mdreader.sidebarW'));
+  setSidebarWidth(saved >= 190 && saved <= 420 ? saved : 240);
+  const bar = $('resizer');
+  bar.addEventListener('pointerdown', (e) => {
+    bar.setPointerCapture(e.pointerId);
+    const move = (ev) => setSidebarWidth(Math.min(420, Math.max(190, ev.clientX)));
+    const up = () => {
+      bar.removeEventListener('pointermove', move);
+      bar.removeEventListener('pointerup', up);
+      try { localStorage.setItem('grizzly.sidebarW', String(parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-w'), 10))); } catch { /* ignore */ }
+    };
+    bar.addEventListener('pointermove', move);
+    bar.addEventListener('pointerup', up);
+  });
+}
+
+function setSidebarWidth(px) { document.documentElement.style.setProperty('--sidebar-w', px + 'px'); }
+
+// ---- Main area: tabs, find bar, panes -------------------------------------
+
+const scrollMemory = new Map();
+let lastScrollToken = null;
+let lastFindFocusToken = 0;
+let findBarEl = null;
+let findDebounce = null;
+
+function buildMainFrame() {
+  const input = h('input', {
+    id: 'find-input', type: 'text', placeholder: t('Найти в документе'), spellcheck: false,
+    oninput: (e) => {
+      clearTimeout(findDebounce);
+      const value = e.target.value;
+      findDebounce = setTimeout(() => App.setQuery(value), 60);
+    },
+    onkeydown: (e) => {
+      if (e.key === 'Enter') { clearTimeout(findDebounce); App.findQuery === e.target.value || (App.findQuery = e.target.value, App.recomputeMatches(true)); App.stepMatch(e.shiftKey ? -1 : 1); }
+      else if (e.key === 'Escape') App.hideFind();
+    },
+  });
+  findBarEl = h('div', { id: 'findbar', hidden: true },
+    icon('search', 15), input,
+    h('span', { id: 'find-count' }),
+    h('button', { class: 'plain', title: t('Предыдущее совпадение (⌘⇧G)'), onclick: () => App.stepMatch(-1) }, icon('up', 16)),
+    h('button', { class: 'plain', title: t('Следующее совпадение (⌘G)'), onclick: () => App.stepMatch(1) }, icon('down', 16)),
+    h('button', { class: 'plain link', onclick: () => App.hideFind() }, t('Готово')));
+
+  $('main').replaceChildren(
+    h('div', { id: 'empty', hidden: true }),
+    h('div', { id: 'tabs' }),
+    findBarEl,
+    h('div', { id: 'panes' }));
+
+  // Links inside rendered Markdown open in the default browser.
+  $('main').addEventListener('click', (e) => {
+    const a = e.target.closest('a[data-url]');
+    if (!a) return;
+    e.preventDefault();
+    window.api.openExternal(a.dataset.url);
+  });
+}
+
+function renderMain() {
+  const empty = App.documents.length === 0;
+  $('empty').hidden = !empty;
+  $('tabs').hidden = empty;
+  $('panes').hidden = empty;
+  if (empty) {
+    renderEmpty();
+    findBarEl.hidden = true;
+    return;
+  }
+  renderTabs();
+  renderFind();
+  renderPanes();
+}
+
+function renderEmpty() {
+  $('empty').replaceChildren(
+    h('div', { class: 'empty-card' },
+      icon('docSearch', 46),
+      h('div', { class: 'empty-title' }, t('Откройте файл')),
+      h('div', { class: 'muted center pre' }, t('Перетащите Markdown или текстовый файл в окно\nили нажмите ⌘O.')),
+      h('button', { class: 'btn', onclick: () => openFiles() }, t('Открыть…'))));
+}
+
+function renderFind() {
+  findBarEl.hidden = !App.isFindVisible;
+  if (!App.isFindVisible) return;
+  const input = $('find-input');
+  if (document.activeElement !== input && input.value !== App.findQuery) input.value = App.findQuery;
+  const count = $('find-count');
+  if (!App.findQuery) count.textContent = '';
+  else if (!App.matches.length) count.textContent = t('Нет совпадений');
+  else count.textContent = t('%d из %d', App.matchIndex + 1, App.matches.length);
+  if (App.findFocusToken !== lastFindFocusToken) {
+    lastFindFocusToken = App.findFocusToken;
+    input.focus();
+    input.select();
+  }
+}
+
+function renderTabs() {
+  const bar = $('tabs');
+  const scroll = bar.scrollLeft;
+  bar.replaceChildren(...App.documents.map(tabItem));
+  bar.scrollLeft = scroll;
+}
+
+function tabItem(doc) {
+  const isLeft = App.selection === doc.id;
+  const isRight = App.isSplit && App.rightSelection === doc.id;
+  const isFocused = !!App.current && App.current.id === doc.id;
+  return h('div', {
+    class: 'tab' + (isFocused ? ' focused' : isLeft || isRight ? ' shown' : ''),
+    title: doc.path,
+    onclick: (e) => App.selectTab(doc.id, e.altKey),
+    onauxclick: (e) => { if (e.button === 1) App.close(doc.id); },
+    oncontextmenu: (e) => Menus.at(e, [
+      { label: t('Открыть справа'), action: () => App.selectTab(doc.id, true) },
+      { separator: true },
+      { label: t('Закрыть'), action: () => App.close(doc.id) },
+      { label: t('Закрыть остальные'), disabled: App.documents.length < 2, action: () => App.closeOthers(doc.id) },
+    ]),
+  },
+  typeIcon(doc.type, 14),
+  h('span', { class: 'tab-name ellipsis' }, doc.name),
+  App.isDirty(doc) ? h('span', { class: 'tab-dirty', title: t('Есть несохранённые изменения.') }, '●') : null,
+  isRight ? h('span', { class: 'tab-right', title: t('Показан в правой панели') }, icon('rightPane', 12)) : null,
+  h('button', {
+    class: 'tab-close plain', title: t('Закрыть вкладку'),
+    onclick: (e) => { e.stopPropagation(); App.close(doc.id); },
+  }, icon('x', 11)));
+}
+
+function renderPanes() {
+  const panes = $('panes');
+  rememberEditors();
+  // Remember where each pane was scrolled before it is rebuilt.
+  panes.querySelectorAll('.scroll').forEach((s) => { if (s.dataset.key) scrollMemory.set(s.dataset.key, s.scrollTop); });
+
+  const target = App.scrollTarget;
+  const fresh = target && target.token !== lastScrollToken;
+  const els = [buildPane('left', fresh ? target : null)];
+  if (App.isSplit) els.push(h('div', { class: 'pane-divider' }), buildPane('right', fresh ? target : null));
+  panes.replaceChildren(...els);
+
+  for (const paneEl of panes.querySelectorAll('.pane')) {
+    const scroller = paneEl.querySelector('.scroll');
+    if (!scroller) continue;
+    const saved = scrollMemory.get(scroller.dataset.key);
+    if (saved != null) scroller.scrollTop = saved;
+  }
+
+  if (fresh) {
+    lastScrollToken = target.token;
+    const pane = App.isSplit ? App.focusedPane : 'left';
+    const scroller = panes.querySelector(`.pane[data-pane="${pane}"] .scroll`);
+    if (scroller) {
+      const el = (target.match && scroller.querySelector('mark.current')) || scroller.querySelector(`[data-unit="${target.unit}"]`);
+      if (el) el.scrollIntoView({ block: 'center' });
+    }
+  }
+}
+
+function updatePaneFocus() {
+  document.querySelectorAll('.pane').forEach((p) => {
+    const header = p.querySelector('.pane-header');
+    if (header) header.classList.toggle('focused', App.focusedPane === p.dataset.pane);
+  });
+}
+
+function buildPane(pane, target) {
+  const doc = App.doc(pane);
+  const el = h('div', { class: 'pane', dataset: { pane }, onpointerdown: () => App.focus(pane) });
+  if (App.isSplit) el.append(paneHeader(pane, doc));
+  if (doc) {
+    if (App.changedOnDisk.has(doc.id)) el.append(changedBanner(doc));
+    el.append(buildContent(doc, pane, target), statusBar(doc));
+  } else {
+    el.append(placeholder(pane));
+  }
+  return el;
+}
+
+function paneHeader(pane, doc) {
+  const trigger = h('button', {
+    class: 'pane-pick',
+    onclick: (e) => Menus.below(e.currentTarget, [
+      ...App.documents.map((d) => ({ label: d.name, action: () => App.assign(d.id, pane) })),
+      { separator: true },
+      { label: t('Открыть файл…'), action: () => { App.focus(pane); openFiles(); } },
+    ]),
+  }, doc ? typeIcon(doc.type, 14) : icon('doc', 14), h('span', { class: 'ellipsis' }, doc ? doc.name : t('Выберите файл')), icon('down', 12));
+  return h('div', { class: 'pane-header' + (App.focusedPane === pane ? ' focused' : '') },
+    trigger, h('span', { class: 'grow' }),
+    pane === 'right' ? h('button', { class: 'plain', title: t('Закрыть правую панель'), onclick: () => App.toggleSplit() }, icon('x', 14)) : null);
+}
+
+function changedBanner(doc) {
+  return h('div', { class: 'banner' },
+    icon('refresh', 16), h('span', { class: 'grow' }, t('Файл изменён на диске.')),
+    h('button', { class: 'plain link', onclick: () => App.refresh(doc.id) }, t('Обновить  ⌘R')),
+    h('button', { class: 'plain link', onclick: () => App.ignoreChange(doc.id) }, t('Не сейчас')));
+}
+
+function placeholder(pane) {
+  return h('div', { class: 'placeholder' },
+    icon('rightPane', 32),
+    h('div', null, t('Выберите файл для этой панели')),
+    h('div', { class: 'small muted center' }, t('Откройте его из списка слева с зажатым ⌥ или выберите во вкладках.')),
+    h('button', { class: 'btn', onclick: () => { App.focus(pane); openFiles(); } }, t('Открыть файл…')));
+}
+
+function statusBar(doc) {
+  return h('div', { class: 'status' },
+    h('span', null, `${TYPE_TITLES[doc.type]} · ${doc.encoding}`),
+    h('span', null, t('%lld строк · %lld слов', doc.lines.length, doc.wordCount)));
+}
+
+// ---- Content ----------------------------------------------------------------
+
+/** Every pane paints the query; only the focused one marks the current hit. */
+function highlightFor(pane) {
+  if (!App.isFindVisible || !App.findQuery) return null;
+  const isTarget = !App.isSplit || App.focusedPane === pane;
+  return { query: App.findQuery, current: isTarget ? App.currentMatch : null };
+}
+
+const FIRST_CHUNK = 2500;
+const CHUNK = 1500;
+
+/** Appends rows to `parent`: the first batch at once, the rest in the background. */
+function fillRows(parent, scroller, total, makeRow, upTo) {
+  let next = 0;
+  const batch = (limit) => {
+    const frag = document.createDocumentFragment();
+    for (; next < Math.min(total, limit); next++) frag.append(makeRow(next));
+    parent.append(frag);
+  };
+  batch(Math.max(FIRST_CHUNK, upTo + 1));
+  const wanted = scrollMemory.get(scroller.dataset.key);
+  const more = () => {
+    if (next >= total || !scroller.isConnected) return;
+    batch(next + CHUNK);
+    if (wanted != null && scroller.scrollTop < wanted) scroller.scrollTop = wanted;
+    setTimeout(more, 0);
+  };
+  if (next < total) setTimeout(more, 0);
+}
+
+function buildContent(doc, pane, target) {
+  const size = Prefs.values.fontSize;
+  if (App.mode === 'edit') return editorView(doc, pane, size - 2);
+  const hl = highlightFor(pane);
+  const scroller = h('div', { class: 'scroll', dataset: { key: `${doc.id}:${App.mode}` } });
+  const upTo = target ? target.unit : 0;
+  const isTargetPane = !App.isSplit || App.focusedPane === pane;
+  const unitHint = isTargetPane ? upTo : 0;
+
+  if (App.mode === 'source') {
+    scroller.append(sourceView(doc, scroller, size - 2, hl, unitHint));
+  } else if (doc.csv) {
+    scroller.append(csvView(doc, scroller, size - 1, hl, unitHint));
+  } else if (doc.type === 'markdown') {
+    scroller.append(h('div', { class: 'reading' }, markdownView(doc.blocks, size, hl)));
+  } else {
+    const wrap = h('div', { class: 'reading plain-text' });
+    const mono = Syntax.hasHighlighting(doc.type);
+    wrap.style.fontFamily = mono ? 'var(--mono-font)' : 'var(--reading-font)';
+    wrap.style.fontSize = size + 'px';
+    wrap.style.lineHeight = '1.55';
+    scroller.append(wrap);
+    fillRows(wrap, scroller, doc.lines.length, (i) => {
+      const row = h('div', { class: 'line', dataset: { unit: i } });
+      if (doc.lines[i]) Syntax.render(doc.lines[i], doc.type, row);
+      else row.append(' ');
+      Searcher.paint(row, hl, i, 0);
+      return row;
+    }, unitHint);
+  }
+  return scroller;
+}
+
+/** Plain-text editor. The draft lives in App.drafts, so re-rendering the pane never loses typed text. */
+const editorMemory = new Map(); // document id -> {start, end, top, focused}
+
+function rememberEditors() {
+  document.querySelectorAll('textarea.editor-text').forEach((ta) => {
+    editorMemory.set(ta.dataset.doc, {
+      start: ta.selectionStart, end: ta.selectionEnd, top: ta.scrollTop, focused: document.activeElement === ta,
+    });
+  });
+}
+
+function editorView(doc, pane, size) {
+  const area = h('textarea', {
+    class: 'editor-text', dataset: { doc: doc.id }, spellcheck: false, wrap: 'soft',
+    'aria-label': doc.name,
+  });
+  area.style.fontSize = size + 'px';
+  area.value = App.textFor(doc);
+
+  const status = h('span', { class: 'grow' });
+  const revert = h('button', { class: 'plain link', onclick: () => App.discardDraft(doc.id) }, t('Отменить изменения'));
+  const save = h('button', { class: 'plain link strong', onclick: () => App.save(doc.id) }, t('Сохранить  ⌘S'));
+  const bar = h('div', { class: 'edit-bar' }, status, revert, save);
+  const sync = () => {
+    const dirty = App.isDirty(doc);
+    bar.classList.toggle('dirty', dirty);
+    status.textContent = dirty
+      ? t(doc.type === 'rtf' ? 'Есть несохранённые изменения. Форматирование RTF при сохранении будет потеряно.' : 'Есть несохранённые изменения.')
+      : t('Изменений нет.');
+    revert.disabled = save.disabled = !dirty;
+  };
+  sync();
+
+  area.addEventListener('input', () => { App.setDraft(doc, area.value); sync(); });
+  area.addEventListener('keydown', (e) => {
+    if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+      e.preventDefault();
+      document.execCommand('insertText', false, '\t');
+    }
+  });
+  area.addEventListener('pointerdown', () => App.focus(pane));
+
+  const saved = editorMemory.get(doc.id);
+  if (saved) {
+    // The textarea is not in the document yet; restore once it is.
+    setTimeout(() => {
+      if (!area.isConnected) return;
+      area.setSelectionRange(saved.start, saved.end);
+      area.scrollTop = saved.top;
+      if (saved.focused) area.focus();
+    }, 0);
+  } else if (!App.isSplit || App.focusedPane === pane) {
+    setTimeout(() => { if (area.isConnected) area.focus(); }, 0);
+  }
+  return h('div', { class: 'editor' }, bar, area);
+}
+
+function sourceView(doc, scroller, size, hl, upTo) {
+  const marked = new Set(Library.bookmarks(doc.libraryID));
+  const showNumbers = Prefs.values.showLineNumbers;
+  const box = h('div', { class: 'source' + (showNumbers ? '' : ' no-gutter') });
+  box.style.fontSize = size + 'px';
+  fillRows(box, scroller, doc.lines.length, (i) => {
+    const code = h('div', { class: 'code' });
+    if (doc.lines[i]) Syntax.render(doc.lines[i], doc.type, code);
+    else code.append('​');
+    if (doc.type === 'markdown' && doc.lines[i].startsWith('#')) code.classList.add('md-head');
+    Searcher.paint(code, hl, i, 0);
+    const row = h('div', { class: 'row', dataset: { unit: i } });
+    if (showNumbers) {
+      const n = i + 1;
+      row.append(h('div', {
+        class: 'gutter' + (marked.has(n) ? ' bookmarked' : ''),
+        dataset: { line: n },
+        title: marked.has(n) ? t('Убрать закладку') : t('Поставить закладку'),
+        onclick: () => { Library.toggleBookmark(doc.libraryID, n); syncBookmarks(); },
+      }, h('span', null, n)));
+    }
+    row.append(code);
+    return row;
+  }, upTo);
+  return box;
+}
+
+function csvView(doc, scroller, size, hl, upTo) {
+  const table = doc.csv;
+  const charWidth = size * 0.62;
+  const box = h('div', { class: 'csv' });
+  box.style.fontSize = size + 'px';
+  const q = hl ? hl.query : '';
+  fillRows(box, scroller, table.rows.length, (index) => {
+    const row = table.rows[index];
+    const hits = q ? Searcher.ranges(q, row.line).map((r) => r[1]) : [];
+    const el = h('div', { class: 'csv-row' + (index === 0 ? ' head' : index % 2 === 0 ? ' alt' : ''), dataset: { unit: index } });
+    table.widths.forEach((width, col) => {
+      const text = col < row.cells.length ? row.cells[col] : '';
+      const offset = col < row.starts.length ? hits.filter((e) => e <= row.starts[col]).length : 0;
+      const cell = h('div', { class: 'csv-cell' }, text || ' ');
+      cell.style.width = width * charWidth + 8 + 'px';
+      Searcher.paint(cell, hl, index, offset);
+      el.append(cell);
+    });
+    return el;
+  }, upTo);
+  return box;
+}
+
+function markdownView(blocks, size, hl) {
+  const box = h('div', { class: 'md' });
+  box.style.fontSize = size + 'px';
+  box.style.setProperty('--gap', size * 0.9 + 'px');
+  const hs = Prefs.values.headingSpacing;
+  const query = hl ? hl.query : '';
+
+  const inline = (parent, text, unit, offset) => {
+    inlineToDom(parseInline(text), parent);
+    Searcher.paint(parent, hl, unit, offset);
+    return parent;
+  };
+
+  blocks.forEach((block, unit) => {
+    const offsets = Searcher.offsets(block, query);
+    const wrap = h('div', { class: 'blk ' + block.type, dataset: { unit } });
+    switch (block.type) {
+      case 'heading': {
+        const scale = [1.9, 1.55, 1.3, 1.15, 1.05, 1.0][block.level - 1];
+        wrap.style.fontSize = size * scale + 'px';
+        wrap.style.paddingTop = size * (block.level <= 2 ? 0.5 : 0.25) * hs + 'px';
+        wrap.style.paddingBottom = size * 0.15 * hs + 'px';
+        inline(wrap, block.text, unit, offsets[0]);
+        break;
+      }
+      case 'paragraph': inline(wrap, block.text, unit, offsets[0]); break;
+      case 'bullets':
+      case 'numbered':
+        block.items.forEach((item, i) => {
+          wrap.append(h('div', { class: 'li' },
+            h('span', { class: 'marker' }, block.type === 'bullets' ? '•' : `${i + 1}.`),
+            inline(h('span', { class: 'li-text' }), item, unit, offsets[i])));
+        });
+        break;
+      case 'code': {
+        const pre = h('pre', null, block.code || ' ');
+        Searcher.paint(pre, hl, unit, offsets[0]);
+        wrap.append(pre);
+        break;
+      }
+      case 'quote':
+        wrap.append(h('div', { class: 'bar' }), inline(h('div', { class: 'quote-text' }), block.text, unit, offsets[0]));
+        break;
+      case 'rule': wrap.append(h('hr')); break;
+      case 'table': {
+        // Cell order matches Searcher.segments: header first, then rows left to right.
+        const rowStarts = block.rows.map((_, r) => block.header.length + block.rows.slice(0, r).reduce((n, row) => n + row.length, 0));
+        const head = h('tr', null, block.header.map((c, i) => inline(h('th'), c, unit, offsets[i])));
+        const body = block.rows.map((row, r) => h('tr', null, row.map((c, i) => inline(h('td'), c, unit, offsets[rowStarts[r] + i]))));
+        wrap.append(h('table', null, h('thead', null, head), h('tbody', null, body)));
+        break;
+      }
+    }
+    box.append(wrap);
+  });
+  return box;
+}
+
+// ---- Dialogs ----------------------------------------------------------------
+
+function renderErrorDialog() {
+  const root = $('overlay-root');
+  root.querySelectorAll('.modal-error').forEach((n) => n.remove());
+  if (!App.errorMessage) return;
+  const close = () => { App.errorMessage = null; renderErrorDialog(); };
+  root.append(h('div', { class: 'modal-back modal-error', onmousedown: (e) => { if (e.target === e.currentTarget) close(); } },
+    h('div', { class: 'dialog small' },
+      h('div', { class: 'dialog-title' }, t('Ошибка')),
+      h('div', { class: 'dialog-body' }, App.errorMessage),
+      h('div', { class: 'dialog-actions' }, h('button', { class: 'btn primary', autofocus: true, onclick: close }, 'OK')))));
+}
+
+let settingsRefresh = null;
+
+function openSettings() {
+  const root = $('overlay-root');
+  if (root.querySelector('.modal-settings')) return;
+  const P = Prefs.values;
+
+  const close = () => {
+    root.querySelector('.modal-settings')?.remove();
+    settingsRefresh = null;
+  };
+
+  const section = (title, ...kids) => h('div', { class: 'sec' }, h('div', { class: 'sec-title' }, t(title)), ...kids);
+  const row = (label, ...kids) => h('div', { class: 'srow' }, h('div', { class: 'slabel' }, t(label)), ...kids);
+
+  const appearance = h('div', { class: 'seg wide' });
+  const tiles = h('div', { class: 'tiles' });
+  const sizeLabel = h('span', { class: 'val' });
+  const spacingLabel = h('span', { class: 'val' });
+  const preview = h('div', { class: 'preview' });
+
+  const paintAppearance = () => appearance.replaceChildren(...[['system', 'Как в системе'], ['light', 'Светлая'], ['dark', 'Тёмная']].map(([id, label]) =>
+    h('button', { class: Prefs.values.appearance === id ? 'on' : '', onclick: () => Prefs.set({ appearance: id }) }, t(label))));
+
+  const paintTiles = () => tiles.replaceChildren(...THEME_SETS.map((set) => {
+    const th = themeVariant(set, Prefs.wantsDark);
+    const tile = h('button', { class: 'tile' + (Prefs.values.themeID === set.id ? ' selected' : ''), onclick: () => Prefs.set({ themeID: set.id }) },
+      h('div', { class: 'dots' }, [th.heading, th.key, th.string, th.keyword].map((c) => h('i', { style: { background: c } }))),
+      h('div', { class: 'tile-name' }, set.name));
+    tile.style.background = th.background;
+    tile.style.color = th.text;
+    return tile;
+  }));
+
+  const paintPreview = () => {
+    const th = Prefs.theme;
+    const size = Prefs.values.fontSize;
+    const hsp = Prefs.values.headingSpacing;
+    preview.style.background = th.background;
+    preview.style.color = th.text;
+    preview.style.fontFamily = Prefs.fontFamily;
+    preview.replaceChildren(
+      h('div', { style: { fontSize: size * 1.5 + 'px', fontWeight: 600, color: th.heading, paddingTop: size * 0.3 * hsp + 'px', paddingBottom: size * 0.2 * hsp + 'px' } }, t('Заголовок')),
+      h('div', { style: { fontSize: size + 'px' } }, t('Так будет выглядеть обычный текст документа.')),
+      h('div', { class: 'pv-code', style: { fontSize: size * 0.85 + 'px' } },
+        Prefs.values.showLineNumbers ? h('span', { style: { color: th.gutter } }, '1') : null,
+        h('span', { style: { color: th.key } }, '"key": '), h('span', { style: { color: th.string } }, '"value"')));
+    sizeLabel.textContent = `${Math.round(Prefs.values.fontSize)} pt`;
+    spacingLabel.textContent = `×${Prefs.values.headingSpacing.toFixed(1)}`;
+  };
+
+  const fontSelect = h('select', { onchange: (e) => Prefs.set({ fontName: e.target.value }) },
+    FONTS.map((f) => h('option', { value: f, selected: P.fontName === f }, f === SYSTEM_FONT ? t('Системный') : f)));
+  const sizeInput = h('input', { type: 'range', min: 10, max: 28, step: 1, value: P.fontSize, oninput: (e) => Prefs.set({ fontSize: Number(e.target.value) }) });
+  const spacingInput = h('input', { type: 'range', min: 0.5, max: 2.5, step: 0.1, value: P.headingSpacing, oninput: (e) => Prefs.set({ headingSpacing: Number(e.target.value) }) });
+  const check = (label, key) => h('label', { class: 'check' },
+    h('input', { type: 'checkbox', checked: P[key], onchange: (e) => Prefs.set({ [key]: e.target.checked }) }), h('span', null, t(label)));
+
+  settingsRefresh = () => {
+    paintAppearance();
+    paintTiles();
+    paintPreview();
+    sizeInput.value = Prefs.values.fontSize;
+    spacingInput.value = Prefs.values.headingSpacing;
+  };
+  settingsRefresh();
+
+  root.append(h('div', { class: 'modal-back modal-settings', onmousedown: (e) => { if (e.target === e.currentTarget) close(); } },
+    h('div', { class: 'dialog' },
+      h('div', { class: 'dialog-head' }, h('div', { class: 'dialog-title' }, t('Настройки')),
+        h('button', { class: 'plain', onclick: close }, icon('x', 16))),
+      h('div', { class: 'dialog-scroll' },
+        section('Оформление', appearance, tiles, h('div', { class: 'small muted' }, t('Dracula и Monokai всегда тёмные.'))),
+        section('Текст',
+          row('Шрифт', fontSelect),
+          row('Размер', sizeInput, sizeLabel),
+          row('Отступы заголовков', spacingInput, spacingLabel),
+          check('Показывать номера строк', 'showLineNumbers')),
+        section('Файлы', check('Обновлять файл автоматически, когда он изменился на диске', 'autoReload')),
+        preview))));
+}
+
+// ---- Commands shared by menu, toolbar and boot ------------------------------
+
+async function openFiles() {
+  const paths = await window.api.openDialog();
+  if (paths && paths.length) App.open(paths);
+}
+
+function runCommand(action) {
+  switch (action) {
+    case 'open': openFiles(); break;
+    case 'closeTab': if (App.current) App.close(App.current.id); break;
+    case 'settings': openSettings(); break;
+    case 'find': App.showFind(); break;
+    case 'findNext': App.stepMatch(1); break;
+    case 'findPrev': App.stepMatch(-1); break;
+    case 'nextTab': App.cycleTab(1); break;
+    case 'prevTab': App.cycleTab(-1); break;
+    case 'split': if (App.documents.length) App.toggleSplit(); break;
+    case 'modeReading': App.setMode('reading'); break;
+    case 'modeSource': App.setMode('source'); break;
+    case 'modeEdit': App.setMode('edit'); break;
+    case 'save': if (App.current) App.save(App.current.id); break;
+    case 'reload': if (App.current) App.refresh(App.current.id); break;
+    case 'fontUp': Prefs.resizeFont(1); break;
+    case 'fontDown': Prefs.resizeFont(-1); break;
+  }
+}
+
+function initDragAndDrop() {
+  const hintEl = $('drop-hint');
+  let depth = 0;
+  const external = (e) => e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files');
+  window.addEventListener('dragenter', (e) => { if (external(e)) { depth++; hintEl.hidden = false; hintEl.textContent = t('Открыть'); } });
+  window.addEventListener('dragleave', (e) => { if (external(e) && --depth <= 0) { depth = 0; hintEl.hidden = true; } });
+  window.addEventListener('dragover', (e) => { if (external(e)) e.preventDefault(); });
+  window.addEventListener('drop', (e) => {
+    depth = 0;
+    hintEl.hidden = true;
+    if (!external(e)) return;
+    e.preventDefault();
+    const paths = Array.from(e.dataTransfer.files).map((f) => window.api.pathForFile(f)).filter(Boolean);
+    if (paths.length) App.open(paths);
+  });
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (Menus.el || Popover.el) { Menus.close(); Popover.close(); return; }
+  const settings = document.querySelector('.modal-settings');
+  if (settings) { settings.remove(); settingsRefresh = null; return; }
+  if (App.errorMessage) { App.errorMessage = null; renderErrorDialog(); return; }
+  if (App.isFindVisible) App.hideFind();
+});
+
+function buildUI() {
+  buildSidebarFrame();
+  buildMainFrame();
+  initResizer();
+  initDragAndDrop();
+  applySidebarVisibility();
+  Prefs.onChange(() => {
+    applyTheme();
+    if (settingsRefresh) settingsRefresh();
+    App.render(['all']);
+  });
+}

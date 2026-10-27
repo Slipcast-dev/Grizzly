@@ -1,0 +1,482 @@
+/* Library store and application state. Port of LibraryStore.swift and AppState.swift.
+   The library keeps references to files (their paths); folders only group those references. */
+
+const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+const byName = (a, b) => collator.compare(a.name, b.name);
+
+const Library = {
+  RECENT_LIMIT: 20,
+  data: { files: [], folders: [] },
+  missing: new Set(),
+  caseInsensitive: false,
+  onChange: () => {},
+  saveTimer: null,
+
+  async load(caseInsensitive) {
+    this.caseInsensitive = caseInsensitive;
+    try {
+      const raw = await window.api.loadLibrary();
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        this.data = {
+          files: (parsed.files || []).map((f) => ({
+            id: f.id, path: f.path, name: f.name || baseName(f.path), folderID: f.folderID || null,
+            isFavorite: !!f.isFavorite, lastOpened: f.lastOpened || null, bookmarks: f.bookmarks || [],
+          })),
+          folders: (parsed.folders || []).map((f) => ({ id: f.id, name: f.name, isExpanded: f.isExpanded !== false })),
+        };
+      }
+    } catch { /* a damaged library starts empty */ }
+    await this.refreshMissing();
+  },
+
+  save() {
+    clearTimeout(this.saveTimer);
+    this.saveTimer = setTimeout(() => window.api.saveLibrary(JSON.stringify(this.data, null, 1)), 150);
+  },
+
+  mutate(change) {
+    change(this.data);
+    this.save();
+    this.onChange();
+  },
+
+  // Queries
+
+  get folders() { return [...this.data.folders].sort(byName); },
+  file(id) { return this.data.files.find((f) => f.id === id) || null; },
+  filesIn(folderID) { return this.data.files.filter((f) => (f.folderID || null) === (folderID || null)).sort(byName); },
+  get recents() {
+    return this.data.files.filter((f) => f.lastOpened)
+      .sort((a, b) => b.lastOpened.localeCompare(a.lastOpened)).slice(0, this.RECENT_LIMIT);
+  },
+  get favorites() { return this.data.files.filter((f) => f.isFavorite).sort(byName); },
+  folderExists(name) { return this.data.folders.some((f) => f.name.toLowerCase() === name.toLowerCase()); },
+  isMissing(id) { return this.missing.has(id); },
+  bookmarks(id) { const f = id && this.file(id); return f ? f.bookmarks : []; },
+
+  // Files
+
+  add(path) {
+    const same = (a, b) => (this.caseInsensitive ? a.toLowerCase() === b.toLowerCase() : a === b);
+    const existing = this.data.files.find((f) => same(f.path, path));
+    if (existing) return existing;
+    const entry = {
+      id: crypto.randomUUID(), path, name: baseName(path), folderID: null,
+      isFavorite: false, lastOpened: null, bookmarks: [],
+    };
+    this.mutate((d) => d.files.push(entry));
+    return entry;
+  },
+
+  async refreshMissing() {
+    const paths = this.data.files.map((f) => f.path);
+    const times = paths.length ? await window.api.mtimes(paths) : {};
+    this.missing = new Set(this.data.files.filter((f) => times[f.path] == null).map((f) => f.id));
+    this.onChange();
+  },
+
+  setMissing(id, value) {
+    if (value) this.missing.add(id); else this.missing.delete(id);
+    this.onChange();
+  },
+
+  markOpened(id) {
+    this.mutate((d) => { const f = d.files.find((x) => x.id === id); if (f) f.lastOpened = new Date().toISOString(); });
+  },
+  clearRecents() { this.mutate((d) => d.files.forEach((f) => { f.lastOpened = null; })); },
+  toggleFavorite(id) {
+    this.mutate((d) => { const f = d.files.find((x) => x.id === id); if (f) f.isFavorite = !f.isFavorite; });
+  },
+
+  toggleBookmark(id, line) {
+    if (!id) return;
+    this.mutate((d) => {
+      const f = d.files.find((x) => x.id === id);
+      if (!f) return;
+      const at = f.bookmarks.indexOf(line);
+      if (at >= 0) f.bookmarks.splice(at, 1);
+      else { f.bookmarks.push(line); f.bookmarks.sort((a, b) => a - b); }
+    });
+  },
+
+  /** Removes the reference only; the file on disk is never touched. */
+  remove(id) {
+    this.mutate((d) => { d.files = d.files.filter((f) => f.id !== id); });
+    this.missing.delete(id);
+  },
+
+  move(fileID, folderID) {
+    this.mutate((d) => {
+      const f = d.files.find((x) => x.id === fileID);
+      if (!f || (f.folderID || null) === (folderID || null)) return;
+      f.folderID = folderID || null;
+      const folder = folderID && d.folders.find((x) => x.id === folderID);
+      if (folder) folder.isExpanded = true;
+    });
+  },
+
+  // Folders
+
+  createFolder(name) {
+    const folder = { id: crypto.randomUUID(), name, isExpanded: true };
+    this.mutate((d) => d.folders.push(folder));
+    return folder;
+  },
+  renameFolder(id, name) { this.mutate((d) => { const f = d.folders.find((x) => x.id === id); if (f) f.name = name; }); },
+  setExpanded(id, expanded) { this.mutate((d) => { const f = d.folders.find((x) => x.id === id); if (f) f.isExpanded = expanded; }); },
+  /** Files from the deleted folder go back to the root of the library. */
+  deleteFolder(id) {
+    this.mutate((d) => {
+      d.files.forEach((f) => { if (f.folderID === id) f.folderID = null; });
+      d.folders = d.folders.filter((f) => f.id !== id);
+    });
+  },
+};
+
+// ---- Application state -----------------------------------------------------
+
+const App = {
+  documents: [], // open tabs, in order; both panes pick their document from this list
+  selection: null, // document id in the left (or only) pane
+  rightSelection: null, // document id in the right pane while split view is on
+  isSplit: false,
+  focusedPane: 'left',
+  selectedFileID: null, // library entry highlighted in the sidebar; follows the focused pane
+  mode: 'reading', // reading | source | edit
+  errorMessage: null,
+  changedOnDisk: new Set(),
+  drafts: new Map(), // document id -> edited text that differs from the file
+  saving: new Set(),
+
+  isFindVisible: false,
+  findQuery: '',
+  matches: [],
+  matchIndex: 0,
+  findFocusToken: 0,
+  scrollTarget: null, // {unit, token}: asks the target pane to scroll a row into view
+
+  ui: {
+    sidebarVisible: true,
+    sidebarSection: 'files',
+    settingsOpen: false,
+  },
+  render: () => {}, // set by the UI: render(['sidebar', 'main', ...])
+
+  docID(pane) { return pane === 'left' ? this.selection : this.rightSelection; },
+  doc(pane) { const id = this.docID(pane); return this.documents.find((d) => d.id === id) || null; },
+  get current() { return this.doc(this.isSplit ? this.focusedPane : 'left'); },
+  get currentMatch() { return this.matches[this.matchIndex] || null; },
+
+  // Opening
+
+  /** Opens files from disk (dialog, drag and drop, command line) and adds them to the library. */
+  async open(paths, inRight = false) {
+    for (const path of paths) {
+      const entry = Library.add(path);
+      await this.show(entry.id, path, inRight ? 'right' : null);
+    }
+  },
+
+  /** Opens a file that is already in the library (sidebar click). */
+  async openLibraryFile(id, inRight = false) {
+    const entry = id && Library.file(id);
+    if (!entry) return;
+    const pane = inRight ? 'right' : (this.isSplit ? this.focusedPane : 'left');
+
+    const existing = this.documents.find((d) => d.libraryID === id);
+    if (existing) {
+      if (this.docID(pane) !== existing.id || this.focusedPane !== pane) this.assign(existing.id, pane);
+      return;
+    }
+    await this.show(id, entry.path, pane, true);
+  },
+
+  async show(libraryID, path, pane, fromLibrary = false) {
+    const target = pane || (this.isSplit ? this.focusedPane : 'left');
+    const existing = this.documents.find((d) => d.libraryID === libraryID);
+    if (existing) {
+      this.assign(existing.id, target);
+      Library.markOpened(libraryID);
+      return;
+    }
+    const loaded = await window.api.readFile(path);
+    if (!loaded.ok) {
+      const name = baseName(path);
+      if (loaded.code === 'ENOENT') {
+        Library.setMissing(libraryID, true);
+        this.fail(fromLibrary ? t('Файл «%@» не найден. Возможно, он перемещён или удалён.', name) : t('Не удалось открыть «%@».', name));
+      } else {
+        this.fail(t('Не удалось открыть «%@».', name));
+      }
+      return;
+    }
+    Library.setMissing(libraryID, false);
+    const doc = makeDocument(path, loaded);
+    doc.libraryID = libraryID;
+    this.documents.push(doc);
+    this.assign(doc.id, target);
+    Library.markOpened(libraryID);
+  },
+
+  fail(message) { this.errorMessage = message; this.render(['dialogs']); },
+
+  // File watching
+
+  /** Polls open files once a second; a changed file shows a banner or reloads itself. */
+  startWatching() {
+    setInterval(() => this.checkFiles(), 1000);
+  },
+
+  async checkFiles() {
+    const docs = this.documents.filter((d) => !this.changedOnDisk.has(d.id) && !this.saving.has(d.id));
+    if (!docs.length) return;
+    const times = await window.api.mtimes(docs.map((d) => d.path));
+    for (const stale of docs) {
+      const doc = this.documents.find((d) => d.id === stale.id);
+      if (!doc || this.saving.has(doc.id)) continue;
+      const now = times[doc.path];
+      if (now == null || now === doc.modified) continue;
+      // Never replace text the user is editing; offer the banner instead.
+      if (Prefs.values.autoReload && !this.isDirty(doc)) await this.reload(doc.id);
+      else { this.changedOnDisk.add(doc.id); this.render(['main']); }
+    }
+  },
+
+  /** Re-reads a document from disk, keeping its tab, library entry and bookmarks. */
+  async reload(id) {
+    const i = this.documents.findIndex((d) => d.id === id);
+    if (i < 0) return;
+    const old = this.documents[i];
+    const loaded = await window.api.readFile(old.path);
+    this.changedOnDisk.delete(id);
+    if (!loaded.ok) { this.fail(t('Не удалось обновить «%@».', old.name)); return; }
+    this.drafts.delete(id);
+    this.syncDirty();
+    const fresh = makeDocument(old.path, loaded);
+    fresh.id = old.id;
+    fresh.libraryID = old.libraryID;
+    this.documents[i] = fresh;
+    this.recomputeMatches(false);
+    this.render(['main']);
+  },
+
+  /** User-initiated reload: asks first when it would throw away unsaved edits. */
+  async refresh(id) {
+    if (await this.confirmDiscard([id])) await this.reload(id);
+  },
+
+  /** Hides the banner until the file changes again. */
+  async ignoreChange(id) {
+    const doc = this.documents.find((d) => d.id === id);
+    if (!doc) return;
+    const times = await window.api.mtimes([doc.path]);
+    doc.modified = times[doc.path];
+    this.changedOnDisk.delete(id);
+    this.render(['main']);
+  },
+
+  // Editing
+
+  baseText(doc) { return doc.lines.join('\n'); },
+  textFor(doc) { return this.drafts.has(doc.id) ? this.drafts.get(doc.id) : this.baseText(doc); },
+  isDirty(doc) { return !!doc && this.drafts.has(doc.id); },
+
+  setDraft(doc, text) {
+    if (text === this.baseText(doc)) this.drafts.delete(doc.id); else this.drafts.set(doc.id, text);
+    this.syncDirty();
+  },
+
+  discardDraft(id) {
+    this.drafts.delete(id);
+    this.syncDirty();
+    this.render(['main']);
+  },
+
+  /** Tells the main process whether closing the window would lose edits. */
+  syncDirty() {
+    window.api.setDirty(this.drafts.size > 0);
+    this.render(['tabs']);
+  },
+
+  /** Writes the edited text to the file in its original encoding, then re-reads it. */
+  async save(id) {
+    const doc = this.documents.find((d) => d.id === id);
+    if (!doc || !this.isDirty(doc)) return true;
+    this.saving.add(id);
+    try {
+      let text = this.drafts.get(id);
+      if (doc.text.includes('\r\n')) text = text.replace(/\n/g, '\r\n');
+      const result = await window.api.writeFile(doc.path, text, doc.encoding);
+      if (!result.ok) {
+        this.fail(result.code === 'EENCODE'
+          ? t('Не удалось сохранить «%@»: в тексте есть символы, которых нет в кодировке %@.', doc.name, doc.encoding)
+          : t('Не удалось сохранить «%@».', doc.name));
+        return false;
+      }
+      await this.reload(id);
+      return !this.isDirty(doc);
+    } finally {
+      this.saving.delete(id);
+    }
+  },
+
+  /** Asks about every unsaved document among `ids`; false means the user cancelled. */
+  async confirmDiscard(ids) {
+    for (const id of ids) {
+      const doc = this.documents.find((d) => d.id === id);
+      if (!this.isDirty(doc)) continue;
+      const choice = await window.api.confirmSave(doc.name);
+      if (choice === 'cancel') return false;
+      if (choice === 'save' && !(await this.save(id))) return false;
+    }
+    return true;
+  },
+
+  // Find and bookmarks
+
+  showFind() {
+    this.isFindVisible = true;
+    this.findFocusToken++;
+    this.recomputeMatches(false);
+    this.render(['main']);
+  },
+
+  hideFind() {
+    this.isFindVisible = false;
+    this.matches = [];
+    this.matchIndex = 0;
+    this.render(['main']);
+  },
+
+  setQuery(query) {
+    this.findQuery = query;
+    this.recomputeMatches(true);
+    this.render(['main']);
+  },
+
+  /** Hits are counted in the focused pane's document; every pane paints the same query. */
+  recomputeMatches(reset) {
+    const doc = this.current;
+    if (!this.isFindVisible || !this.findQuery || !doc || this.mode === 'edit') {
+      this.matches = [];
+      this.matchIndex = 0;
+      return;
+    }
+    this.matches = Searcher.matches(this.findQuery, doc, this.mode);
+    this.matchIndex = reset ? 0 : Math.min(this.matchIndex, Math.max(0, this.matches.length - 1));
+    this.revealCurrentMatch();
+  },
+
+  stepMatch(delta) {
+    if (!this.isFindVisible) { this.showFind(); return; }
+    if (!this.matches.length) return;
+    this.matchIndex = (this.matchIndex + delta + this.matches.length) % this.matches.length;
+    this.revealCurrentMatch();
+    this.render(['main']);
+  },
+
+  revealCurrentMatch() {
+    const m = this.currentMatch;
+    if (m) this.scrollTarget = { unit: m.unit, token: Math.random(), match: true };
+  },
+
+  /** Jumps to a bookmarked line (0-based) in the source view. */
+  goToLine(line) {
+    this.mode = 'source';
+    this.recomputeMatches(false);
+    this.scrollTarget = { unit: line, token: Math.random(), match: false };
+    this.render(['toolbar', 'main']);
+  },
+
+  setMode(mode) {
+    if (this.mode === mode) return;
+    this.mode = mode;
+    this.recomputeMatches(false);
+    this.render(['toolbar', 'main']);
+  },
+
+  // Tabs and panes
+
+  assign(docID, pane) {
+    if (pane === 'right') { this.isSplit = true; this.rightSelection = docID; } else { this.selection = docID; }
+    this.focusedPane = pane;
+    this.selectedFileID = (this.documents.find((d) => d.id === docID) || {}).libraryID || null;
+    this.recomputeMatches(true);
+    this.render(['all']);
+  },
+
+  selectTab(id, inRight = false) {
+    this.assign(id, inRight ? 'right' : (this.isSplit ? this.focusedPane : 'left'));
+  },
+
+  focus(pane) {
+    if (!this.isSplit || this.focusedPane === pane) return;
+    this.focusedPane = pane;
+    this.selectedFileID = (this.current || {}).libraryID || null;
+    this.recomputeMatches(true);
+    this.render(['sidebar', 'toolbar', 'main']);
+  },
+
+  toggleSplit() {
+    this.isSplit = !this.isSplit;
+    if (this.isSplit) {
+      if (!this.rightSelection || !this.doc('right')) {
+        this.rightSelection = (this.documents.find((d) => d.id !== this.selection) || {}).id || null;
+      }
+    } else {
+      this.focusedPane = 'left';
+      this.selectedFileID = (this.current || {}).libraryID || null;
+    }
+    this.recomputeMatches(true);
+    this.render(['all']);
+  },
+
+  cycleTab(delta) {
+    if (this.documents.length < 2) return;
+    const pane = this.isSplit ? this.focusedPane : 'left';
+    const index = Math.max(0, this.documents.findIndex((d) => d.id === this.docID(pane)));
+    const next = (index + delta + this.documents.length) % this.documents.length;
+    this.assign(this.documents[next].id, pane);
+  },
+
+  async close(id) {
+    if (!(await this.confirmDiscard([id]))) return false;
+    const i = this.documents.findIndex((d) => d.id === id);
+    if (i < 0) return true;
+    this.documents.splice(i, 1);
+    this.changedOnDisk.delete(id);
+    this.drafts.delete(id);
+    this.syncDirty();
+    const neighbour = (this.documents[i] || this.documents[this.documents.length - 1] || {}).id || null;
+    if (this.selection === id) this.selection = neighbour;
+    if (this.rightSelection === id) this.rightSelection = neighbour;
+    if (!this.documents.length) { this.isSplit = false; this.focusedPane = 'left'; }
+    this.selectedFileID = (this.current || {}).libraryID || null;
+    this.recomputeMatches(true);
+    this.render(['all']);
+    return true;
+  },
+
+  async closeOthers(keeping) {
+    if (!(await this.confirmDiscard(this.documents.filter((d) => d.id !== keeping).map((d) => d.id)))) return;
+    for (const id of [...this.drafts.keys()]) if (id !== keeping) this.drafts.delete(id);
+    this.syncDirty();
+    this.documents = this.documents.filter((d) => d.id === keeping);
+    this.selection = keeping;
+    this.rightSelection = null;
+    this.isSplit = false;
+    this.focusedPane = 'left';
+    this.changedOnDisk.clear();
+    this.selectedFileID = (this.current || {}).libraryID || null;
+    this.recomputeMatches(true);
+    this.render(['all']);
+  },
+
+  /** Removes a file from the library (the file on disk stays) and closes it if open. */
+  async removeFromLibrary(id) {
+    const doc = this.documents.find((d) => d.libraryID === id);
+    if (doc && !(await this.close(doc.id))) return;
+    Library.remove(id);
+  },
+};
