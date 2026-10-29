@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('api', {
   scanDir: (dir) => ipcRenderer.invoke('fs:scanDir', dir),
   readFile: (file) => ipcRenderer.invoke('file:read', file),
   writeFile: (file, text, encoding) => ipcRenderer.invoke('file:write', file, text, encoding),
+  saveAs: (name, text, encoding, dir) => ipcRenderer.invoke('dialog:saveAs', name, text, encoding, dir),
   confirmSave: (name) => ipcRenderer.invoke('dialog:confirmSave', name),
   setDirty: (dirty) => ipcRenderer.send('app:dirty', dirty),
   mtimes: (files) => ipcRenderer.invoke('file:mtimes', files),

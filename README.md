@@ -34,8 +34,8 @@ Get the files from the **[latest release](https://github.com/Slipcast-dev/Grizzl
 
 | Platform | File | Notes |
 |---|---|---|
-| macOS 13+, Apple Silicon | `Grizzly-0.3.1-arm64.dmg` | Drag *Grizzly* to *Applications* |
-| macOS 13+, Intel | `Grizzly-0.3.1-x64.dmg` | Drag *Grizzly* to *Applications* |
+| macOS 13+, Apple Silicon | `Grizzly-0.3.2-arm64.dmg` | Drag *Grizzly* to *Applications* |
+| macOS 13+, Intel | `Grizzly-0.3.2-x64.dmg` | Drag *Grizzly* to *Applications* |
 | Windows 10/11, x64 | `Grizzly-0.2.1-portable.exe` | Portable, no installer |
 
 > [!IMPORTANT]
@@ -51,6 +51,7 @@ Get the files from the **[latest release](https://github.com/Slipcast-dev/Grizzl
 - **Edit mode** — edit and save in place; the original encoding (UTF-8 with/without BOM, UTF-16, Windows-1251,
   ISO-8859-1) is preserved.
 - **CSV / TSV tables** with automatic delimiter detection.
+- **Save As…** — save a copy in any supported format and location, without touching the original.
 - **Find** with live highlighting, next / previous match.
 - **Tabs** and **two files side by side**.
 - **Virtual library** — folders, recents and favorites that never touch your files.
@@ -80,6 +81,7 @@ Supported extensions: `md markdown mdown txt text log json yaml yml csv tsv xml 
 | Next / previous tab | `⇧⌘]` / `⇧⌘[` | `Ctrl+Shift+]` / `Ctrl+Shift+[` |
 | Two files side by side | `⌘\` | `Ctrl+\` |
 | Reading / Source / Edit | `⌥⌘1` / `⌥⌘2` / `⌥⌘3` | `Ctrl+Alt+1` / `2` / `3` |
+| Save As… | `⇧⌘S` | `Ctrl+Shift+S` |
 | Reload file | `⌘R` | `Ctrl+R` |
 | Larger / smaller text | `⌘+` / `⌘-` | `Ctrl++` / `Ctrl+-` |
 

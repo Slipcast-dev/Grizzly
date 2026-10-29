@@ -24,6 +24,12 @@ SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
 NOTARY_PROFILE="my-notary-profile" ./scripts/make-dmg.sh
 ```
 
+Tests (Swift core compiled with `swiftc`, then `node --test tests/` for the JS port):
+
+```bash
+./scripts/test.sh
+```
+
 `Package.swift` is provided for editors that understand SwiftPM; the release builds use the scripts above.
 
 ## Windows app (Electron)
@@ -46,7 +52,7 @@ npx electron scripts/smoke.js a.md b.csv # launch the real app and print the ren
 
 ## Release checklist
 
-1. Bump the version in `scripts/build-app.sh` (`CFBundleShortVersionString`) and `electron/package.json`.
+1. Set the version in the `VERSION` file and in `electron/package.json` (`tests/version.test.cjs` checks they match and that CHANGELOG has an entry).
 2. Update [CHANGELOG.md](../../CHANGELOG.md).
-3. Build all three artifacts and compute checksums with `shasum -a 256`.
+3. Run `./scripts/test.sh`, build the artifacts and compute checksums with `shasum -a 256`.
 4. Tag `vX.Y.Z` and create a GitHub release with the artifacts and checksums.

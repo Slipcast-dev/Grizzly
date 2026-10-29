@@ -24,6 +24,12 @@ SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
 NOTARY_PROFILE="my-notary-profile" ./scripts/make-dmg.sh
 ```
 
+Тесты (Swift-ядро компилируется через `swiftc`, затем `node --test tests/` для JS-порта):
+
+```bash
+./scripts/test.sh
+```
+
 `Package.swift` нужен редакторам с поддержкой SwiftPM; релизные сборки делаются скриптами выше.
 
 ## Приложение для Windows (Electron)
@@ -46,7 +52,7 @@ npx electron scripts/smoke.js a.md b.csv # запустить настоящее
 
 ## Чек-лист релиза
 
-1. Поднимите версию в `scripts/build-app.sh` (`CFBundleShortVersionString`) и `electron/package.json`.
+1. Задайте версию в файле `VERSION` и в `electron/package.json` (`tests/version.test.cjs` проверяет, что они совпадают и что в CHANGELOG есть запись).
 2. Обновите [CHANGELOG.md](../../CHANGELOG.md).
-3. Соберите все три артефакта и посчитайте суммы `shasum -a 256`.
+3. Запустите `./scripts/test.sh`, соберите артефакты и посчитайте суммы `shasum -a 256`.
 4. Поставьте тег `vX.Y.Z` и создайте релиз на GitHub с артефактами и суммами.

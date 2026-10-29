@@ -24,6 +24,7 @@ Object.assign(table, {
   'Файлы Grizzly': 'Grizzly files',
   'Все файлы': 'All files',
   'Готово.': 'Done.',
+  'Сохранить как… (Ctrl+Shift+S)': 'Save As… (Ctrl+Shift+S)',
 });
 
 const root = path.join(__dirname, '..');

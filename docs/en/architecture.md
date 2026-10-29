@@ -17,7 +17,8 @@ electron/     Windows port
   main.js       Main process: window, menu, file I/O, single-instance handoff, portable data dir
   preload.js    Narrow bridge exposed to the renderer (contextIsolation)
   renderer/     UI in plain JS/CSS: state, core (parsers), ui
-scripts/      build-app.sh, make-dmg.sh
+scripts/      build-app.sh, make-dmg.sh, test.sh
+tests/        Swift test (swiftc) and JS tests (node --test); VERSION is the single source of the version
 samples/      One file of each supported type for manual testing
 ```
 
@@ -38,6 +39,8 @@ samples/      One file of each supported type for manual testing
 - Electron renderer: `sandbox: true`, `contextIsolation: true`, `nodeIntegration: false`, and a
   Content-Security-Policy of `default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:`.
   File access happens in the main process through the preload bridge.
+- The Electron main process answers file IPC only to the app's own page and only for absolute paths with supported extensions.
+- Quick Look HTML escapes quotes and makes only `http`, `https` and `mailto` links clickable.
 - The library stores references (paths) only; it never modifies the files it points to.
 - Release builds are unsigned/ad-hoc signed; integrity is established with published SHA-256 checksums.
 

@@ -1,11 +1,11 @@
 # Установка
 
-Grizzly распространяется тремя файлами (macOS 0.3.1, Windows 0.2.1) на [странице релизов](https://github.com/Slipcast-dev/Grizzly/releases).
+Grizzly распространяется тремя файлами (macOS 0.3.2, Windows 0.2.1) на [странице релизов](https://github.com/Slipcast-dev/Grizzly/releases).
 
 | Платформа | Файл | Требования |
 |---|---|---|
-| macOS, Apple Silicon (M1 и новее) | `Grizzly-0.3.1-arm64.dmg` | macOS 13 Ventura или новее |
-| macOS, Intel | `Grizzly-0.3.1-x64.dmg` | macOS 13 Ventura или новее |
+| macOS, Apple Silicon (M1 и новее) | `Grizzly-0.3.2-arm64.dmg` | macOS 13 Ventura или новее |
+| macOS, Intel | `Grizzly-0.3.2-x64.dmg` | macOS 13 Ventura или новее |
 | Windows x64 | `Grizzly-0.2.1-portable.exe` | Windows 10 или 11, 64-бит |
 
 Не знаете, какой у вас Mac? Меню Apple → «Об этом Mac»: «Чип: Apple M…» — Apple Silicon, «Процессор: Intel…» — Intel.
@@ -16,7 +16,7 @@ Grizzly распространяется тремя файлами (macOS 0.3.1,
 
 ```bash
 # macOS
-shasum -a 256 ~/Downloads/Grizzly-0.3.1-arm64.dmg
+shasum -a 256 ~/Downloads/Grizzly-0.3.2-arm64.dmg
 ```
 
 ```powershell
@@ -50,7 +50,7 @@ Get-FileHash $HOME\Downloads\Grizzly-0.2.1-portable.exe -Algorithm SHA256
 
 Если что-то не работает:
 - *Grizzly* в списке Quick Look дважды: macOS нашла несколько копий приложения. Оставьте только `/Applications/Grizzly.app` (удалите остальные, например из «Загрузок» или смонтированного образа), затем выполните `qlmanage -r`.
-- Превью не появляется или не загружается: убедитесь, что установлена версия 0.3.1 или новее и расширение включено, затем выполните `qlmanage -r` и снова нажмите пробел.
+- Превью не появляется или не загружается: убедитесь, что установлена версия 0.3.2 или новее и расширение включено, затем выполните `qlmanage -r` и снова нажмите пробел.
 
 ## 3. Windows
 

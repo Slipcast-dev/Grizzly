@@ -2,7 +2,7 @@
 
 Port of the macOS SwiftUI app. Same features: Markdown reading mode, source view with line numbers and
 bookmarks, CSV tables, syntax coloring (JSON, YAML, INI, XML/HTML, TeX, logs), find, two panes side by side,
-tabs, virtual library with folders / recents / favorites, themes, reload on change, drag and drop,
+tabs, Save As (copy in any supported format), virtual library with folders / recents / favorites, themes, reload on change, drag and drop,
 Russian and English UI.
 
 ## Run from source
@@ -17,7 +17,7 @@ Russian and English UI.
 The result is `dist/Grizzly-<version>-portable.exe`. It needs no installation: settings and the library
 are stored in a `GrizzlyData` folder next to the .exe (or in `%APPDATA%` if that folder is read-only).
 
-Command line: `Grizzly-0.2.1-portable.exe file1.md file2.csv` opens the files; a second launch hands its
+Command line: `Grizzly-<version>-portable.exe file1.md file2.csv` opens the files; a second launch hands its
 files to the running window.
 
 `npm run strings` regenerates the English table from `../resources/en.lproj/Localizable.strings`.

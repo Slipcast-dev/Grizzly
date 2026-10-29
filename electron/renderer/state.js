@@ -353,6 +353,17 @@ const App = {
     }
   },
 
+  /** Saves a copy of the document (with unsaved edits) in a chosen format and place. */
+  async saveAs(id) {
+    const doc = this.documents.find((d) => d.id === id);
+    if (!doc) return;
+    let text = this.textFor(doc);
+    if (doc.text.includes('\r\n')) text = text.replace(/\n/g, '\r\n');
+    const dir = doc.path.replace(/[\\/][^\\/]*$/, '');
+    const result = await window.api.saveAs(doc.name, text, doc.encoding, dir);
+    if (!result.ok && result.code !== 'ECANCEL') this.fail(t('Не удалось сохранить «%@».', doc.name));
+  },
+
   /** Asks about every unsaved document among `ids`; false means the user cancelled. */
   async confirmDiscard(ids) {
     for (const id of ids) {
