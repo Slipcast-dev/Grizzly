@@ -8,7 +8,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let paths = CommandLine.arguments.dropFirst().filter { !$0.hasPrefix("-") }
         let urls = paths.map { URL(fileURLWithPath: $0) }.filter { FileManager.default.fileExists(atPath: $0.path) }
-        if !urls.isEmpty { AppState.shared.open(urls: urls) }
+        AppState.shared.openExternal(urls)
+        // Let a file-open event that is already on its way land first, then open everything that was queued.
+        DispatchQueue.main.async { AppState.shared.markReady() }
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -18,7 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Finder (double click, "Open With"), the Dock and `open -a` deliver files here, also while the app is launching.
     func application(_ application: NSApplication, open urls: [URL]) {
-        AppState.shared.open(urls: urls)
+        AppState.shared.openExternal(urls)
         NSApp.activate(ignoringOtherApps: true)
     }
 
@@ -42,6 +44,8 @@ struct GrizzlyApp: App {
                 .environmentObject(state.library)
                 .environmentObject(settings)
                 .frame(minWidth: 720, minHeight: 460)
+                // Some macOS versions deliver Finder's open event to the scene instead of the app delegate.
+                .onOpenURL { state.openExternal([$0]) }
         }
         .handlesExternalEvents(matching: ["*"])
         .windowToolbarStyle(.unified)

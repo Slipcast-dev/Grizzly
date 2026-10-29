@@ -124,7 +124,7 @@ struct SidebarView: View {
         let items = filtered(library.recents)
         if !items.isEmpty {
             Section {
-                ForEach(items) { file in fileRow(file, showsDate: true) }
+                ForEach(items) { entry in historyRow(entry) }
             } header: {
                 HStack {
                     Text("Недавно открытые")
@@ -174,6 +174,10 @@ struct SidebarView: View {
     private var visibleFolders: [LibraryFolder] {
         guard !query.isEmpty else { return library.folders }
         return library.folders.filter { !filtered(library.files(in: $0.id)).isEmpty }
+    }
+
+    private func filtered(_ entries: [HistoryEntry]) -> [HistoryEntry] {
+        query.isEmpty ? entries : entries.filter { $0.name.localizedCaseInsensitiveContains(query) }
     }
 
     private func filtered(_ files: [LibraryFile]) -> [LibraryFile] {
@@ -272,6 +276,34 @@ struct SidebarView: View {
         })
         .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
         .contextMenu { fileMenu(file) }
+    }
+
+    private func historyRow(_ entry: HistoryEntry) -> some View {
+        let isMissing = library.isMissing(entry)
+        return HStack(spacing: 6) {
+            Image(systemName: isMissing ? "exclamationmark.triangle" : entry.type.symbol)
+                .foregroundColor(isMissing ? .orange : .secondary)
+            Text(entry.name)
+                .lineLimit(1)
+                .foregroundColor(isMissing ? .secondary : .primary)
+            Spacer(minLength: 4)
+            Text(relative(entry.date)).font(.caption).foregroundColor(.secondary)
+        }
+        .padding(.vertical, 3)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .onTapGesture { state.openHistory(entry, inRight: NSEvent.modifierFlags.contains(.option)) }
+        .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
+        .contextMenu {
+            Button("Открыть") { state.openHistory(entry) }
+            Button("Открыть справа") { state.openHistory(entry, inRight: true) }
+            Button("Показать в Finder") {
+                if let url = library.resolve(entry) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+            }
+            .disabled(isMissing)
+            Divider()
+            Button("Убрать из истории", role: .destructive) { library.removeFromHistory(entry.path) }
+        }
     }
 
     @ViewBuilder

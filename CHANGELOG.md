@@ -3,16 +3,26 @@
 All notable changes are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.3] - 2026-10-29
+
+### Fixed
+- **History is kept**: files you opened stay in *Recent* after they are removed from the sidebar. The history is now stored separately from the library; opening an entry shows the file in a tab without adding it back to the sidebar. Entries can be removed one by one from the context menu, and *Clear* empties the list. Existing recents are migrated.
+- **Save As…**: the name field no longer comes pre-filled with the extension. It holds just the name and the format chosen in the list is added on save, so saving as another format no longer means erasing the old extension first (an extension typed by hand still wins).
+- macOS (Intel / x64): a file opened from Finder (double click, *Open With*) now opens in the app on launch. Files are accepted through every route the system may use (app delegate, scene `onOpenURL`) and queued until the app has started.
+
+### Changed
+- **Windows portable build is updated to 0.3.3** (was 0.2.1) and now has everything from 0.3.x: Save As…, the hardened file IPC, and the history fix above.
+
 ## [0.3.2] - 2026-10-29
 
 ### Added
-- **Save As…** (toolbar button, `⇧⌘S` / `Ctrl+Shift+S`): saves a copy of the current file, including unsaved edits, in any supported format (Markdown, Text, JSON, YAML, CSV/TSV, Log, XML, HTML, INI/TOML, TeX, RTF) and in a place you choose. The open document is not changed. macOS build only for now: the Windows source has it, but the portable build stays at 0.2.1 until it is rebuilt.
+- **Save As…** (toolbar button, `⇧⌘S` / `Ctrl+Shift+S`): saves a copy of the current file, including unsaved edits, in any supported format (Markdown, Text, JSON, YAML, CSV/TSV, Log, XML, HTML, INI/TOML, TeX, RTF) and in a place you choose. The open document is not changed.
 - macOS: files opened from Finder (double click, Open With) or the Dock open as tabs in the existing window, and launch the app with the file when it is not running. The built-in extensions are now declared with the default handler rank.
 - Unit tests and CI (`scripts/test.sh`, `.github/workflows/ci.yml`); `VERSION` is the single source of the version number.
 
 ### Security
 - Quick Look: quotes are escaped in rendered Markdown and only `http`, `https` and `mailto` links are clickable.
-- Windows source (not in the 0.2.1 portable build): the main process now accepts file IPC only from the app's own page and only for absolute paths with supported extensions.
+- Windows: the main process now accepts file IPC only from the app's own page and only for absolute paths with supported extensions.
 
 ## [0.3.1] - 2026-10-28
 

@@ -346,7 +346,7 @@ function renderSidebarList() {
     if (items.length) {
       frag.append(h('div', { class: 'sec-head' }, h('span', null, t('Недавно открытые')),
         h('button', { class: 'plain link', onclick: () => Library.clearRecents() }, t('Очистить'))));
-      items.forEach((f) => frag.append(fileRow(f, true)));
+      items.forEach((e) => frag.append(historyRow(e)));
     }
     if (!Library.recents.length) frag.append(hint('clock', t('Здесь появятся файлы, которые вы открывали.')));
   } else {
@@ -504,6 +504,26 @@ function fileRow(file, showsDate = false) {
   h('span', { class: 'grow ellipsis' }, file.name),
   showsDate && file.lastOpened ? h('span', { class: 'small muted' }, relativeTime(file.lastOpened)) : null,
   file.isFavorite ? h('span', { class: 'fav' }, icon('star', 12, true)) : null);
+}
+
+function historyRow(entry) {
+  const known = Library.fileByPath(entry.path);
+  const missing = !!known && Library.isMissing(known.id);
+  return h('div', {
+    class: 'file' + (missing ? ' missing' : ''),
+    title: entry.path,
+    onclick: (e) => App.openHistory(entry, e.altKey),
+    oncontextmenu: (e) => Menus.at(e, [
+      { label: t('Открыть'), action: () => App.openHistory(entry) },
+      { label: t('Открыть справа'), action: () => App.openHistory(entry, true) },
+      { label: t('Показать в проводнике'), action: () => window.api.reveal(entry.path) },
+      { separator: true },
+      { label: t('Убрать из истории'), danger: true, action: () => Library.removeFromHistory(entry.path) },
+    ]),
+  },
+  missing ? icon('warning', 15) : typeIcon(fileTypeOf(entry.path), 15),
+  h('span', { class: 'grow ellipsis' }, entry.name),
+  h('span', { class: 'small muted' }, relativeTime(entry.date)));
 }
 
 function fileMenu(file) {

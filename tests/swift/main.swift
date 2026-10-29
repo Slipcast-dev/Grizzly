@@ -32,5 +32,20 @@ let table = CSVTable(lines: ["a;b", "1;\"x;y\""], delimiter: CSVTable.detectDeli
 check(table.rows.count == 2 && table.rows[1].cells.contains("x;y"), "csv quoted cell with delimiter")
 check(!MarkdownParser.parse(["# T", "", "- a", "- b"]).isEmpty, "markdown parses")
 
+// History survives removing the file from the library
+let histFile = dir.appendingPathComponent("h.md")
+try "# hi".write(to: histFile, atomically: true, encoding: .utf8)
+let lib = LibraryStore(storeURL: dir.appendingPathComponent("lib.json"))
+let entry = lib.add(url: histFile)
+lib.recordOpened(histFile)
+check(lib.recents.count == 1, "opened file is in history")
+lib.remove(entry.id)
+check(lib.recents.count == 1 && lib.file(atPath: histFile.standardizedFileURL.path) == nil, "history keeps a file removed from the library")
+lib.recordOpened(histFile)
+check(lib.recents.count == 1, "history has no duplicates")
+check(LibraryStore(storeURL: dir.appendingPathComponent("lib.json")).recents.count == 1, "history is saved to disk")
+lib.clearRecents()
+check(lib.recents.isEmpty, "clear empties history")
+
 try? FileManager.default.removeItem(at: dir)
 exit(failures == 0 ? 0 : 1)

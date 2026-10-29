@@ -6,7 +6,8 @@ const byName = (a, b) => collator.compare(a.name, b.name);
 
 const Library = {
   RECENT_LIMIT: 20,
-  data: { files: [], folders: [] },
+  HISTORY_STORED: 200,
+  data: { files: [], folders: [], history: [] },
   missing: new Set(),
   caseInsensitive: false,
   onChange: () => {},
@@ -24,7 +25,13 @@ const Library = {
             isFavorite: !!f.isFavorite, lastOpened: f.lastOpened || null, bookmarks: f.bookmarks || [],
           })),
           folders: (parsed.folders || []).map((f) => ({ id: f.id, name: f.name, isExpanded: f.isExpanded !== false, sourcePath: f.sourcePath || null })),
+          // The history lives apart from the files, so removing a file from the sidebar keeps its record.
+          history: (parsed.history || []).filter((h) => h && h.path && h.date).map((h) => ({ path: h.path, name: h.name || baseName(h.path), date: h.date })),
         };
+        if (!parsed.history) {
+          this.data.history = this.data.files.filter((f) => f.lastOpened)
+            .map((f) => ({ path: f.path, name: f.name, date: f.lastOpened }));
+        }
       }
     } catch { /* a damaged library starts empty */ }
     await this.refreshMissing();
@@ -46,9 +53,13 @@ const Library = {
   get folders() { return [...this.data.folders].sort(byName); },
   file(id) { return this.data.files.find((f) => f.id === id) || null; },
   filesIn(folderID) { return this.data.files.filter((f) => (f.folderID || null) === (folderID || null)).sort(byName); },
+  /** Opened files, newest first, whether or not they are still in the library. */
   get recents() {
-    return this.data.files.filter((f) => f.lastOpened)
-      .sort((a, b) => b.lastOpened.localeCompare(a.lastOpened)).slice(0, this.RECENT_LIMIT);
+    return [...this.data.history].sort((a, b) => b.date.localeCompare(a.date)).slice(0, this.RECENT_LIMIT);
+  },
+  fileByPath(path) {
+    const same = (a, b) => (this.caseInsensitive ? a.toLowerCase() === b.toLowerCase() : a === b);
+    return this.data.files.find((f) => same(f.path, path)) || null;
   },
   get favorites() { return this.data.files.filter((f) => f.isFavorite).sort(byName); },
   folderExists(name) { return this.data.folders.some((f) => f.name.toLowerCase() === name.toLowerCase()); },
@@ -81,10 +92,22 @@ const Library = {
     this.onChange();
   },
 
-  markOpened(id) {
-    this.mutate((d) => { const f = d.files.find((x) => x.id === id); if (f) f.lastOpened = new Date().toISOString(); });
+  /** Puts a file at the top of the history (once per path). */
+  recordOpened(path) {
+    const same = (a, b) => (this.caseInsensitive ? a.toLowerCase() === b.toLowerCase() : a === b);
+    const now = new Date().toISOString();
+    this.mutate((d) => {
+      d.history = d.history.filter((h) => !same(h.path, path));
+      d.history.push({ path, name: baseName(path), date: now });
+      if (d.history.length > this.HISTORY_STORED) {
+        d.history = d.history.sort((a, b) => b.date.localeCompare(a.date)).slice(0, this.HISTORY_STORED);
+      }
+      const f = d.files.find((x) => same(x.path, path));
+      if (f) f.lastOpened = now;
+    });
   },
-  clearRecents() { this.mutate((d) => d.files.forEach((f) => { f.lastOpened = null; })); },
+  removeFromHistory(path) { this.mutate((d) => { d.history = d.history.filter((h) => h.path !== path); }); },
+  clearRecents() { this.mutate((d) => { d.history = []; d.files.forEach((f) => { f.lastOpened = null; }); }); },
   toggleFavorite(id) {
     this.mutate((d) => { const f = d.files.find((x) => x.id === id); if (f) f.isFavorite = !f.isFavorite; });
   },
@@ -224,31 +247,38 @@ const App = {
     await this.show(id, entry.path, pane, true);
   },
 
+  /** Opens a file from the history. It is shown in a tab without being added back to the sidebar. */
+  async openHistory(entry, inRight = false) {
+    const pane = inRight ? 'right' : (this.isSplit ? this.focusedPane : 'left');
+    const known = Library.fileByPath(entry.path);
+    await this.show(known ? known.id : null, entry.path, pane, false);
+  },
+
   async show(libraryID, path, pane, fromLibrary = false) {
     const target = pane || (this.isSplit ? this.focusedPane : 'left');
-    const existing = this.documents.find((d) => d.libraryID === libraryID);
+    const existing = this.documents.find((d) => (libraryID ? d.libraryID === libraryID : !d.libraryID && d.path === path));
     if (existing) {
       this.assign(existing.id, target);
-      Library.markOpened(libraryID);
+      Library.recordOpened(path);
       return;
     }
     const loaded = await window.api.readFile(path);
     if (!loaded.ok) {
       const name = baseName(path);
       if (loaded.code === 'ENOENT') {
-        Library.setMissing(libraryID, true);
+        if (libraryID) Library.setMissing(libraryID, true);
         this.fail(fromLibrary ? t('Файл «%@» не найден. Возможно, он перемещён или удалён.', name) : t('Не удалось открыть «%@».', name));
       } else {
         this.fail(t('Не удалось открыть «%@».', name));
       }
       return;
     }
-    Library.setMissing(libraryID, false);
+    if (libraryID) Library.setMissing(libraryID, false);
     const doc = makeDocument(path, loaded);
     doc.libraryID = libraryID;
     this.documents.push(doc);
     this.assign(doc.id, target);
-    Library.markOpened(libraryID);
+    Library.recordOpened(path);
   },
 
   fail(message) { this.errorMessage = message; this.render(['dialogs']); },
