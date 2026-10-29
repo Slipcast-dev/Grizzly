@@ -9,7 +9,7 @@ Sources/Grizzly/          приложение macOS (SwiftUI, ~2,8 тыс. ст
   Core/       Модель документа, загрузка и кодировки, парсер Markdown, CSV, подсветка, поиск
   Features/   Вкладки, панели, исходник, редактор, поиск, боковая панель, настройки
   Render/     Отрисовка Markdown и таблиц CSV
-  Library/    Виртуальная библиотека (папки / недавние / избранное) в JSON
+  Library/    Виртуальная библиотека (папки / избранное) и история открытых файлов в JSON
 QuickLook/    Расширение Quick Look (.appex): HTML-превью Markdown, CSV, YAML и логов;
               использует Core/FileLoader, FileType, CSVTable и MarkdownParser
 resources/    Иконка и Localizable.strings (ru, en)

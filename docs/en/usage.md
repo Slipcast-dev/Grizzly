@@ -57,7 +57,7 @@ The open document is not changed. *Save* (`⌘S`) still writes edits back to the
 
 ## Library
 
-The sidebar holds a **virtual library**: your own folders, recents and favorites (⭐). It is only a list of
+The sidebar holds a **virtual library**: your own folders and favorites (⭐), plus the history of opened files on the clock tab. It is only a list of
 references — it never moves, copies or changes your files.
 
 - **New folder** (the folder button in the sidebar header): type a name and press Return (leaving the field also saves it). Drag files onto a folder to move them; right-click a folder to rename or delete it.
