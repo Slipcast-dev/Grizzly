@@ -65,9 +65,10 @@ struct MarkdownView: View {
             }
             .font(.system(size: size))
 
-        case .code(_, let code):
+        case .code(let lang, let code):
             ScrollView(.horizontal, showsIndicators: false) {
-                Text(AttributedString(code.isEmpty ? " " : code)
+                Text((FileType.fromFenceTag(lang).map { Syntax.highlightBlock(code.isEmpty ? " " : code, type: $0, theme: theme) }
+                        ?? AttributedString(code.isEmpty ? " " : code))
                         .highlighted(highlight, unit: unit, offset: offsets[0], theme: theme))
                     .font(.system(size: size * 0.9, design: .monospaced))
                     .foregroundColor(theme.codeText)

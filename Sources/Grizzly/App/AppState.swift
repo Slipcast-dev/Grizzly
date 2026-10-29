@@ -249,41 +249,65 @@ final class AppState: ObservableObject {
 
     /// Formats offered by "Save As…": one per supported extension, Markdown first.
     static let exportExtensions: [String] = {
-        let first = ["md", "txt", "json", "yaml", "csv", "log", "xml", "html", "ini", "toml", "tex", "rtf"]
+        let first = ["md", "txt", "json", "yaml", "csv", "log", "xml", "html", "ini", "toml", "tex", "rtf",
+                     "py", "swift", "cpp", "cs", "js", "ts", "css", "php"]
         return first + FileType.allExtensions.filter { !first.contains($0) }
     }()
 
-    /// Saves a copy of the current document (with unsaved edits) in a chosen format and place.
-    /// The open document is left as it is.
-    func presentSaveAsPanel() {
-        guard let doc = current else { return }
+    /// Save panel with a format popup. The name field holds only the name: the format is picked in the popup and
+    /// appended, so the extension never has to be erased by hand. A supported extension typed by hand wins.
+    private func runFormatPanel(title: String, directory: URL?, base: String, selecting ext: String) -> URL? {
         let panel = NSSavePanel()
         panel.canCreateDirectories = true
-        panel.title = L("Сохранить как…")
-        panel.directoryURL = doc.url.deletingLastPathComponent()
+        panel.title = title
+        if let directory { panel.directoryURL = directory }
 
-        let base = doc.url.deletingPathExtension().lastPathComponent
-        let ownExt = doc.url.pathExtension.lowercased()
         let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 240, height: 26), pullsDown: false)
         for ext in Self.exportExtensions {
             popup.addItem(withTitle: ".\(ext) — \(FileType.extensions[ext]?.title ?? ext)")
         }
-        popup.selectItem(at: Self.exportExtensions.firstIndex(of: ownExt) ?? 0)
+        popup.selectItem(at: Self.exportExtensions.firstIndex(of: ext) ?? 0)
         let label = NSTextField(labelWithString: L("Формат:"))
         let stack = NSStackView(views: [label, popup])
         stack.spacing = 8
         stack.edgeInsets = NSEdgeInsets(top: 8, left: 0, bottom: 8, right: 0)
         panel.accessoryView = stack
 
-        // The name field holds only the name: the format is picked in the popup and appended on save,
-        // so the extension never has to be erased by hand.
         panel.nameFieldStringValue = base
-        guard panel.runModal() == .OK, var url = panel.url else { return }
+        guard panel.runModal() == .OK, var url = panel.url else { return nil }
+        if FileType.extensions[url.pathExtension.lowercased()] == nil {
+            url.appendPathExtension(Self.exportExtensions[popup.indexOfSelectedItem])
+        }
+        return url
+    }
 
-        // A supported extension typed by hand wins; otherwise the chosen format is appended.
-        let chosen = Self.exportExtensions[popup.indexOfSelectedItem]
-        if FileType.extensions[url.pathExtension.lowercased()] == nil { url.appendPathExtension(chosen) }
+    /// Saves a copy of the current document (with unsaved edits) in a chosen format and place.
+    /// The open document is left as it is.
+    func presentSaveAsPanel() {
+        guard let doc = current else { return }
+        guard let url = runFormatPanel(
+            title: L("Сохранить как…"), directory: doc.url.deletingLastPathComponent(),
+            base: doc.url.deletingPathExtension().lastPathComponent, selecting: doc.url.pathExtension.lowercased()) else { return }
         export(doc, to: url)
+    }
+
+    /// Creates a new file: the user picks name, place and format, the file is written with a small starter
+    /// template and opened in a tab, ready to edit.
+    func presentNewFilePanel() {
+        let lastDir = UserDefaults.standard.string(forKey: "newFileDirectory").map { URL(fileURLWithPath: $0) }
+        guard let url = runFormatPanel(
+            title: L("Новый файл"), directory: lastDir ?? current?.url.deletingLastPathComponent(),
+            base: L("Без названия"), selecting: "md") else { return }
+        let ext = url.pathExtension.lowercased()
+        do {
+            try FileLoader.write(FileType.template(forExtension: ext), to: url, encoding: ext == "rtf" ? "RTF" : "UTF-8")
+        } catch {
+            errorMessage = L("Не удалось создать «%@».", url.lastPathComponent)
+            return
+        }
+        UserDefaults.standard.set(url.deletingLastPathComponent().path, forKey: "newFileDirectory")
+        open(urls: [url])
+        mode = .edit
     }
 
     private func export(_ doc: Document, to url: URL) {

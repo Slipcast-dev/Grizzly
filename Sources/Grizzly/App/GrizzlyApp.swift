@@ -53,6 +53,8 @@ struct GrizzlyApp: App {
         Settings { SettingsView().environmentObject(settings) }
         .commands {
             CommandGroup(replacing: .newItem) {
+                Button("Новый файл…") { state.presentNewFilePanel() }
+                    .keyboardShortcut("n")
                 Button("Открыть…") { state.presentOpenPanel() }
                     .keyboardShortcut("o")
                 Button("Сохранить") { if let id = state.current?.id { state.save(id) } }

@@ -128,3 +128,7 @@
 "Перед выходом предложим сохранить несохранённые изменения." = "You will be asked to save any unsaved changes first.";
 "Перезапустить" = "Restart";
 "Позже" = "Later";
+"Новый файл…" = "New File…";
+"Новый файл" = "New File";
+"Без названия" = "Untitled";
+"Не удалось создать «%@»." = "Couldn’t create “%@”.";

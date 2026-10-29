@@ -1,12 +1,12 @@
 # Установка
 
-Grizzly распространяется тремя файлами (версия 0.4.0) на [странице релизов](https://github.com/Slipcast-dev/Grizzly/releases).
+Grizzly распространяется тремя файлами (версия 1.0.0) на [странице релизов](https://github.com/Slipcast-dev/Grizzly/releases).
 
 | Платформа | Файл | Требования |
 |---|---|---|
-| macOS, Apple Silicon (M1 и новее) | `Grizzly-0.4.0-arm64.dmg` | macOS 13 Ventura или новее |
-| macOS, Intel | `Grizzly-0.4.0-x64.dmg` | macOS 13 Ventura или новее |
-| Windows x64 | `Grizzly-0.4.0-portable.exe` | Windows 10 или 11, 64-бит |
+| macOS, Apple Silicon (M1 и новее) | `Grizzly-1.0.0-arm64.dmg` | macOS 13 Ventura или новее |
+| macOS, Intel | `Grizzly-1.0.0-x64.dmg` | macOS 13 Ventura или новее |
+| Windows x64 | `Grizzly-1.0.0-portable.exe` | Windows 10 или 11, 64-бит |
 
 Не знаете, какой у вас Mac? Меню Apple → «Об этом Mac»: «Чип: Apple M…» — Apple Silicon, «Процессор: Intel…» — Intel.
 
@@ -16,12 +16,12 @@ Grizzly распространяется тремя файлами (версия
 
 ```bash
 # macOS
-shasum -a 256 ~/Downloads/Grizzly-0.4.0-arm64.dmg
+shasum -a 256 ~/Downloads/Grizzly-1.0.0-arm64.dmg
 ```
 
 ```powershell
 # Windows (PowerShell)
-Get-FileHash $HOME\Downloads\Grizzly-0.4.0-portable.exe -Algorithm SHA256
+Get-FileHash $HOME\Downloads\Grizzly-1.0.0-portable.exe -Algorithm SHA256
 ```
 
 Если значения отличаются — удалите файл и скачайте заново. Не запускайте его.
@@ -54,13 +54,13 @@ Get-FileHash $HOME\Downloads\Grizzly-0.4.0-portable.exe -Algorithm SHA256
 
 ## 3. Windows
 
-1. Положите `Grizzly-0.4.0-portable.exe` куда угодно (папка, флешка). Установщика нет.
+1. Положите `Grizzly-1.0.0-portable.exe` куда угодно (папка, флешка). Установщика нет.
 2. Запустите двойным кликом. SmartScreen может показать «Windows защитила ваш компьютер», потому что файл не подписан:
    **Подробнее → Выполнить в любом случае**.
 3. Настройки и библиотека хранятся в папке `GrizzlyData` **рядом с .exe**
    (или в `%APPDATA%\Grizzly`, если папка недоступна для записи). Перенесите папку вместе с .exe — данные поедут с вами.
 
-Командная строка: `Grizzly-0.4.0-portable.exe notes.md data.csv` откроет файлы. Повторный запуск передаёт файлы
+Командная строка: `Grizzly-1.0.0-portable.exe notes.md data.csv` откроет файлы. Повторный запуск передаёт файлы
 уже работающему окну.
 
 ## Обновление и удаление

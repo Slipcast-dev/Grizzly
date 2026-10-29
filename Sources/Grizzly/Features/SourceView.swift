@@ -24,7 +24,7 @@ struct SourceView: View {
                             if prefs.showLineNumbers {
                                 gutter(number: index + 1, isBookmarked: bookmarked.contains(index + 1))
                             }
-                            Text(Syntax.highlight(line.isEmpty ? " " : line, type: document.type, theme: theme)
+                            Text(Syntax.highlight(line.isEmpty ? " " : line, type: document.type, theme: theme, state: document.syntaxStates.isEmpty ? 0 : document.syntaxStates[index])
                                     .highlighted(highlight, unit: index, offset: 0, theme: theme))
                                 .font(.system(size: size, design: .monospaced))
                                 .foregroundColor(color(for: line))

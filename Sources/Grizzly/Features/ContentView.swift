@@ -19,6 +19,7 @@ struct ContentView: View {
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Menu {
+                    Button("Новый файл…") { state.presentNewFilePanel() }
                     Button("Открыть файл…") { state.presentOpenPanel() }
                     Button("Добавить папку с диска…") { state.presentFolderPanel() }
                 } label: {

@@ -34,9 +34,9 @@ Get the files from the **[latest release](https://github.com/Slipcast-dev/Grizzl
 
 | Platform | File | Notes |
 |---|---|---|
-| macOS 13+, Apple Silicon | `Grizzly-0.4.0-arm64.dmg` | Drag *Grizzly* to *Applications* |
-| macOS 13+, Intel | `Grizzly-0.4.0-x64.dmg` | Drag *Grizzly* to *Applications* |
-| Windows 10/11, x64 | `Grizzly-0.4.0-portable.exe` | Portable, no installer |
+| macOS 13+, Apple Silicon | `Grizzly-1.0.0-arm64.dmg` | Drag *Grizzly* to *Applications* |
+| macOS 13+, Intel | `Grizzly-1.0.0-x64.dmg` | Drag *Grizzly* to *Applications* |
+| Windows 10/11, x64 | `Grizzly-1.0.0-portable.exe` | Portable, no installer |
 
 > [!IMPORTANT]
 > The builds are **not code-signed or notarized**. macOS Gatekeeper and Windows SmartScreen will warn on first
@@ -47,7 +47,9 @@ Get the files from the **[latest release](https://github.com/Slipcast-dev/Grizzl
 
 - **Reading mode** — Markdown with headings, lists, task lists, quotes, code blocks, tables and links.
 - **Source mode** — line numbers, clickable line **bookmarks** (kept between sessions), syntax colors for
-  JSON, YAML, INI/TOML, XML/HTML, TeX and log files.
+  **Python, Swift, C/C++, C#, JavaScript, TypeScript, CSS and PHP** (also inside fenced code blocks in Markdown) as well as
+  JSON, YAML, INI/TOML, XML/HTML, TeX and log files. Colors follow the theme; comments and strings that span several lines are handled.
+- **New file** — `⌘N` / `Ctrl+N`: pick a name, folder and format; the file is created with a small template and opens for editing.
 - **Edit mode** — edit and save in place; the original encoding (UTF-8 with/without BOM, UTF-16, Windows-1251,
   ISO-8859-1) is preserved.
 - **CSV / TSV tables** with automatic delimiter detection.
@@ -62,7 +64,7 @@ Get the files from the **[latest release](https://github.com/Slipcast-dev/Grizzl
 - **Default app picker** (macOS) — Settings → File types makes Grizzly the default app for chosen extensions.
 - **English and Russian** interface.
 
-Supported extensions: `md markdown mdown txt text log json yaml yml csv tsv xml html htm ini conf toml tex rtf`.
+Supported extensions: `md markdown mdown txt text log json yaml yml csv tsv xml html htm ini conf toml tex rtf` and source code: `py pyw swift c h cpp cc cxx hpp hh hxx cs js mjs cjs jsx ts tsx css scss php`.
 
 ## Quick start
 

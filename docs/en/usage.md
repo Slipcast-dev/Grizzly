@@ -5,8 +5,15 @@
 - `⌘O` / `Ctrl+O`, or drag files onto the window or the Dock / taskbar icon.
 - **From Finder (macOS)**: double-click a file or use *Open With → Grizzly*. If Grizzly is not running it starts with the file; if it is, the file opens as a tab in the existing window (never a second window or a second copy of the app). To make it the default app, see *Settings → File types*.
 - Several files open as tabs. `⇧⌘]` / `⇧⌘[` (`Ctrl+Shift+]` / `[`) cycle through them.
-- Supported extensions: `md markdown mdown txt text log json yaml yml csv tsv xml html htm ini conf toml tex rtf`.
+- Supported extensions: `md markdown mdown txt text log json yaml yml csv tsv xml html htm ini conf toml tex rtf`,
+  plus source code: `py pyw swift c h cpp cc cxx hpp hh hxx cs js mjs cjs jsx ts tsx css scss php`.
   Anything unknown opens as plain text.
+
+## New file
+
+`⌘N` / `Ctrl+N` (or *New File…* in the open menu of the toolbar) asks for a name, folder and format in the save dialog, creates the file with a
+small starter template (a heading for Markdown, `{}` for JSON, a header row for CSV, a skeleton for HTML, C/C++, C#, PHP and so on) and opens it in a new tab in
+Edit mode. Existing files are replaced only after the system dialog's confirmation.
 
 ## Three modes
 
@@ -28,6 +35,7 @@ tables and links are rendered in the current theme. Open [`samples/README.md`](.
 | Type | Treatment |
 |---|---|
 | CSV / TSV | Shown as a table; the delimiter (`,` `;` tab) is detected automatically |
+| Python, Swift, C / C++, C#, JavaScript, TypeScript, CSS, PHP | Syntax colors in Reading and Source modes (and live in Edit mode on macOS); comments and strings spanning lines are supported. Fenced Markdown blocks (```` ```python ````) use the same colors |
 | JSON, YAML, INI / conf / TOML | Syntax colors in source mode |
 | XML / HTML | Shown as source with syntax colors (HTML is never executed) |
 | TeX | Syntax colors |
@@ -97,6 +105,7 @@ Open Settings (`⌘,` / `Ctrl+,`):
 
 | Action | macOS | Windows |
 |---|---|---|
+| New file | `⌘N` | `Ctrl+N` |
 | Save As | `⇧⌘S` | `Ctrl+Shift+S` |
 | Open / Save / Close tab | `⌘O` / `⌘S` / `⌘W` | `Ctrl+O` / `Ctrl+S` / `Ctrl+W` |
 | Settings | `⌘,` | `Ctrl+,` |

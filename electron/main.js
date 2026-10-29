@@ -3,7 +3,8 @@ const fs = require('fs');
 const path = require('path');
 
 const EXTENSIONS = ['md', 'markdown', 'mdown', 'txt', 'text', 'json', 'yaml', 'yml', 'csv', 'tsv', 'log',
-  'xml', 'html', 'htm', 'ini', 'conf', 'toml', 'tex', 'rtf'];
+  'xml', 'html', 'htm', 'ini', 'conf', 'toml', 'tex', 'rtf',
+  'py', 'pyw', 'swift', 'c', 'h', 'cpp', 'cc', 'cxx', 'hpp', 'hh', 'hxx', 'cs', 'js', 'mjs', 'cjs', 'jsx', 'ts', 'tsx', 'css', 'scss', 'php'];
 
 // Portable build: keep settings and the library next to the .exe when that folder is writable.
 // The app used to be called MD Reader: its data folders are renamed once so settings and the library carry over.
@@ -138,6 +139,7 @@ function buildMenu() {
     {
       label: T('Файл'),
       submenu: [
+        item('Новый файл…', 'newFile', 'CmdOrCtrl+N'),
         item('Открыть…', 'open', 'CmdOrCtrl+O'),
         item('Сохранить', 'save', 'CmdOrCtrl+S'),
         item('Сохранить как…', 'saveAs', 'CmdOrCtrl+Shift+S'),
@@ -431,7 +433,51 @@ const FORMATS = [
   ['Markdown', ['md', 'markdown', 'mdown']], ['Text', ['txt', 'text']], ['JSON', ['json']], ['YAML', ['yaml', 'yml']],
   ['CSV', ['csv']], ['TSV', ['tsv']], ['Log', ['log']], ['XML', ['xml']], ['HTML', ['html', 'htm']],
   ['Config', ['ini', 'conf', 'toml']], ['TeX', ['tex']], ['RTF', ['rtf']],
+  ['Python', ['py', 'pyw']], ['Swift', ['swift']], ['C / C++', ['cpp', 'c', 'cc', 'cxx', 'h', 'hpp', 'hh', 'hxx']], ['C#', ['cs']],
+  ['JavaScript', ['js', 'mjs', 'cjs', 'jsx']], ['TypeScript', ['ts', 'tsx']], ['CSS', ['css', 'scss']], ['PHP', ['php']],
 ];
+
+/** Starter content for a newly created file. */
+function templateFor(ext) {
+  switch (ext) {
+    case 'md': case 'markdown': case 'mdown': return '# \n\n';
+    case 'json': return '{\n  \n}\n';
+    case 'csv': return 'column1,column2\n';
+    case 'tsv': return 'column1\tcolumn2\n';
+    case 'html': case 'htm': return '<!DOCTYPE html>\n<html>\n<head>\n  <meta charset="utf-8">\n  <title></title>\n</head>\n<body>\n\n</body>\n</html>\n';
+    case 'xml': return '<?xml version="1.0" encoding="UTF-8"?>\n';
+    case 'tex': return '\\documentclass{article}\n\\begin{document}\n\n\\end{document}\n';
+    case 'swift': return 'import Foundation\n\n';
+    case 'c': return '#include <stdio.h>\n\nint main(void) {\n    return 0;\n}\n';
+    case 'cpp': case 'cc': case 'cxx': return '#include <iostream>\n\nint main() {\n    return 0;\n}\n';
+    case 'h': case 'hpp': case 'hh': case 'hxx': return '#pragma once\n';
+    case 'cs': return 'using System;\n\nclass Program\n{\n    static void Main()\n    {\n    }\n}\n';
+    case 'js': case 'mjs': case 'cjs': case 'jsx': return "'use strict';\n\n";
+    case 'css': case 'scss': return 'body {\n}\n';
+    case 'php': return '<?php\n\n';
+    default: return '';
+  }
+}
+
+/** New file: the user picks name, place and format; the file is written with a starter template. */
+ipcMain.handle('dialog:newFile', async (e, dir) => {
+  if (!trusted(e)) return refuse;
+  const result = await dialog.showSaveDialog(win, {
+    title: T('Новый файл'),
+    defaultPath: path.join(typeof dir === 'string' && path.isAbsolute(dir) ? dir : app.getPath('documents'), T('Без названия')),
+    filters: FORMATS.map(([label, exts]) => ({ name: `${label} (.${exts[0]})`, extensions: exts })),
+  });
+  if (result.canceled || !result.filePath) return { ok: false, code: 'ECANCEL' };
+  let file = result.filePath;
+  if (!EXTENSIONS.includes(path.extname(file).slice(1).toLowerCase())) file += '.md';
+  const ext = path.extname(file).slice(1).toLowerCase();
+  try {
+    fs.writeFileSync(file, encodeText(templateFor(ext), ext === 'rtf' ? 'RTF' : 'UTF-8', file));
+    return { ok: true, path: file };
+  } catch (err) {
+    return { ok: false, code: err.code || 'EWRITE', name: path.basename(file) };
+  }
+});
 
 /** Save a copy in a chosen format and place; the open document is left as it is. */
 ipcMain.handle('dialog:saveAs', async (e, name, text, encoding, dir) => {

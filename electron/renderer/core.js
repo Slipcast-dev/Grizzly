@@ -15,16 +15,39 @@ const EXTENSION_TYPES = {
   ini: 'config', conf: 'config', toml: 'config',
   tex: 'tex',
   rtf: 'rtf',
+  py: 'python', pyw: 'python',
+  swift: 'swift',
+  c: 'cpp', h: 'cpp', cpp: 'cpp', cc: 'cpp', cxx: 'cpp', hpp: 'cpp', hh: 'cpp', hxx: 'cpp',
+  cs: 'csharp',
+  js: 'javascript', mjs: 'javascript', cjs: 'javascript', jsx: 'javascript',
+  ts: 'typescript', tsx: 'typescript',
+  css: 'css', scss: 'css',
+  php: 'php',
 };
+
+/** Language names after the opening ``` of a Markdown code block. */
+const FENCE_TAGS = {
+  python: 'python', py: 'python', python3: 'python', swift: 'swift',
+  c: 'cpp', h: 'cpp', cpp: 'cpp', 'c++': 'cpp', cc: 'cpp', cxx: 'cpp', hpp: 'cpp',
+  cs: 'csharp', csharp: 'csharp', 'c#': 'csharp',
+  js: 'javascript', javascript: 'javascript', jsx: 'javascript', mjs: 'javascript', node: 'javascript',
+  ts: 'typescript', typescript: 'typescript', tsx: 'typescript',
+  css: 'css', scss: 'css', php: 'php',
+  json: 'json', yaml: 'yaml', yml: 'yaml', xml: 'xml', html: 'html', htm: 'html',
+  ini: 'config', toml: 'config', tex: 'tex', latex: 'tex', log: 'log',
+};
+const fenceType = (tag) => FENCE_TAGS[(String(tag || '').split(/[\s{]/)[0] || '').toLowerCase()] || null;
 
 const TYPE_TITLES = {
   markdown: 'Markdown', text: 'Text', json: 'JSON', yaml: 'YAML', csv: 'CSV', log: 'Log',
   xml: 'XML', html: 'HTML', config: 'Config', tex: 'TeX', rtf: 'RTF',
+  python: 'Python', swift: 'Swift', cpp: 'C / C++', csharp: 'C#', javascript: 'JavaScript', typescript: 'TypeScript', css: 'CSS', php: 'PHP',
 };
 
 const TYPE_ICONS = {
   markdown: 'docRich', rtf: 'docRich', json: 'braces', yaml: 'doc', config: 'doc', xml: 'doc',
   html: 'doc', tex: 'doc', csv: 'table', log: 'list', text: 'docPlain',
+  python: 'code', swift: 'code', cpp: 'code', csharp: 'code', javascript: 'code', typescript: 'code', css: 'code', php: 'code',
 };
 
 const baseName = (p) => p.split(/[\\/]/).pop();
@@ -355,6 +378,7 @@ function makeDocument(path, loaded) {
     encoding: loaded.encoding,
     text: loaded.text,
     lines,
+    syntaxStates: Syntax.states(lines, type),
     blocks: type === 'markdown' ? MarkdownParser.parse(lines) : [],
     csv: type === 'csv' ? CSV.parse(lines, CSV.detectDelimiter(path, lines)) : null,
     modified: loaded.mtimeMs,
@@ -439,16 +463,165 @@ const Syntax = (() => {
     ],
   };
 
+  // ---- Programming languages: comments and strings are scanned first (they can span lines), then rules apply.
+  const block = (open, close, role) => ({ open, close, role });
+  const words = (list, role) => rule('\\b(?:' + list.split(' ').join('|') + ')\\b', role);
+  const codeNumber = rule('\\b(?:0[xX][0-9A-Fa-f_]+|0[bB][01_]+|\\d[\\d_]*(?:\\.\\d+)?(?:[eE][+-]?\\d+)?)[uUlLfFdDmMzZ]*\\b', 'number');
+  const typeName = rule('\\b[A-Z][A-Za-z0-9_]*\\b', 'key');
+  const cBlock = block('/*', '*/', 'comment');
+  const QUOTES = '"\'';
+
+  const jsRules = (extra) => [
+    rule('@\\w+', 'key'),
+    words('async await break case catch class const continue debugger default delete do else export extends finally for from function get if import in instanceof let new of return set static super switch this throw try typeof var void while with yield ' + extra, 'keyword'),
+    words('true false null undefined NaN Infinity', 'number'),
+    codeNumber, typeName,
+  ];
+
+  const CODE = {
+    python: {
+      lineComments: ['#'], blocks: [block('"""', '"""', 'string'), block("'''", "'''", 'string')], quotes: QUOTES,
+      rules: [
+        rule('^\\s*@[\\w.]+|(?<=\\s)@[\\w.]+$', 'key'),
+        words('and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield match case', 'keyword'),
+        words('True False None self cls', 'number'),
+        codeNumber, typeName,
+      ],
+    },
+    swift: {
+      lineComments: ['//'], blocks: [block('"""', '"""', 'string'), cBlock], quotes: '"',
+      rules: [
+        rule('@\\w+|#\\w+', 'key'),
+        words('actor associatedtype async await break case catch class continue default defer deinit do else enum extension fallthrough fileprivate final for func guard if import in indirect init inout internal is lazy let mutating nonisolated nonmutating open operator override private protocol public repeat rethrows return static struct subscript super switch throw throws try typealias var weak where while some any willSet didSet get set self Self', 'keyword'),
+        words('true false nil', 'number'),
+        codeNumber, typeName,
+      ],
+    },
+    cpp: {
+      lineComments: ['//'], blocks: [cBlock], quotes: QUOTES,
+      rules: [
+        rule('^\\s*#\\s*\\w+', 'keyword'),
+        rule('(?<=include )<[^>]*>|(?<=include)<[^>]*>', 'string'),
+        words('alignas alignof auto bool break case catch char class concept const consteval constexpr const_cast continue co_await co_return co_yield decltype default delete do double dynamic_cast else enum explicit extern final float for friend goto if inline int long mutable namespace new noexcept operator override private protected public register reinterpret_cast requires return short signed sizeof static static_assert static_cast struct switch template this thread_local throw try typedef typeid typename union unsigned using virtual void volatile while', 'keyword'),
+        words('true false NULL nullptr', 'number'),
+        codeNumber, typeName,
+      ],
+    },
+    csharp: {
+      lineComments: ['//'], blocks: [cBlock], quotes: QUOTES,
+      rules: [
+        rule('^\\s*#\\s*\\w+', 'keyword'),
+        words('abstract as async await base bool break byte case catch char checked class const continue decimal default delegate do double dynamic else enum event explicit extern finally fixed float for foreach get goto if implicit in init int interface internal is lock long nameof namespace new object operator out override params partial private protected public readonly record ref required return sbyte sealed set short sizeof stackalloc static string struct switch this throw try typeof uint ulong unchecked unsafe ushort using var virtual void volatile when where while with yield', 'keyword'),
+        words('true false null', 'number'),
+        codeNumber, typeName,
+      ],
+    },
+    javascript: { lineComments: ['//'], blocks: [block('`', '`', 'string'), cBlock], quotes: QUOTES, rules: jsRules('') },
+    typescript: {
+      lineComments: ['//'], blocks: [block('`', '`', 'string'), cBlock], quotes: QUOTES,
+      rules: jsRules('abstract any as asserts bigint boolean declare enum implements infer interface is keyof module namespace never number object override private protected public readonly satisfies string symbol type unknown'),
+    },
+    css: {
+      lineComments: [], blocks: [cBlock], quotes: QUOTES,
+      rules: [
+        rule('@[\\w-]+', 'keyword'),
+        rule('!important', 'error'),
+        rule('^\\s*[\\w-]+(?=\\s*:\\s*[^;{]*[;}]?\\s*$)', 'key'),
+        rule('(?<=[:\\s,(])#[0-9a-fA-F]{3,8}\\b', 'number'),
+        rule('(?<![\\w-])-?(?:\\d+\\.?\\d*|\\.\\d+)(?:px|em|rem|%|vh|vw|vmin|vmax|ch|ex|pt|cm|mm|in|s|ms|deg|rad|turn|fr)?(?![\\w-])', 'number'),
+        rule('[\\w-]+(?=\\()', 'key'),
+        rule('::?[a-zA-Z-]+(?![\\w-]*\\s*:\\s)', 'keyword'),
+        rule('[.#][A-Za-z_][\\w-]*', 'keyword'),
+      ],
+    },
+    php: {
+      lineComments: ['//', '#'], blocks: [cBlock], quotes: QUOTES,
+      rules: [
+        rule('<\\?php|<\\?=|\\?>', 'keyword'),
+        rule('\\$\\w+', 'key'),
+        words('abstract and array as break callable case catch class clone const continue declare default do echo else elseif empty enddeclare endfor endforeach endif endswitch endwhile enum extends final finally fn for foreach function global goto if implements include include_once instanceof insteadof interface isset list match namespace new or print private protected public readonly require require_once return static switch throw trait try unset use var while xor yield', 'keyword'),
+        rule('\\b(?:true|false|null|TRUE|FALSE|NULL)\\b', 'number'),
+        codeNumber, typeName,
+      ],
+    },
+  };
+
+  /** Comments and strings of one line. `start` is the open block (index + 1) carried from the previous line. */
+  function scan(line, lang, start) {
+    const out = [];
+    const n = line.length;
+    let state = start;
+    let i = 0;
+    const find = (pat, from, escapes) => {
+      for (let j = from; j + pat.length <= n; j++) {
+        if (escapes && line[j] === '\\') { j++; continue; }
+        if (line.startsWith(pat, j)) return j;
+      }
+      return -1;
+    };
+    const add = (from, to, role) => { if (to > from) out.push({ start: from, end: to, role }); };
+
+    while (i < n) {
+      if (state > 0) {
+        const b = lang.blocks[state - 1];
+        const e = find(b.close, i, b.role === 'string');
+        if (e >= 0) { add(i, e + b.close.length, b.role); i = e + b.close.length; state = 0; } else { add(i, n, b.role); i = n; }
+        continue;
+      }
+      const bi = lang.blocks.findIndex((b) => line.startsWith(b.open, i));
+      if (bi >= 0) {
+        const b = lang.blocks[bi];
+        const from = i;
+        i += b.open.length;
+        const e = find(b.close, i, b.role === 'string');
+        if (e >= 0) { i = e + b.close.length; add(from, i, b.role); } else { add(from, n, b.role); i = n; state = bi + 1; }
+        continue;
+      }
+      if (lang.lineComments.some((c) => line.startsWith(c, i))) { add(i, n, 'comment'); break; }
+      if (lang.quotes.includes(line[i])) {
+        const q = line[i];
+        let j = i + 1;
+        while (j < n && line[j] !== q) j += line[j] === '\\' ? 2 : 1;
+        const end = Math.min(j + 1, n);
+        add(i, end, 'string');
+        i = end;
+        continue;
+      }
+      i++;
+    }
+    return { spans: out, next: state };
+  }
+
   const MAX_LENGTH = 2000;
 
-  const hasHighlighting = (type) => !!RULES[type];
+  const hasHighlighting = (type) => !!RULES[type] || !!CODE[type];
+
+  /** Scanner state at the start of every line (0 = nothing open); empty for formats without carried state. */
+  function states(lines, type) {
+    const lang = CODE[type];
+    if (!lang) return [];
+    const out = [];
+    let state = 0;
+    for (const line of lines) {
+      out.push(state);
+      state = scan(line, lang, state).next;
+    }
+    return out;
+  }
 
   /** Returns [{start, end, role}] for a single line. A character claimed by an earlier rule is never recolored. */
-  function spans(line, type) {
-    const rules = RULES[type];
+  function spans(line, type, state = 0) {
+    const lang = CODE[type];
+    const rules = lang ? lang.rules : RULES[type];
     if (!rules || !line || line.length > MAX_LENGTH) return [];
     const claimed = new Array(line.length).fill(false);
     const out = [];
+    if (lang) {
+      for (const s of scan(line, lang, state).spans) {
+        out.push(s);
+        for (let k = s.start; k < s.end; k++) claimed[k] = true;
+      }
+    }
     for (const { re, role } of rules) {
       re.lastIndex = 0;
       for (const m of line.matchAll(re)) {
@@ -470,8 +643,8 @@ const Syntax = (() => {
   }
 
   /** Fills `parent` with the line's text, colored with `tok-*` classes. */
-  function render(line, type, parent) {
-    const list = spans(line, type);
+  function render(line, type, parent, state = 0) {
+    const list = spans(line, type, state);
     let pos = 0;
     for (const s of list) {
       if (s.start > pos) parent.appendChild(document.createTextNode(line.slice(pos, s.start)));
@@ -485,7 +658,18 @@ const Syntax = (() => {
     return parent;
   }
 
-  return { hasHighlighting, render };
+  /** A multi-line code block (Markdown fence) as colored rows joined by newlines. */
+  function renderBlock(code, type, parent) {
+    const lines = code.split('\n');
+    const st = states(lines, type);
+    lines.forEach((line, i) => {
+      if (i > 0) parent.appendChild(document.createTextNode('\n'));
+      render(line, type, parent, st.length ? st[i] : 0);
+    });
+    return parent;
+  }
+
+  return { hasHighlighting, render, renderBlock, states, spans };
 })();
 
 // ---- Search ----------------------------------------------------------------

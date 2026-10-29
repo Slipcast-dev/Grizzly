@@ -18,6 +18,8 @@ struct EditorView: View {
                     set: { state.setDraft($0, for: document) }),
                 font: .monospacedSystemFont(ofSize: size, weight: .regular),
                 textColor: NSColor(theme.text),
+                type: document.type,
+                theme: theme,
                 background: NSColor(theme.background))
                 .id(document.id)
         }
@@ -48,6 +50,8 @@ private struct EditorTextView: NSViewRepresentable {
     @Binding var text: String
     let font: NSFont
     let textColor: NSColor
+    let type: FileType
+    let theme: Theme
     let background: NSColor
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -90,6 +94,26 @@ private struct EditorTextView: NSViewRepresentable {
         view.backgroundColor = background
         scroll.backgroundColor = background
         scroll.drawsBackground = true
+        colorize(view)
+    }
+
+    /// Syntax colors for the whole text (skipped for very large files, where rescanning on every key would lag).
+    private func colorize(_ view: NSTextView) {
+        guard SyntaxEngine.hasHighlighting(type), let storage = view.textStorage else { return }
+        let text = view.string
+        guard text.utf16.count <= 200_000 else { return }
+        let lines = text.components(separatedBy: "\n")
+        let states = SyntaxEngine.states(lines, type: type)
+        storage.beginEditing()
+        var offset = 0
+        for (i, line) in lines.enumerated() {
+            for span in SyntaxEngine.spans(line, type: type, state: states.isEmpty ? 0 : states[i]).spans {
+                let range = NSRange(location: offset + span.range.location, length: span.range.length)
+                storage.addAttribute(.foregroundColor, value: NSColor(Syntax.color(span.role, theme)), range: range)
+            }
+            offset += line.utf16.count + 1
+        }
+        storage.endEditing()
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {

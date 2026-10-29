@@ -34,9 +34,9 @@
 
 | Платформа | Файл | Примечание |
 |---|---|---|
-| macOS 13+, Apple Silicon | `Grizzly-0.4.0-arm64.dmg` | Перетащите *Grizzly* в *Программы* |
-| macOS 13+, Intel | `Grizzly-0.4.0-x64.dmg` | Перетащите *Grizzly* в *Программы* |
-| Windows 10/11, x64 | `Grizzly-0.4.0-portable.exe` | Без установки |
+| macOS 13+, Apple Silicon | `Grizzly-1.0.0-arm64.dmg` | Перетащите *Grizzly* в *Программы* |
+| macOS 13+, Intel | `Grizzly-1.0.0-x64.dmg` | Перетащите *Grizzly* в *Программы* |
+| Windows 10/11, x64 | `Grizzly-1.0.0-portable.exe` | Без установки |
 
 > [!IMPORTANT]
 > Сборки **не подписаны и не нотаризованы**. macOS (Gatekeeper) и Windows (SmartScreen) покажут предупреждение
@@ -46,8 +46,10 @@
 ## Возможности
 
 - **Режим чтения** — Markdown: заголовки, списки, чек-листы, цитаты, блоки кода, таблицы, ссылки.
-- **Исходник** — номера строк, **закладки** по клику на номер (сохраняются между запусками), подсветка JSON,
-  YAML, INI/TOML, XML/HTML, TeX и логов.
+- **Исходник** — номера строк, **закладки** по клику на номер (сохраняются между запусками), подсветка
+  **Python, Swift, C/C++, C#, JavaScript, TypeScript, CSS и PHP** (в том числе в блоках кода Markdown), а также JSON,
+  YAML, INI/TOML, XML/HTML, TeX и логов. Цвета берутся из темы; многострочные комментарии и строки поддерживаются.
+- **Новый файл** — `⌘N` / `Ctrl+N`: выберите имя, папку и формат; файл создаётся с небольшим шаблоном и открывается для правки.
 - **Правка** — редактирование и сохранение на месте; исходная кодировка (UTF-8 с BOM и без, UTF-16,
   Windows-1251, ISO-8859-1) сохраняется.
 - **Таблицы CSV / TSV** с автоопределением разделителя.
@@ -61,7 +63,7 @@
 - **Выбор программы по умолчанию** (macOS) — Настройки → Типы файлов назначают Grizzly для нужных расширений.
 - Интерфейс на **русском и английском**.
 
-Поддерживаемые расширения: `md markdown mdown txt text log json yaml yml csv tsv xml html htm ini conf toml tex rtf`.
+Поддерживаемые расширения: `md markdown mdown txt text log json yaml yml csv tsv xml html htm ini conf toml tex rtf` и исходный код: `py pyw swift c h cpp cc cxx hpp hh hxx cs js mjs cjs jsx ts tsx css scss php`.
 
 ## Быстрый старт
 

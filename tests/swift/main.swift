@@ -47,5 +47,31 @@ check(LibraryStore(storeURL: dir.appendingPathComponent("lib.json")).recents.cou
 lib.clearRecents()
 check(lib.recents.isEmpty, "clear empties history")
 
+// Syntax highlighting of programming languages
+func roles(_ line: String, _ type: FileType, state: Int = 0) -> [(String, SyntaxRole)] {
+    let ns = line as NSString
+    return SyntaxEngine.spans(line, type: type, state: state).spans.map { (ns.substring(with: $0.range), $0.role) }
+}
+func has(_ list: [(String, SyntaxRole)], _ text: String, _ role: SyntaxRole) -> Bool { list.contains { $0.0.trimmingCharacters(in: .whitespaces) == text && $0.1 == role } }
+
+check(FileType(url: URL(fileURLWithPath: "/a/x.py")) == .python && FileType(url: URL(fileURLWithPath: "/a/x.hpp")) == .cpp
+      && FileType(url: URL(fileURLWithPath: "/a/x.tsx")) == .typescript && FileType(url: URL(fileURLWithPath: "/a/x.cs")) == .csharp, "code extensions map to types")
+let py = roles("def run(x): # go", .python)
+check(has(py, "def", .keyword) && has(py, "# go", .comment), "python keyword and comment")
+check(SyntaxEngine.states(["x = \"\"\"doc", "more", "end\"\"\"", "y = 1"], type: .python) == [0, 1, 1, 0], "python triple-quoted string spans lines")
+check(SyntaxEngine.states(["a /* b", "c */ d", "e"], type: .cpp) == [0, 1, 0], "C block comment spans lines")
+check(has(roles("c */ d", .cpp, state: 1), "c */", .comment), "closing line of a block comment is colored")
+check(has(roles("#include <vector>", .cpp), "#include", .keyword) && has(roles("int x = 0x1F;", .cpp), "0x1F", .number), "C++ preprocessor and hex number")
+check(has(roles("let s = \"a // b\" // c", .swift), "\"a // b\"", .string) && has(roles("let s = \"a // b\" // c", .swift), "// c", .comment), "comment marker inside a string is not a comment")
+check(has(roles("public class Foo : Bar", .csharp), "class", .keyword) && has(roles("public class Foo : Bar", .csharp), "Foo", .key), "C# keyword and type")
+check(SyntaxEngine.states(["const a = `x", "y`;", "z"], type: .javascript) == [0, 1, 0], "JS template literal spans lines")
+check(has(roles("const n = null;", .typescript), "null", .number) && has(roles("interface A {}", .typescript), "interface", .keyword), "TypeScript literals and keywords")
+check(has(roles("  color: #fff;", .css), "color", .key) && has(roles("  color: #fff;", .css), "#fff", .number), "CSS property and color")
+check(!has(roles("a:hover {", .css), "a", .key), "CSS selector with pseudo-class is not a property")
+check(has(roles("$x = 1; // c", .php), "$x", .key) && has(roles("$x = 1; // c", .php), "// c", .comment), "PHP variable and comment")
+check(SyntaxEngine.states(["a", "b"], type: .json).isEmpty, "stateless formats carry no state")
+check(FileType.fromFenceTag("Python title=x") == .python && FileType.fromFenceTag("c++") == .cpp && FileType.fromFenceTag("nope") == nil, "fenced code language tags")
+check(FileType.template(forExtension: "json") == "{\n  \n}\n" && FileType.template(forExtension: "xyz") == "", "new file templates")
+
 try? FileManager.default.removeItem(at: dir)
 exit(failures == 0 ? 0 : 1)

@@ -6,7 +6,7 @@ translation tables and file-type rules, not code.
 ```
 Sources/Grizzly/          macOS app (SwiftUI, ~2.8k lines)
   App/        AppState, Settings, Theme, entry point and menu commands
-  Core/       Document model, file loading/encodings, Markdown parser, CSV, syntax coloring, search
+  Core/       Document model, file loading/encodings, Markdown parser, CSV, syntax coloring (`SyntaxEngine` scans comments/strings across lines, `Syntax` maps roles to theme colors), search
   Features/   Tab bar, panes, source view, editor, find bar, sidebar, settings
   Render/     Markdown and CSV table views
   Library/    Virtual library (folders / favorites) and the open history, persisted as JSON

@@ -3,6 +3,17 @@
 All notable changes are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.0.0] - 2026-10-30
+
+### Added
+- **Syntax highlighting for programming languages**: Python, Swift, C / C++, C#, JavaScript (JSX), TypeScript (TSX), CSS / SCSS and PHP. Keywords, types, literals, numbers, strings, comments, decorators / attributes, preprocessor lines and CSS properties are colored with the current theme. Multi-line block comments, triple-quoted strings and template literals are tracked across lines. Fenced code blocks in Markdown (```` ```python ````, `cpp`, `cs`, `js`, ...) use the same colors. macOS also colors the text live in Edit mode.
+- **New file** (`⌘N` / `Ctrl+N`, also in the toolbar's open menu): choose name, folder and format; the file is created with a small template and opens in Edit mode. Works for every supported format.
+- Source-code extensions are now supported: `py pyw swift c h cpp cc cxx hpp hh hxx cs js mjs cjs jsx ts tsx css scss php`. On macOS Grizzly is offered under *Open With* for them without claiming them as the default app.
+- Sample files for every new language in `samples/`.
+
+### Changed
+- First stable release: all features of the 0.x line are included and documented in English and Russian.
+
 ## [0.4.0] - 2026-10-30
 
 ### Added

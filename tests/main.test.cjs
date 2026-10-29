@@ -17,7 +17,7 @@ vm.createContext(ctx);
 let api;
 try {
   // main.js touches `app` at load time; the stub swallows it. Helpers are read from the same script scope.
-  api = vm.runInContext(`${src}\n({ encodeText, readText, validPath, rtfToText, textToRtf })`, ctx);
+  api = vm.runInContext(`${src}\n({ encodeText, readText, validPath, rtfToText, textToRtf, templateFor, EXTENSIONS })`, ctx);
 } catch (err) { console.error('main.js did not load:', err); api = null; }
 
 test('main.js helpers load', () => assert.ok(api.encodeText));
@@ -43,4 +43,11 @@ test('encodings round trip', () => {
 
 test('rtf text survives a round trip', () => {
   assert.strictEqual(api.rtfToText(api.textToRtf('Hello {x}\nПривет')).trim(), 'Hello {x}\nПривет');
+});
+
+test('new file templates and code extensions', () => {
+  assert.strictEqual(api.templateFor('json'), '{\n  \n}\n');
+  assert.strictEqual(api.templateFor('xyz'), '');
+  assert.ok(api.templateFor('html').startsWith('<!DOCTYPE html>'));
+  for (const ext of ['py', 'swift', 'cpp', 'cs', 'js', 'ts', 'css', 'php']) assert.ok(api.EXTENSIONS.includes(ext), ext);
 });
