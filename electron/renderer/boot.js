@@ -1,6 +1,7 @@
 (async function boot() {
   const info = await window.api.info();
   setLocale(info.locale);
+  languagePref = info.language;
   Prefs.load();
   applyTheme();
   await Library.load(info.platform === 'win32');

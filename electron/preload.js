@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
   info: () => ipcRenderer.invoke('app:info'),
+  setLanguage: (language) => ipcRenderer.invoke('language:set', language),
   openDialog: () => ipcRenderer.invoke('dialog:open'),
   openFolderDialog: () => ipcRenderer.invoke('dialog:openFolder'),
   scanDir: (dir) => ipcRenderer.invoke('fs:scanDir', dir),

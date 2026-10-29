@@ -4,6 +4,7 @@
 // Keys are the Russian source strings; English lives in strings-en.js (generated from en.lproj).
 
 let LANG = 'ru';
+let languagePref = 'auto'; // auto | ru | en, kept by the main process
 
 function setLocale(locale) {
   LANG = String(locale || '').toLowerCase().startsWith('ru') ? 'ru' : 'en';

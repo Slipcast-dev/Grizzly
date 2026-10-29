@@ -28,7 +28,18 @@ function migrate(from, to) {
 
 let STRINGS_EN = {};
 try { STRINGS_EN = require('./strings-en.json'); } catch { /* English table is optional */ }
-const T = (key) => (app.getLocale().toLowerCase().startsWith('ru') ? key : (STRINGS_EN[key] || key));
+
+// Interface language: 'auto' follows the system (Russian on a Russian system, English otherwise), or 'ru' / 'en'.
+const languagePath = () => path.join(app.getPath('userData'), 'language.json');
+function loadLanguage() {
+  try {
+    const v = JSON.parse(fs.readFileSync(languagePath(), 'utf8')).language;
+    return ['auto', 'ru', 'en'].includes(v) ? v : 'auto';
+  } catch { return 'auto'; }
+}
+let languagePref = 'auto';
+const resolveLocale = () => (languagePref === 'auto' ? (app.getLocale().toLowerCase().startsWith('ru') ? 'ru' : 'en') : languagePref);
+const T = (key) => (resolveLocale() === 'ru' ? key : (STRINGS_EN[key] || key));
 
 let win = null;
 let rendererReady = false;
@@ -292,10 +303,19 @@ const refuse = { ok: false, code: 'EACCES' };
 
 ipcMain.handle('app:info', () => ({
   platform: process.platform,
-  locale: app.getLocale(),
+  locale: resolveLocale(),
+  language: languagePref,
   version: app.getVersion(),
   dataDir: app.getPath('userData'),
 }));
+
+ipcMain.handle('language:set', (e, language) => {
+  if (!trusted(e) || !['auto', 'ru', 'en'].includes(language)) return resolveLocale();
+  languagePref = language;
+  try { fs.writeFileSync(languagePath(), JSON.stringify({ language })); } catch { /* not persisted this time */ }
+  buildMenu();
+  return resolveLocale();
+});
 
 ipcMain.on('renderer:ready', () => {
   rendererReady = true;
@@ -504,6 +524,7 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(() => {
     pendingFiles = filesFromArgv(process.argv);
+    languagePref = loadLanguage();
     buildMenu();
     createWindow();
     app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });

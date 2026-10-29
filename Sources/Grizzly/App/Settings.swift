@@ -12,6 +12,31 @@ enum Appearance: String, CaseIterable, Identifiable {
     }
 }
 
+/// Interface language. `auto` follows the system: Russian on a Russian system, English otherwise.
+enum AppLanguage: String, CaseIterable, Identifiable {
+    case auto, ru, en
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .auto: return L("Как в системе")
+        case .ru: return "Русский"
+        case .en: return "English"
+        }
+    }
+
+    /// The choice in effect, read from the app's own defaults domain (before the first change it is `auto`).
+    static var saved: AppLanguage {
+        AppLanguage(rawValue: UserDefaults.standard.string(forKey: "language") ?? "") ?? .auto
+    }
+
+    /// macOS picks the bundle language from `AppleLanguages` at launch, so the choice takes effect after a restart.
+    func apply() {
+        let d = UserDefaults.standard
+        d.set(rawValue, forKey: "language")
+        if self == .auto { d.removeObject(forKey: "AppleLanguages") } else { d.set([rawValue], forKey: "AppleLanguages") }
+    }
+}
+
 /// User preferences, saved to UserDefaults on every change.
 final class Preferences: ObservableObject {
     static let shared = Preferences()
@@ -29,6 +54,7 @@ final class Preferences: ObservableObject {
     @Published var headingSpacing: Double { didSet { defaults.set(headingSpacing, forKey: "headingSpacing") } }
     @Published var showLineNumbers: Bool { didSet { defaults.set(showLineNumbers, forKey: "showLineNumbers") } }
     @Published var autoReload: Bool { didSet { defaults.set(autoReload, forKey: "autoReload") } }
+    @Published var language: AppLanguage { didSet { language.apply() } }
     @Published private(set) var systemIsDark: Bool
 
     private init() {
@@ -40,6 +66,7 @@ final class Preferences: ObservableObject {
         headingSpacing = d.object(forKey: "headingSpacing") as? Double ?? 1
         showLineNumbers = d.object(forKey: "showLineNumbers") as? Bool ?? true
         autoReload = d.object(forKey: "autoReload") as? Bool ?? false
+        language = AppLanguage.saved
         systemIsDark = Preferences.readSystemDark()
 
         DistributedNotificationCenter.default().addObserver(

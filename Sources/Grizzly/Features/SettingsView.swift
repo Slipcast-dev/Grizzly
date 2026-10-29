@@ -44,6 +44,15 @@ struct SettingsView: View {
                 Toggle("Обновлять файл автоматически, когда он изменился на диске", isOn: $settings.autoReload)
             }
 
+            section("Язык") {
+                Picker("", selection: $settings.language) {
+                    ForEach(AppLanguage.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .onChange(of: settings.language) { _ in AppRestart.offer() }
+            }
+
             section("Типы файлов") { FileAssociationsView() }
 
             preview(theme)
