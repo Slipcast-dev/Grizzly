@@ -51,10 +51,9 @@ The line-number gutter can be turned off in Settings.
 ## Save As
 
 The **Save As…** button next to *Open* in the toolbar (`⇧⌘S` / `Ctrl+Shift+S`) saves a **copy** of the current file, including unsaved edits, to a place you choose.
-Pick the format in the dialog (Markdown, Text, JSON, YAML, CSV, TSV, Log, XML, HTML, INI/TOML, TeX, RTF); the extension follows the format.
+The name field starts with the file name **without an extension**. Pick the format in the dialog (Markdown, Text, JSON, YAML, CSV, TSV, Log, XML, HTML, INI/TOML, TeX, RTF); it is appended when you save. An extension you type yourself wins.
 The text is not converted between formats, only the file type changes. The source encoding is kept; if it cannot hold some characters the copy is written in UTF-8, and RTF sources are saved as UTF-8 text.
 The open document is not changed. *Save* (`⌘S`) still writes edits back to the original file.
-Windows: available in the source tree; it ships with the next portable build.
 
 ## Library
 
@@ -64,6 +63,7 @@ references — it never moves, copies or changes your files.
 - **New folder** (the folder button in the sidebar header): type a name and press Return (leaving the field also saves it). Drag files onto a folder to move them; right-click a folder to rename or delete it.
 - **Open** in the toolbar opens a file or adds a whole folder from disk (subfolders become sidebar folders; use
   *Refresh from folder* in its menu to pick up new files). Dropping a folder into the window does the same.
+- **History** (the clock tab): every file you open is recorded there, newest first. Removing a file from the library does **not** remove it from the history; opening it from there shows it in a tab without putting it back in the sidebar. Right-click an entry to remove it, or use *Clear* to empty the list.
 - **Quick Look**: select a file in the sidebar and press Space (or use the context menu) to preview it without opening a tab.
 
 ## Preview in Finder and default app (macOS)

@@ -41,14 +41,46 @@ struct LibraryFolder: Identifiable, Codable, Hashable {
     var sourcePath: String?
 }
 
+/// A file the reader opened. Lives apart from the library, so removing a file from the sidebar keeps its history.
+struct HistoryEntry: Identifiable, Codable, Hashable {
+    var path: String
+    var name: String
+    var bookmark: Data
+    var date: Date
+
+    var id: String { path }
+    var type: FileType { FileType(url: URL(fileURLWithPath: path)) }
+}
+
 private struct LibraryData: Codable {
     var files: [LibraryFile] = []
     var folders: [LibraryFolder] = []
+    var history: [HistoryEntry] = []
+
+    enum CodingKeys: String, CodingKey { case files, folders, history }
+
+    init() {}
+
+    // Libraries saved before the history existed have no "history" key.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        files = try c.decodeIfPresent([LibraryFile].self, forKey: .files) ?? []
+        folders = try c.decodeIfPresent([LibraryFolder].self, forKey: .folders) ?? []
+        history = try c.decodeIfPresent([HistoryEntry].self, forKey: .history) ?? []
+        // First launch with a history: seed it from the "last opened" dates of the library files.
+        if history.isEmpty {
+            history = files.compactMap { f in
+                f.lastOpened.map { HistoryEntry(path: f.path, name: f.name, bookmark: f.bookmark, date: $0) }
+            }.sorted { $0.date > $1.date }
+        }
+    }
 }
 
 /// Virtual library: files stay where they are on disk, folders only group references to them.
 final class LibraryStore: ObservableObject {
     static let recentLimit = 20
+    /// More is stored than shown, so clearing the oldest entries never happens by surprise.
+    static let historyStored = 200
 
     @Published private var data = LibraryData()
     @Published private(set) var missing: Set<UUID> = []
@@ -87,13 +119,12 @@ final class LibraryStore: ObservableObject {
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
-    var recents: [LibraryFile] {
-        data.files
-            .filter { $0.lastOpened != nil }
-            .sorted { $0.lastOpened! > $1.lastOpened! }
-            .prefix(Self.recentLimit)
-            .map { $0 }
+    /// Opened files, newest first, whether or not they are still in the library.
+    var recents: [HistoryEntry] {
+        Array(data.history.sorted { $0.date > $1.date }.prefix(Self.recentLimit))
     }
+
+    func file(atPath path: String) -> LibraryFile? { data.files.first { $0.path == path } }
 
     var favorites: [LibraryFile] {
         data.files
@@ -140,14 +171,39 @@ final class LibraryStore: ObservableObject {
         return nil
     }
 
-    func markOpened(_ id: UUID) {
+    /// Puts a file at the top of the history (once per path).
+    func recordOpened(_ url: URL) {
+        let path = url.standardizedFileURL.path
+        let bookmark = (try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)) ?? Data()
         mutate { d in
-            if let i = d.files.firstIndex(where: { $0.id == id }) { d.files[i].lastOpened = Date() }
+            d.history.removeAll { $0.path == path }
+            d.history.append(HistoryEntry(path: path, name: url.lastPathComponent, bookmark: bookmark, date: Date()))
+            if d.history.count > Self.historyStored {
+                d.history = Array(d.history.sorted { $0.date > $1.date }.prefix(Self.historyStored))
+            }
+            if let i = d.files.firstIndex(where: { $0.path == path }) { d.files[i].lastOpened = Date() }
         }
+    }
+
+    /// Finds a history file on disk, following moves and renames through the bookmark.
+    func resolve(_ entry: HistoryEntry) -> URL? {
+        let fm = FileManager.default
+        var stale = false
+        if !entry.bookmark.isEmpty,
+           let url = try? URL(resolvingBookmarkData: entry.bookmark, options: [], relativeTo: nil, bookmarkDataIsStale: &stale),
+           fm.fileExists(atPath: url.path) { return url }
+        return fm.fileExists(atPath: entry.path) ? URL(fileURLWithPath: entry.path) : nil
+    }
+
+    func isMissing(_ entry: HistoryEntry) -> Bool { resolve(entry) == nil }
+
+    func removeFromHistory(_ path: String) {
+        mutate { $0.history.removeAll { $0.path == path } }
     }
 
     func clearRecents() {
         mutate { d in
+            d.history = []
             for i in d.files.indices { d.files[i].lastOpened = nil }
         }
     }

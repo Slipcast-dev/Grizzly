@@ -34,9 +34,9 @@
 
 | Платформа | Файл | Примечание |
 |---|---|---|
-| macOS 13+, Apple Silicon | `Grizzly-0.3.2-arm64.dmg` | Перетащите *Grizzly* в *Программы* |
-| macOS 13+, Intel | `Grizzly-0.3.2-x64.dmg` | Перетащите *Grizzly* в *Программы* |
-| Windows 10/11, x64 | `Grizzly-0.2.1-portable.exe` | Без установки |
+| macOS 13+, Apple Silicon | `Grizzly-0.3.3-arm64.dmg` | Перетащите *Grizzly* в *Программы* |
+| macOS 13+, Intel | `Grizzly-0.3.3-x64.dmg` | Перетащите *Grizzly* в *Программы* |
+| Windows 10/11, x64 | `Grizzly-0.3.3-portable.exe` | Без установки |
 
 > [!IMPORTANT]
 > Сборки **не подписаны и не нотаризованы**. macOS (Gatekeeper) и Windows (SmartScreen) покажут предупреждение

@@ -51,6 +51,26 @@ final class AppState: ObservableObject {
 
     // MARK: Opening
 
+    /// Files handed over by the system (Finder, Dock, `open -a`) before the app finished launching.
+    private var pendingExternal: [URL] = []
+    private var isReady = false
+
+    /// Entry point for files that arrive from outside. Whichever route delivers them first (the app delegate,
+    /// SwiftUI's `onOpenURL`, the command line) opens them; a file delivered twice is not opened twice.
+    func openExternal(_ urls: [URL]) {
+        let files = urls.filter { $0.isFileURL }
+        guard !files.isEmpty else { return }
+        if isReady { open(urls: files) } else { pendingExternal.append(contentsOf: files) }
+    }
+
+    /// Called once the app has launched: opens whatever arrived while it was starting.
+    func markReady() {
+        isReady = true
+        let queued = pendingExternal
+        pendingExternal = []
+        if !queued.isEmpty { open(urls: queued) }
+    }
+
     /// Opens files from disk (Open panel, drag and drop, Finder) and adds them to the library.
     func open(urls: [URL], inRight: Bool = false) {
         for url in urls {
@@ -60,6 +80,20 @@ final class AppState: ObservableObject {
             }
             let entry = library.add(url: url)
             show(entry.id, url: url, pane: inRight ? .right : nil)
+        }
+    }
+
+    /// Opens a file from the history. It is shown in a tab without being added back to the sidebar.
+    func openHistory(_ entry: HistoryEntry, inRight: Bool = false) {
+        guard let url = library.resolve(entry) else {
+            errorMessage = L("Файл «%@» не найден. Возможно, он перемещён или удалён.", entry.name)
+            return
+        }
+        let pane: Pane = inRight ? .right : (isSplit ? focusedPane : .left)
+        if let known = library.file(atPath: url.standardizedFileURL.path) {
+            show(known.id, url: url, pane: pane)
+        } else {
+            show(nil, url: url, pane: pane)
         }
     }
 
@@ -80,12 +114,13 @@ final class AppState: ObservableObject {
         show(id, url: url, pane: pane)
     }
 
-    private func show(_ libraryID: UUID, url: URL, pane: Pane?) {
+    private func show(_ libraryID: UUID?, url: URL, pane: Pane?) {
         let target = pane ?? (isSplit ? focusedPane : .left)
 
-        if let existing = documents.first(where: { $0.libraryID == libraryID }) {
+        let same: (Document) -> Bool = { libraryID != nil ? $0.libraryID == libraryID : $0.url.standardizedFileURL == url.standardizedFileURL }
+        if let existing = documents.first(where: same) {
             assign(existing.id, to: target)
-            library.markOpened(libraryID)
+            library.recordOpened(url)
             return
         }
         do {
@@ -93,7 +128,7 @@ final class AppState: ObservableObject {
             doc.libraryID = libraryID
             documents.append(doc)
             assign(doc.id, to: target)
-            library.markOpened(libraryID)
+            library.recordOpened(url)
         } catch {
             errorMessage = L("Не удалось открыть «%@».", url.lastPathComponent)
         }
@@ -240,12 +275,10 @@ final class AppState: ObservableObject {
         stack.edgeInsets = NSEdgeInsets(top: 8, left: 0, bottom: 8, right: 0)
         panel.accessoryView = stack
 
-        let target = ExportFormatTarget(panel: panel, base: base)
-        popup.target = target
-        popup.action = #selector(ExportFormatTarget.changed(_:))
-        target.apply(Self.exportExtensions[popup.indexOfSelectedItem])
+        // The name field holds only the name: the format is picked in the popup and appended on save,
+        // so the extension never has to be erased by hand.
+        panel.nameFieldStringValue = base
         guard panel.runModal() == .OK, var url = panel.url else { return }
-        withExtendedLifetime(target) {}
 
         // A supported extension typed by hand wins; otherwise the chosen format is appended.
         let chosen = Self.exportExtensions[popup.indexOfSelectedItem]
@@ -415,26 +448,5 @@ final class AppState: ObservableObject {
     func removeFromLibrary(_ id: UUID) {
         if let doc = documents.first(where: { $0.libraryID == id }), !close(doc.id) { return }
         library.remove(id)
-    }
-}
-
-/// Keeps the name field of the Save As panel in step with the format popup.
-final class ExportFormatTarget: NSObject {
-    private let panel: NSSavePanel
-    private let base: String
-
-    init(panel: NSSavePanel, base: String) {
-        self.panel = panel
-        self.base = base
-    }
-
-    func apply(_ ext: String) {
-        let typed = (panel.nameFieldStringValue as NSString)
-        let name = typed.length == 0 ? base : typed.deletingPathExtension
-        panel.nameFieldStringValue = name + "." + ext
-    }
-
-    @objc func changed(_ sender: NSPopUpButton) {
-        apply(AppState.exportExtensions[sender.indexOfSelectedItem])
     }
 }

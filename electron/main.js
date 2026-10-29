@@ -421,7 +421,8 @@ ipcMain.handle('dialog:saveAs', async (e, name, text, encoding, dir) => {
   const formats = [...FORMATS].sort((a, b) => Number(b[1].includes(own)) - Number(a[1].includes(own)));
   const result = await dialog.showSaveDialog(win, {
     title: T('Сохранить как…'),
-    defaultPath: path.join(typeof dir === 'string' && path.isAbsolute(dir) ? dir : app.getPath('documents'), name),
+    // The name is offered without its extension: the format is chosen with the file-type list and added on save.
+    defaultPath: path.join(typeof dir === 'string' && path.isAbsolute(dir) ? dir : app.getPath('documents'), path.basename(name, path.extname(name))),
     filters: formats.map(([label, exts]) => ({ name: `${label} (.${exts[0]})`, extensions: exts })),
   });
   if (result.canceled || !result.filePath) return { ok: false, code: 'ECANCEL' };

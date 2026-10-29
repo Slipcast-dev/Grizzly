@@ -1,7 +1,7 @@
 {
   "name": "grizzly",
   "productName": "Grizzly",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Reader for Markdown and text files (Windows/Electron port of Grizzly)",
   "main": "main.js",
   "private": true,
