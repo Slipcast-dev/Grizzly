@@ -2,7 +2,7 @@
 
 Port of the macOS SwiftUI app. Same features: Markdown reading mode, source view with line numbers and
 bookmarks, CSV tables, syntax coloring (JSON, YAML, INI, XML/HTML, TeX, logs), find, two panes side by side,
-tabs, Save As (copy in any supported format), virtual library with folders / recents / favorites, themes, reload on change, drag and drop,
+tabs, Save As (copy in any supported format), virtual library with folders / favorites and an open history, themes, reload on change, drag and drop,
 Russian and English UI.
 
 ## Run from source

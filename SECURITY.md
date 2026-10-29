@@ -6,7 +6,7 @@ Only the latest release receives security fixes.
 
 | Version | Supported |
 |---|---|
-| 0.3.x (macOS), 0.2.x (Windows) | ✅ |
+| 0.3.x (macOS and Windows) | ✅ |
 | older | ❌ |
 
 ## Reporting a vulnerability

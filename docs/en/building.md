@@ -34,7 +34,7 @@ Tests (Swift core compiled with `swiftc`, then `node --test tests/` for the JS p
 
 ## Windows app (Electron)
 
-Requirements: a current Node.js LTS and npm. The portable .exe can be built on macOS or Linux as well as on Windows.
+Requirements: a current Node.js LTS and npm. The portable .exe can be built on macOS or Linux as well as on Windows. On Apple Silicon, Rosetta 2 is required (the NSIS packer is x86_64): `softwareupdate --install-rosetta --agree-to-license`.
 
 ```bash
 cd electron

@@ -34,7 +34,7 @@ NOTARY_PROFILE="my-notary-profile" ./scripts/make-dmg.sh
 
 ## Приложение для Windows (Electron)
 
-Нужно: актуальный Node.js LTS и npm. Portable .exe можно собрать и на macOS / Linux, не только на Windows.
+Нужно: актуальный Node.js LTS и npm. Portable .exe можно собрать и на macOS / Linux, не только на Windows. На Apple Silicon нужен Rosetta 2 (упаковщик NSIS — x86_64): `softwareupdate --install-rosetta --agree-to-license`.
 
 ```bash
 cd electron
