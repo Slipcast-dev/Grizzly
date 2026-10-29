@@ -8,4 +8,4 @@ swiftc -O -o "$OUT/swift-tests" \
     tests/swift/main.swift QuickLook/HTMLRenderer.swift Sources/Grizzly/Core/FileLoader.swift \
     Sources/Grizzly/Core/FileType.swift Sources/Grizzly/Core/CSVTable.swift Sources/Grizzly/Core/MarkdownParser.swift 2>&1 | tail -20
 "$OUT/swift-tests"
-node --test tests/
+node --test tests/*.test.cjs

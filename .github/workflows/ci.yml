@@ -36,6 +36,6 @@ jobs:
           for f in main.js preload.js renderer/*.js scripts/*.js; do node --check "$f"; done
       - name: Unit tests
         working-directory: .
-        run: node --test tests/
+        run: node --test tests/*.test.cjs
       - name: Audit runtime-relevant dependencies
         run: npm audit --audit-level=high --omit=dev
