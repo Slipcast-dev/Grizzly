@@ -3,7 +3,7 @@
 ## Opening files
 
 - `⌘O` / `Ctrl+O`, or drag files onto the window or the Dock / taskbar icon.
-- **From Finder (macOS)**: double-click a file or use *Open With → Grizzly*. If Grizzly is not running it starts with the file; if it is, the file opens as a tab in the existing window. To make it the default app, see *Settings → File types*.
+- **From Finder (macOS)**: double-click a file or use *Open With → Grizzly*. If Grizzly is not running it starts with the file; if it is, the file opens as a tab in the existing window (never a second window or a second copy of the app). To make it the default app, see *Settings → File types*.
 - Several files open as tabs. `⇧⌘]` / `⇧⌘[` (`Ctrl+Shift+]` / `[`) cycle through them.
 - Supported extensions: `md markdown mdown txt text log json yaml yml csv tsv xml html htm ini conf toml tex rtf`.
   Anything unknown opens as plain text.
@@ -91,7 +91,7 @@ Open Settings (`⌘,` / `Ctrl+,`):
 - **Appearance:** follow system, light or dark.
 - **Theme:** Xcode, GitHub, Solarized, Dracula, Monokai, Nord, One Dark. Themes without a light variant stay dark in light mode.
 - **Font** and **size** (`⌘+` / `⌘-` while reading), heading spacing (compact / normal / spacious).
-- **Language:** the interface follows the system language (Russian or English; English otherwise).
+- **Language:** *Settings → Language* switches between *Follow System*, Русский and English. On first launch the interface follows the system language (Russian on a Russian system, English otherwise). On macOS the app offers to restart after a change; on Windows it switches instantly.
 
 ## Shortcut reference
 

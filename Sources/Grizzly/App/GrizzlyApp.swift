@@ -2,6 +2,7 @@ import SwiftUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NSWindow.allowsAutomaticWindowTabbing = false
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         AppState.shared.startWatching()
@@ -38,7 +39,8 @@ struct GrizzlyApp: App {
     @StateObject private var settings = Preferences.shared
 
     var body: some Scene {
-        WindowGroup("Grizzly") {
+        // A single window: files opened while the app runs become tabs, never a second window.
+        Window("Grizzly", id: "main") {
             ContentView()
                 .environmentObject(state)
                 .environmentObject(state.library)
@@ -47,7 +49,6 @@ struct GrizzlyApp: App {
                 // Some macOS versions deliver Finder's open event to the scene instead of the app delegate.
                 .onOpenURL { state.openExternal([$0]) }
         }
-        .handlesExternalEvents(matching: ["*"])
         .windowToolbarStyle(.unified)
         Settings { SettingsView().environmentObject(settings) }
         .commands {
@@ -93,5 +94,23 @@ struct GrizzlyApp: App {
                 Button("Мельче") { settings.resizeFont(by: -1) }.keyboardShortcut("-")
             }
         }
+    }
+}
+
+/// Changing the language needs a relaunch: menus and system strings are bound to the language at launch.
+enum AppRestart {
+    static func offer() {
+        let alert = NSAlert()
+        alert.messageText = L("Чтобы сменить язык, нужно перезапустить Grizzly.")
+        alert.informativeText = L("Перед выходом предложим сохранить несохранённые изменения.")
+        alert.addButton(withTitle: L("Перезапустить"))
+        alert.addButton(withTitle: L("Позже"))
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let path = Bundle.main.bundlePath
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/sh")
+        task.arguments = ["-c", "sleep 1; /usr/bin/open \"$0\"", path]
+        try? task.run()
+        NSApp.terminate(nil)
     }
 }

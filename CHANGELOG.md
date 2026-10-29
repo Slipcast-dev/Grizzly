@@ -3,6 +3,15 @@
 All notable changes are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-10-30
+
+### Added
+- **Language setting**: *Settings → Language* — *Follow System*, Русский or English. On first launch (and until you choose) the interface follows the system language: Russian on a Russian system, English otherwise. macOS offers a restart after a change; Windows switches instantly, including the menu.
+
+### Changed
+- macOS: the app now has a single window (`LSMultipleInstancesProhibited`, no automatic window tabbing); a file opened while Grizzly is running always becomes a tab in that window. Windows already behaved this way (single-instance lock).
+- macOS: the fallback language is now English for any system language other than Russian (development region `en`).
+
 ## [0.3.3] - 2026-10-29
 
 ### Fixed

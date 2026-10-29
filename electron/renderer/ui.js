@@ -605,6 +605,8 @@ function buildMainFrame() {
     h('div', { id: 'panes' }));
 
   // Links inside rendered Markdown open in the default browser.
+  if ($('main').dataset.linksBound) return;
+  $('main').dataset.linksBound = '1';
   $('main').addEventListener('click', (e) => {
     const a = e.target.closest('a[data-url]');
     if (!a) return;
@@ -1036,6 +1038,20 @@ async function quickLook(id) {
 
 let settingsRefresh = null;
 
+/** Switches the interface language on the fly: the main process rebuilds the menu, the renderer rebuilds its labels. */
+async function changeLanguage(choice) {
+  setLocale(await window.api.setLanguage(choice));
+  languagePref = choice;
+  document.title = 'Grizzly';
+  $('overlay-root').querySelector('.modal-settings')?.remove();
+  settingsRefresh = null;
+  buildSidebarFrame();
+  buildMainFrame();
+  applySidebarVisibility();
+  App.render(['all']);
+  openSettings();
+}
+
 function openSettings() {
   const root = $('overlay-root');
   if (root.querySelector('.modal-settings')) return;
@@ -1057,6 +1073,10 @@ function openSettings() {
 
   const paintAppearance = () => appearance.replaceChildren(...[['system', 'Как в системе'], ['light', 'Светлая'], ['dark', 'Тёмная']].map(([id, label]) =>
     h('button', { class: Prefs.values.appearance === id ? 'on' : '', onclick: () => Prefs.set({ appearance: id }) }, t(label))));
+
+  const language = h('div', { class: 'seg wide' });
+  const paintLanguage = () => language.replaceChildren(...[['auto', t('Как в системе')], ['ru', 'Русский'], ['en', 'English']].map(([id, label]) =>
+    h('button', { class: languagePref === id ? 'on' : '', onclick: () => changeLanguage(id) }, label)));
 
   const paintTiles = () => tiles.replaceChildren(...THEME_SETS.map((set) => {
     const th = themeVariant(set, Prefs.wantsDark);
@@ -1094,6 +1114,7 @@ function openSettings() {
 
   settingsRefresh = () => {
     paintAppearance();
+    paintLanguage();
     paintTiles();
     paintPreview();
     sizeInput.value = Prefs.values.fontSize;
@@ -1113,6 +1134,7 @@ function openSettings() {
           row('Отступы заголовков', spacingInput, spacingLabel),
           check('Показывать номера строк', 'showLineNumbers')),
         section('Файлы', check('Обновлять файл автоматически, когда он изменился на диске', 'autoReload')),
+        section('Язык', language),
         preview))));
 }
 

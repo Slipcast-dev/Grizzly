@@ -123,3 +123,8 @@
 "Сохранить как…" = "Save As…";
 "Формат:" = "Format:";
 "Сохранить как… (⇧⌘S)" = "Save As… (⇧⌘S)";
+"Язык" = "Language";
+"Чтобы сменить язык, нужно перезапустить Grizzly." = "Grizzly needs to restart to change the language.";
+"Перед выходом предложим сохранить несохранённые изменения." = "You will be asked to save any unsaved changes first.";
+"Перезапустить" = "Restart";
+"Позже" = "Later";

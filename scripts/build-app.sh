@@ -33,7 +33,8 @@ cat > "$APP/Contents/Info.plist" <<EOF
   <key>CFBundleDisplayName</key><string>Grizzly</string>
   <key>CFBundleIdentifier</key><string>app.grizzly.Grizzly</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
-  <key>CFBundleDevelopmentRegion</key><string>ru</string>
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
+  <key>LSMultipleInstancesProhibited</key><true/>
   <key>CFBundleLocalizations</key><array><string>ru</string><string>en</string></array>
   <key>CFBundleExecutable</key><string>Grizzly</string>
   <key>CFBundlePackageType</key><string>APPL</string>
