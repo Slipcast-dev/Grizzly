@@ -21,3 +21,14 @@ brew install grizzly
 |--------|-----------|
 | Markdown | .md |
 | Text | .txt |
+
+Блоки кода с указанием языка подсвечиваются:
+
+```python
+def greet(name: str) -> str:
+    return f"Hello, {name}!"  # comment
+```
+
+```swift
+let numbers = [1, 2, 3].map { $0 * 2 }
+```

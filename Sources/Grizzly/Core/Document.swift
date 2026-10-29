@@ -12,6 +12,8 @@ struct Document: Identifiable, Hashable {
     let lines: [String]
     let blocks: [MDBlock]
     let csv: CSVTable?
+    /// Syntax scanner state at the start of each line (open block comment or multi-line string); empty if unused.
+    let syntaxStates: [Int]
     /// Modification date of the file when it was read; used to notice outside changes.
     var modified: Date?
 
@@ -29,6 +31,7 @@ struct Document: Identifiable, Hashable {
         self.blocks = type == .markdown ? MarkdownParser.parse(self.lines) : []
         self.modified = Document.modificationDate(url)
         let lines = self.lines
+        self.syntaxStates = SyntaxEngine.states(lines, type: type)
         self.csv = type == .csv
             ? CSVTable(lines: lines, delimiter: CSVTable.detectDelimiter(url: url, lines: lines))
             : nil

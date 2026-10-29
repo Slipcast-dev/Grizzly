@@ -44,6 +44,7 @@ const ICONS = {
   docPlain: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 12h6M9 15h6M9 18h4"/>',
   docSearch: '<path d="M13 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4"/><path d="M13 3l5 5v2"/><circle cx="16" cy="16" r="3.5"/><path d="m21 21-2.5-2.5"/>',
   docPlus: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 11v6M9 14h6"/>',
+  code: '<path d="M8 7l-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/>',
   braces: '<path d="M8 4c-2 0-3 1-3 3v2c0 1-1 3-2 3 1 0 2 2 2 3v2c0 2 1 3 3 3M16 4c2 0 3 1 3 3v2c0 1 1 3 2 3-1 0-2 2-2 3v2c0 2-1 3-3 3"/>',
   table: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16M15 4v16"/>',
   list: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h.01M7 12h.01M7 15h.01M11 9h6M11 12h6M11 15h6"/>',
@@ -193,6 +194,7 @@ function renderToolbar() {
     h('button', {
       class: 'tb', title: t('Открыть файл (⌘O)'),
       onclick: (e) => Menus.below(e.currentTarget, [
+        { label: t('Новый файл…'), action: () => runCommand('newFile') },
         { label: t('Открыть файл…'), action: () => openFiles() },
         { label: t('Добавить папку с диска…'), action: () => openFolders() },
       ]),
@@ -828,7 +830,7 @@ function buildContent(doc, pane, target) {
     scroller.append(wrap);
     fillRows(wrap, scroller, doc.lines.length, (i) => {
       const row = h('div', { class: 'line', dataset: { unit: i } });
-      if (doc.lines[i]) Syntax.render(doc.lines[i], doc.type, row);
+      if (doc.lines[i]) Syntax.render(doc.lines[i], doc.type, row, doc.syntaxStates.length ? doc.syntaxStates[i] : 0);
       else row.append(' ');
       Searcher.paint(row, hl, i, 0);
       return row;
@@ -901,7 +903,7 @@ function sourceView(doc, scroller, size, hl, upTo) {
   box.style.fontSize = size + 'px';
   fillRows(box, scroller, doc.lines.length, (i) => {
     const code = h('div', { class: 'code' });
-    if (doc.lines[i]) Syntax.render(doc.lines[i], doc.type, code);
+    if (doc.lines[i]) Syntax.render(doc.lines[i], doc.type, code, doc.syntaxStates.length ? doc.syntaxStates[i] : 0);
     else code.append('​');
     if (doc.type === 'markdown' && doc.lines[i].startsWith('#')) code.classList.add('md-head');
     Searcher.paint(code, hl, i, 0);
@@ -979,7 +981,9 @@ function markdownView(blocks, size, hl) {
         });
         break;
       case 'code': {
-        const pre = h('pre', null, block.code || ' ');
+        const lang = fenceType(block.lang);
+        const pre = h('pre', null, lang ? null : (block.code || ' '));
+        if (lang) Syntax.renderBlock(block.code || ' ', lang, pre);
         Searcher.paint(pre, hl, unit, offsets[0]);
         wrap.append(pre);
         break;
@@ -1145,6 +1149,17 @@ async function openFolders() {
   for (const d of dirs || []) await App.importFolder(d);
 }
 
+/** Creates a file (name, place and format are chosen in the save dialog) and opens it for editing. */
+async function newFile() {
+  const result = await window.api.newFile();
+  if (!result.ok) {
+    if (result.code !== 'ECANCEL') App.fail(t('Не удалось создать «%@».', result.name || ''));
+    return;
+  }
+  await App.open([result.path]);
+  App.setMode('edit');
+}
+
 async function openFiles() {
   const paths = await window.api.openDialog();
   if (paths && paths.length) App.open(paths);
@@ -1153,6 +1168,7 @@ async function openFiles() {
 function runCommand(action) {
   switch (action) {
     case 'open': openFiles(); break;
+    case 'newFile': newFile(); break;
     case 'closeTab': if (App.current) App.close(App.current.id); break;
     case 'settings': openSettings(); break;
     case 'find': App.showFind(); break;

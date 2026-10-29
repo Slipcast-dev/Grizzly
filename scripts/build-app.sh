@@ -24,6 +24,15 @@ EXTS=$(cat <<'EOF'
 EOF
 )
 
+# Source code: offered under "Open With" but never claimed as the default (Xcode, VS Code and friends keep those).
+CODE_EXTS=$(cat <<'EOF'
+<string>py</string><string>pyw</string><string>swift</string><string>c</string><string>h</string><string>cpp</string>
+<string>cc</string><string>cxx</string><string>hpp</string><string>hh</string><string>hxx</string><string>cs</string>
+<string>js</string><string>mjs</string><string>cjs</string><string>jsx</string><string>ts</string><string>tsx</string>
+<string>css</string><string>scss</string><string>php</string>
+EOF
+)
+
 cat > "$APP/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -50,6 +59,13 @@ cat > "$APP/Contents/Info.plist" <<EOF
       <key>LSHandlerRank</key><string>Default</string>
       <key>CFBundleTypeExtensions</key>
       <array>$EXTS</array>
+    </dict>
+    <dict>
+      <key>CFBundleTypeName</key><string>Source code</string>
+      <key>CFBundleTypeRole</key><string>Viewer</string>
+      <key>LSHandlerRank</key><string>Alternate</string>
+      <key>CFBundleTypeExtensions</key>
+      <array>$CODE_EXTS</array>
     </dict>
     <dict>
       <key>CFBundleTypeName</key><string>Text and source files</string>
