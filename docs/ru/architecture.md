@@ -17,7 +17,8 @@ electron/     Порт для Windows
   main.js       Главный процесс: окно, меню, файловый ввод-вывод, передача файлов второму запуску, каталог данных
   preload.js    Узкий мост для рендерера (contextIsolation)
   renderer/     Интерфейс на чистом JS/CSS: state, core (парсеры), ui
-scripts/      build-app.sh, make-dmg.sh
+scripts/      build-app.sh, make-dmg.sh, test.sh
+tests/        Swift-тест (swiftc) и JS-тесты (node --test); VERSION — единый источник версии
 samples/      По файлу каждого поддерживаемого типа для ручной проверки
 ```
 

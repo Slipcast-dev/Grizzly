@@ -129,6 +129,7 @@ function buildMenu() {
       submenu: [
         item('Открыть…', 'open', 'CmdOrCtrl+O'),
         item('Сохранить', 'save', 'CmdOrCtrl+S'),
+        item('Сохранить как…', 'saveAs', 'CmdOrCtrl+Shift+S'),
         item('Закрыть вкладку', 'closeTab', 'CmdOrCtrl+W'),
         { type: 'separator' },
         item('Настройки…', 'settings', 'CmdOrCtrl+,'),
@@ -279,6 +280,16 @@ function readText(file) {
   return { text: decode(buf, 'windows-1251'), encoding: 'Windows-1251' };
 }
 
+/** IPC hardening: only our own page may call, and only with absolute paths to supported file types. */
+function trusted(e) {
+  try { return e.senderFrame.url.startsWith('file://') && e.senderFrame.url.endsWith('/renderer/index.html'); } catch { return false; }
+}
+function validPath(file) {
+  return typeof file === 'string' && path.isAbsolute(file) && !file.includes('\0')
+    && EXTENSIONS.includes(path.extname(file).slice(1).toLowerCase());
+}
+const refuse = { ok: false, code: 'EACCES' };
+
 ipcMain.handle('app:info', () => ({
   platform: process.platform,
   locale: app.getLocale(),
@@ -308,7 +319,8 @@ ipcMain.handle('dialog:openFolder', async () => {
 });
 
 /** Supported files under a directory (subfolders included), grouped by their directory. Null if the path is not a directory. */
-ipcMain.handle('fs:scanDir', (_e, root) => {
+ipcMain.handle('fs:scanDir', (e, root) => {
+  if (!trusted(e) || typeof root !== 'string' || !path.isAbsolute(root)) return null;
   try { if (!fs.statSync(root).isDirectory()) return null; } catch { return null; }
   const out = [];
   const walk = (dir, depth) => {
@@ -325,7 +337,8 @@ ipcMain.handle('fs:scanDir', (_e, root) => {
   return out;
 });
 
-ipcMain.handle('file:read', (_e, file) => {
+ipcMain.handle('file:read', (e, file) => {
+  if (!trusted(e) || !validPath(file)) return refuse;
   try {
     const { text, encoding } = readText(file);
     return { ok: true, text, encoding, mtimeMs: fs.statSync(file).mtimeMs };
@@ -384,10 +397,48 @@ function encodeText(text, encoding, file) {
   throw Object.assign(new Error('unsupported encoding'), { code: 'EENCODE' });
 }
 
-ipcMain.handle('file:write', (_e, file, text, encoding) => {
+ipcMain.handle('file:write', (e, file, text, encoding) => {
+  if (!trusted(e) || !validPath(file)) return refuse;
   try {
     fs.writeFileSync(file, encodeText(String(text), encoding, file));
     return { ok: true, mtimeMs: fs.statSync(file).mtimeMs };
+  } catch (err) {
+    return { ok: false, code: err.code || 'EWRITE' };
+  }
+});
+
+const FORMATS = [
+  ['Markdown', ['md', 'markdown', 'mdown']], ['Text', ['txt', 'text']], ['JSON', ['json']], ['YAML', ['yaml', 'yml']],
+  ['CSV', ['csv']], ['TSV', ['tsv']], ['Log', ['log']], ['XML', ['xml']], ['HTML', ['html', 'htm']],
+  ['Config', ['ini', 'conf', 'toml']], ['TeX', ['tex']], ['RTF', ['rtf']],
+];
+
+/** Save a copy in a chosen format and place; the open document is left as it is. */
+ipcMain.handle('dialog:saveAs', async (e, name, text, encoding, dir) => {
+  if (!trusted(e) || typeof name !== 'string') return refuse;
+  const own = path.extname(name).slice(1).toLowerCase();
+  // The format of the current file comes first, so it is the dialog's default.
+  const formats = [...FORMATS].sort((a, b) => Number(b[1].includes(own)) - Number(a[1].includes(own)));
+  const result = await dialog.showSaveDialog(win, {
+    title: T('Сохранить как…'),
+    defaultPath: path.join(typeof dir === 'string' && path.isAbsolute(dir) ? dir : app.getPath('documents'), name),
+    filters: formats.map(([label, exts]) => ({ name: `${label} (.${exts[0]})`, extensions: exts })),
+  });
+  if (result.canceled || !result.filePath) return { ok: false, code: 'ECANCEL' };
+  let file = result.filePath;
+  if (!EXTENSIONS.includes(path.extname(file).slice(1).toLowerCase())) file += '.' + formats[0][1][0];
+  const toRtf = path.extname(file).toLowerCase() === '.rtf';
+  // Text formats keep the source encoding; RTF is its own container and RTF sources become UTF-8.
+  let enc = toRtf ? 'RTF' : (encoding === 'RTF' ? 'UTF-8' : encoding);
+  try {
+    let data;
+    try { data = encodeText(String(text), enc, file); } catch (err) {
+      if (err.code !== 'EENCODE' || enc === 'UTF-8') throw err;
+      enc = 'UTF-8';
+      data = encodeText(String(text), enc, file);
+    }
+    fs.writeFileSync(file, data);
+    return { ok: true, path: file, encoding: enc };
   } catch (err) {
     return { ok: false, code: err.code || 'EWRITE' };
   }
@@ -409,16 +460,18 @@ ipcMain.handle('dialog:confirmSave', async (_e, name) => {
 let hasUnsaved = false;
 ipcMain.on('app:dirty', (_e, dirty) => { hasUnsaved = !!dirty; });
 
-ipcMain.handle('file:mtimes', (_e, files) => {
+ipcMain.handle('file:mtimes', (e, files) => {
   const out = {};
+  if (!trusted(e) || !Array.isArray(files)) return out;
   for (const f of files) {
+    if (!validPath(f)) { out[f] = null; continue; }
     try { out[f] = fs.statSync(f).mtimeMs; } catch { out[f] = null; }
   }
   return out;
 });
 
-ipcMain.handle('shell:reveal', (_e, file) => { shell.showItemInFolder(file); });
-ipcMain.handle('shell:external', (_e, url) => { openExternal(String(url)); });
+ipcMain.handle('shell:reveal', (e, file) => { if (trusted(e) && typeof file === 'string' && path.isAbsolute(file)) shell.showItemInFolder(file); });
+ipcMain.handle('shell:external', (e, url) => { if (trusted(e)) openExternal(String(url)); });
 
 const libraryPath = () => path.join(app.getPath('userData'), 'library.json');
 

@@ -16,9 +16,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return state.confirmDiscard(state.documents.map(\.id)) ? .terminateNow : .terminateCancel
     }
 
+    /// Finder (double click, "Open With"), the Dock and `open -a` deliver files here, also while the app is launching.
     func application(_ application: NSApplication, open urls: [URL]) {
         AppState.shared.open(urls: urls)
+        NSApp.activate(ignoringOtherApps: true)
     }
+
+    /// Clicking the Dock icon after the last window was closed brings a window back.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { true }
+
+    /// One window is enough: a file opened from Finder becomes a tab instead of a second window.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 }
 
 @main
@@ -35,6 +43,7 @@ struct GrizzlyApp: App {
                 .environmentObject(settings)
                 .frame(minWidth: 720, minHeight: 460)
         }
+        .handlesExternalEvents(matching: ["*"])
         .windowToolbarStyle(.unified)
         Settings { SettingsView().environmentObject(settings) }
         .commands {
@@ -44,6 +53,9 @@ struct GrizzlyApp: App {
                 Button("Сохранить") { if let id = state.current?.id { state.save(id) } }
                     .keyboardShortcut("s")
                     .disabled(!(state.current.map { state.isDirty($0.id) } ?? false))
+                Button("Сохранить как…") { state.presentSaveAsPanel() }
+                    .keyboardShortcut("s", modifiers: [.command, .shift])
+                    .disabled(state.current == nil)
                 Button("Закрыть вкладку") {
                     if let id = state.current?.id { state.close(id) }
                 }

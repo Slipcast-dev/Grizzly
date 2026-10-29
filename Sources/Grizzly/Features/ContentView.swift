@@ -28,6 +28,12 @@ struct ContentView: View {
                 }
                 .help("Открыть файл (⌘O)")
 
+                Button { state.presentSaveAsPanel() } label: {
+                    Label("Сохранить как…", systemImage: "square.and.arrow.down")
+                }
+                .help("Сохранить как… (⇧⌘S)")
+                .disabled(state.current == nil)
+
                 Picker("Режим", selection: $state.mode) {
                     Text("Чтение").tag(ReadMode.reading)
                     Text("Исходник").tag(ReadMode.source)

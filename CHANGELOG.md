@@ -3,6 +3,17 @@
 All notable changes are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.2] - 2026-10-29
+
+### Added
+- **Save As…** (toolbar button, `⇧⌘S` / `Ctrl+Shift+S`): saves a copy of the current file, including unsaved edits, in any supported format (Markdown, Text, JSON, YAML, CSV/TSV, Log, XML, HTML, INI/TOML, TeX, RTF) and in a place you choose. The open document is not changed. macOS build only for now: the Windows source has it, but the portable build stays at 0.2.1 until it is rebuilt.
+- macOS: files opened from Finder (double click, Open With) or the Dock open as tabs in the existing window, and launch the app with the file when it is not running. The built-in extensions are now declared with the default handler rank.
+- Unit tests and CI (`scripts/test.sh`, `.github/workflows/ci.yml`); `VERSION` is the single source of the version number.
+
+### Security
+- Quick Look: quotes are escaped in rendered Markdown and only `http`, `https` and `mailto` links are clickable.
+- Windows source (not in the 0.2.1 portable build): the main process now accepts file IPC only from the app's own page and only for absolute paths with supported extensions.
+
 ## [0.3.1] - 2026-10-28
 
 ### Fixed
@@ -50,6 +61,7 @@ First public release.
 - Russian and English interface.
 - Builds: macOS Apple Silicon (`.dmg`), macOS Intel (`.dmg`), Windows x64 portable (`.exe`).
 
+[0.3.2]: https://github.com/Slipcast-dev/Grizzly/releases/tag/v0.3.2
 [0.3.1]: https://github.com/Slipcast-dev/Grizzly/releases/tag/v0.3.1
 [0.3.0]: https://github.com/Slipcast-dev/Grizzly/releases/tag/v0.3.0
 [0.2.1]: https://github.com/Slipcast-dev/Grizzly/releases/tag/v0.2.1

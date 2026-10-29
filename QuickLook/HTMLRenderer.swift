@@ -28,6 +28,29 @@ enum HTMLRenderer {
         s.replacingOccurrences(of: "&", with: "&amp;")
             .replacingOccurrences(of: "<", with: "&lt;")
             .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "'", with: "&#39;")
+    }
+
+    /// Only web and mail links stay clickable; `javascript:`, `file:` and relative targets become plain text.
+    static func isSafeLink(_ target: String) -> Bool {
+        let lower = target.lowercased()
+        return lower.hasPrefix("http://") || lower.hasPrefix("https://") || lower.hasPrefix("mailto:")
+    }
+
+    /// Replaces `[text](target)` in already escaped text with anchors (safe targets only).
+    private static func links(_ s: String) -> String {
+        guard let re = try? NSRegularExpression(pattern: "\\[([^\\]]+)\\]\\(([^)\\s]+)\\)") else { return s }
+        var out = s
+        let ns = s as NSString
+        for m in re.matches(in: s, range: NSRange(location: 0, length: ns.length)).reversed() {
+            let label = ns.substring(with: m.range(at: 1))
+            let target = ns.substring(with: m.range(at: 2))
+            // `escape` ran first, so a target cannot contain a raw quote or angle bracket.
+            let html = isSafeLink(target) ? "<a href=\"\(target)\">\(label)</a>" : label
+            out = (out as NSString).replacingCharacters(in: m.range, with: html)
+        }
+        return out
     }
 
     static func code(_ lines: [String]) -> String {
@@ -73,11 +96,10 @@ enum HTMLRenderer {
             ("`([^`]+)`", "<code>$1</code>"),
             ("\\*\\*([^*]+)\\*\\*", "<strong>$1</strong>"),
             ("(?<![*\\w])\\*([^*\\n]+)\\*(?!\\w)", "<em>$1</em>"),
-            ("\\[([^\\]]+)\\]\\(([^)\\s]+)\\)", "<a href=\"$2\">$1</a>"),
         ]
         for (pattern, template) in rules {
             s = s.replacingOccurrences(of: pattern, with: template, options: .regularExpression)
         }
-        return s
+        return links(s)
     }
 }

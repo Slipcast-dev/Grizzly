@@ -210,6 +210,66 @@ final class AppState: ObservableObject {
         return drafts[id] == nil
     }
 
+    // MARK: Save As
+
+    /// Formats offered by "Save As…": one per supported extension, Markdown first.
+    static let exportExtensions: [String] = {
+        let first = ["md", "txt", "json", "yaml", "csv", "log", "xml", "html", "ini", "toml", "tex", "rtf"]
+        return first + FileType.allExtensions.filter { !first.contains($0) }
+    }()
+
+    /// Saves a copy of the current document (with unsaved edits) in a chosen format and place.
+    /// The open document is left as it is.
+    func presentSaveAsPanel() {
+        guard let doc = current else { return }
+        let panel = NSSavePanel()
+        panel.canCreateDirectories = true
+        panel.title = L("Сохранить как…")
+        panel.directoryURL = doc.url.deletingLastPathComponent()
+
+        let base = doc.url.deletingPathExtension().lastPathComponent
+        let ownExt = doc.url.pathExtension.lowercased()
+        let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 240, height: 26), pullsDown: false)
+        for ext in Self.exportExtensions {
+            popup.addItem(withTitle: ".\(ext) — \(FileType.extensions[ext]?.title ?? ext)")
+        }
+        popup.selectItem(at: Self.exportExtensions.firstIndex(of: ownExt) ?? 0)
+        let label = NSTextField(labelWithString: L("Формат:"))
+        let stack = NSStackView(views: [label, popup])
+        stack.spacing = 8
+        stack.edgeInsets = NSEdgeInsets(top: 8, left: 0, bottom: 8, right: 0)
+        panel.accessoryView = stack
+
+        let target = ExportFormatTarget(panel: panel, base: base)
+        popup.target = target
+        popup.action = #selector(ExportFormatTarget.changed(_:))
+        target.apply(Self.exportExtensions[popup.indexOfSelectedItem])
+        guard panel.runModal() == .OK, var url = panel.url else { return }
+        withExtendedLifetime(target) {}
+
+        // A supported extension typed by hand wins; otherwise the chosen format is appended.
+        let chosen = Self.exportExtensions[popup.indexOfSelectedItem]
+        if FileType.extensions[url.pathExtension.lowercased()] == nil { url.appendPathExtension(chosen) }
+        export(doc, to: url)
+    }
+
+    private func export(_ doc: Document, to url: URL) {
+        var body = text(for: doc)
+        if doc.text.contains("\r\n") { body = body.replacingOccurrences(of: "\n", with: "\r\n") }
+        let toRTF = url.pathExtension.lowercased() == "rtf"
+        // Keep the source encoding for text formats; RTF is its own container, and RTF sources become UTF-8.
+        var encoding = toRTF ? "RTF" : (doc.encoding == "RTF" ? "UTF-8" : doc.encoding)
+        do {
+            do { try FileLoader.write(body, to: url, encoding: encoding) }
+            catch let error as CocoaError where error.code == .fileWriteInapplicableStringEncoding && encoding != "UTF-8" {
+                encoding = "UTF-8"
+                try FileLoader.write(body, to: url, encoding: encoding)
+            }
+        } catch {
+            errorMessage = L("Не удалось сохранить «%@».", url.lastPathComponent)
+        }
+    }
+
     /// Asks about every unsaved document among `ids`; false means the user cancelled.
     func confirmDiscard(_ ids: [UUID]) -> Bool {
         for id in ids {
@@ -355,5 +415,26 @@ final class AppState: ObservableObject {
     func removeFromLibrary(_ id: UUID) {
         if let doc = documents.first(where: { $0.libraryID == id }), !close(doc.id) { return }
         library.remove(id)
+    }
+}
+
+/// Keeps the name field of the Save As panel in step with the format popup.
+final class ExportFormatTarget: NSObject {
+    private let panel: NSSavePanel
+    private let base: String
+
+    init(panel: NSSavePanel, base: String) {
+        self.panel = panel
+        self.base = base
+    }
+
+    func apply(_ ext: String) {
+        let typed = (panel.nameFieldStringValue as NSString)
+        let name = typed.length == 0 ? base : typed.deletingPathExtension
+        panel.nameFieldStringValue = name + "." + ext
+    }
+
+    @objc func changed(_ sender: NSPopUpButton) {
+        apply(AppState.exportExtensions[sender.indexOfSelectedItem])
     }
 }

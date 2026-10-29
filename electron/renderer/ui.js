@@ -25,6 +25,7 @@ function h(tag, attrs, ...kids) {
 const ICONS = {
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
   folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  download: '<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5"/><path d="M5 19h14"/>',
   folderPlus: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 10.5v5M9.5 13h5"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   star: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>',
@@ -196,6 +197,7 @@ function renderToolbar() {
         { label: t('Добавить папку с диска…'), action: () => openFolders() },
       ]),
     }, icon('folderPlus', 17)),
+    btn('download', t('Сохранить как… (Ctrl+Shift+S)'), () => runCommand('saveAs'), { disabled: noDocs }),
     h('div', { class: 'title' }, (App.current || {}).name || 'Grizzly'),
     h('div', { class: 'seg', title: t('Режим просмотра') },
       ...[['reading', 'Чтение'], ['source', 'Исходник'], ['edit', 'Правка']].map(([mode, label]) => h('button', {
@@ -1120,6 +1122,7 @@ function runCommand(action) {
     case 'modeReading': App.setMode('reading'); break;
     case 'modeSource': App.setMode('source'); break;
     case 'modeEdit': App.setMode('edit'); break;
+    case 'saveAs': if (App.current) App.saveAs(App.current.id); break;
     case 'save': if (App.current) App.save(App.current.id); break;
     case 'reload': if (App.current) App.refresh(App.current.id); break;
     case 'fontUp': Prefs.resizeFont(1); break;

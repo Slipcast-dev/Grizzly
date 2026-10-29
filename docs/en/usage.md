@@ -3,6 +3,7 @@
 ## Opening files
 
 - `⌘O` / `Ctrl+O`, or drag files onto the window or the Dock / taskbar icon.
+- **From Finder (macOS)**: double-click a file or use *Open With → Grizzly*. If Grizzly is not running it starts with the file; if it is, the file opens as a tab in the existing window. To make it the default app, see *Settings → File types*.
 - Several files open as tabs. `⇧⌘]` / `⇧⌘[` (`Ctrl+Shift+]` / `[`) cycle through them.
 - Supported extensions: `md markdown mdown txt text log json yaml yml csv tsv xml html htm ini conf toml tex rtf`.
   Anything unknown opens as plain text.
@@ -47,6 +48,14 @@ The line-number gutter can be turned off in Settings.
 
 `⌘\` / `Ctrl+\` splits the window into two panes so you can compare or cross-reference two documents. Press it again to go back.
 
+## Save As
+
+The **Save As…** button next to *Open* in the toolbar (`⇧⌘S` / `Ctrl+Shift+S`) saves a **copy** of the current file, including unsaved edits, to a place you choose.
+Pick the format in the dialog (Markdown, Text, JSON, YAML, CSV, TSV, Log, XML, HTML, INI/TOML, TeX, RTF); the extension follows the format.
+The text is not converted between formats, only the file type changes. The source encoding is kept; if it cannot hold some characters the copy is written in UTF-8, and RTF sources are saved as UTF-8 text.
+The open document is not changed. *Save* (`⌘S`) still writes edits back to the original file.
+Windows: available in the source tree; it ships with the next portable build.
+
 ## Library
 
 The sidebar holds a **virtual library**: your own folders, recents and favorites (⭐). It is only a list of
@@ -88,6 +97,7 @@ Open Settings (`⌘,` / `Ctrl+,`):
 
 | Action | macOS | Windows |
 |---|---|---|
+| Save As | `⇧⌘S` | `Ctrl+Shift+S` |
 | Open / Save / Close tab | `⌘O` / `⌘S` / `⌘W` | `Ctrl+O` / `Ctrl+S` / `Ctrl+W` |
 | Settings | `⌘,` | `Ctrl+,` |
 | Find / next / previous | `⌘F` / `⌘G` / `⇧⌘G` | `Ctrl+F` / `Ctrl+G` / `Ctrl+Shift+G` |

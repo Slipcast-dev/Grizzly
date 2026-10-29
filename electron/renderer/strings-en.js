@@ -110,6 +110,19 @@ window.STRINGS_EN = {
  "Обновить из папки": "Refresh from Folder",
  "Открыть папку…": "Open Folder…",
  "Быстрый просмотр": "Quick Look",
+ "не выбрано": "not set",
+ "Не удалось назначить: %@": "Could not set for: %@",
+ "Сейчас: %@": "Currently: %@",
+ "Открывается в Grizzly": "Opens in Grizzly",
+ "Сделать Grizzly приложением по умолчанию для всех": "Make Grizzly the default app for all",
+ "Нажмите на расширение, чтобы открывать такие файлы в Grizzly. macOS может запросить подтверждение.": "Click an extension to open such files in Grizzly. macOS may ask you to confirm.",
+ "Другое расширение, например py": "Another extension, e.g. py",
+ "Добавить": "Add",
+ "Убрать из списка": "Remove from list",
+ "Типы файлов": "File types",
+ "Сохранить как…": "Save As…",
+ "Формат:": "Format:",
+ "Сохранить как… (⇧⌘S)": "Save As… (⇧⌘S)",
  "Файл": "File",
  "Показать в проводнике": "Show in Explorer",
  "Настройки": "Settings",
@@ -118,5 +131,6 @@ window.STRINGS_EN = {
  "Боковая панель": "Sidebar",
  "Файлы Grizzly": "Grizzly files",
  "Все файлы": "All files",
- "Готово.": "Done."
+ "Готово.": "Done.",
+ "Сохранить как… (Ctrl+Shift+S)": "Save As… (Ctrl+Shift+S)"
 };
