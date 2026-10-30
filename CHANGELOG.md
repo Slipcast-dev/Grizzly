@@ -12,7 +12,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 - **Settings window**: content scrolls and the window can be resized vertically; it no longer runs off the screen.
 
 ### Changed
-- **New File button in the sidebar**, next to *New Folder*, in both versions.
+- **File actions moved into the sidebar**: one row of four equal buttons — New File, Open File, New Folder, Save As… — replaces the toolbar's open menu and Save As button (no duplicates, no drop-down). *Add Folder from Disk…* is now in the File menu (`⇧⌘O` / `Ctrl+Shift+O`).
+- **The Reading / Source / Edit switch is centered** at the top of the window in both versions; the remaining tools stay on the right.
 - Sidebar and toolbar controls share one set of sizes (30–34 pt height, equal square buttons, same corner radii): the sidebar section switcher and the folder button were too small.
 
 ## [1.0.0] - 2026-10-30

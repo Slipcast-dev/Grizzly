@@ -189,29 +189,24 @@ function renderToolbar() {
     onclick: (e) => toggleBookmarksPopover(e.currentTarget),
   }, icon('bookmark', 17, bookmarkLines.length > 0));
 
+  // Three zones: sidebar toggle and file name on the left, the mode switch exactly in the middle, tools on the right.
   bar.replaceChildren(
-    btn('sidebar', t('Боковая панель'), () => { App.ui.sidebarVisible = !App.ui.sidebarVisible; applySidebarVisibility(); }),
-    h('button', {
-      class: 'tb', title: t('Открыть файл (⌘O)'),
-      onclick: (e) => Menus.below(e.currentTarget, [
-        { label: t('Новый файл…'), action: () => runCommand('newFile') },
-        { label: t('Открыть файл…'), action: () => openFiles() },
-        { label: t('Добавить папку с диска…'), action: () => openFolders() },
-      ]),
-    }, icon('folderPlus', 17)),
-    btn('download', t('Сохранить как… (Ctrl+Shift+S)'), () => runCommand('saveAs'), { disabled: noDocs }),
-    h('div', { class: 'title' }, (App.current || {}).name || 'Grizzly'),
+    h('div', { class: 'tb-left' },
+      btn('sidebar', t('Боковая панель'), () => { App.ui.sidebarVisible = !App.ui.sidebarVisible; applySidebarVisibility(); }),
+      h('div', { class: 'title' }, (App.current || {}).name || 'Grizzly')),
     h('div', { class: 'seg', title: t('Режим просмотра') },
       ...[['reading', 'Чтение'], ['source', 'Исходник'], ['edit', 'Правка']].map(([mode, label]) => h('button', {
         class: App.mode === mode ? 'on' : '', onclick: () => App.setMode(mode),
       }, t(label)))),
-    btn(App.isSplit ? 'rightPane' : 'split', t('Два файла рядом (⌘\\)'), () => App.toggleSplit(), { disabled: noDocs, class: 'tb' + (App.isSplit ? ' active' : '') }),
-    btn('search', t('Найти (⌘F)'), () => App.showFind(), { disabled: noDocs }),
-    bmBtn,
-    h('button', { class: 'tb text', title: t('Уменьшить текст'), onclick: () => Prefs.resizeFont(-1) }, 'A−'),
-    h('button', { class: 'tb text big', title: t('Увеличить текст'), onclick: () => Prefs.resizeFont(1) }, 'A+'),
-    btn('gear', t('Настройки'), () => openSettings()),
+    h('div', { class: 'tb-right' },
+      btn(App.isSplit ? 'rightPane' : 'split', t('Два файла рядом (⌘\\)'), () => App.toggleSplit(), { disabled: noDocs, class: 'tb' + (App.isSplit ? ' active' : '') }),
+      btn('search', t('Найти (⌘F)'), () => App.showFind(), { disabled: noDocs }),
+      bmBtn,
+      h('button', { class: 'tb text', title: t('Уменьшить текст'), onclick: () => Prefs.resizeFont(-1) }, 'A−'),
+      h('button', { class: 'tb text big', title: t('Увеличить текст'), onclick: () => Prefs.resizeFont(1) }, 'A+'),
+      btn('gear', t('Настройки'), () => openSettings())),
   );
+  if ($('side-actions')) renderSideActions();
 }
 
 function toggleBookmarksPopover(anchor) {
@@ -295,6 +290,7 @@ function buildSidebarFrame() {
       h('button', { id: 'filter-clear', class: 'plain', hidden: true, onclick: () => {
         SidebarUI.query = ''; $('filter-input').value = ''; renderSidebarList(); renderFilterClear();
       } }, icon('xCircle', 14))),
+    h('div', { class: 'side-actions', id: 'side-actions' }),
     h('div', { id: 'side-list', class: 'side-list' }),
   );
   const list = $('side-list');
@@ -309,7 +305,19 @@ function buildSidebarFrame() {
 
 function renderFilterClear() { $('filter-clear').hidden = !SidebarUI.query; }
 
+/** One row of equal buttons for the file actions (new, open, new folder, save as). */
+function renderSideActions() {
+  const noDocs = App.documents.length === 0;
+  const b = (name, title, onclick, disabled) => h('button', { class: 'sq', title, onclick, disabled: !!disabled }, icon(name, 17));
+  $('side-actions').replaceChildren(
+    b('docPlus', t('Новый файл (⌘N)'), () => runCommand('newFile')),
+    b('folder', t('Открыть файл (⌘O)'), () => openFiles()),
+    b('folderPlus', t('Новая папка'), () => { App.ui.sidebarSection = 'files'; SidebarUI.pendingMove = null; App.render(['sidebar']); beginNaming(); }),
+    b('download', t('Сохранить как… (Ctrl+Shift+S)'), () => runCommand('saveAs'), noDocs));
+}
+
 function renderSidebar() {
+  renderSideActions();
   const seg = $('side-seg');
   seg.replaceChildren(...SECTIONS.map((s) => h('button', {
     class: App.ui.sidebarSection === s.id ? 'on' : '', title: s.title(),
@@ -329,12 +337,7 @@ function renderSidebarList() {
 
   if (section === 'files') {
     const head = h('div', { class: 'sec-head' }, h('span', null, t('Файлы')),
-      h('div', { class: 'sec-tools' },
-        h('button', { class: 'plain sq', title: t('Новый файл (⌘N)'), onclick: () => runCommand('newFile') }, icon('docPlus', 17)),
-        h('button', {
-          class: 'plain sq', title: t('Новая папка'),
-          onclick: () => { SidebarUI.pendingMove = null; beginNaming(); },
-        }, icon('folderPlus', 17))));
+      h('span'));
     frag.append(head);
     if (SidebarUI.isNaming) frag.append(nameField());
     const folders = SidebarUI.query
@@ -1170,6 +1173,7 @@ async function openFiles() {
 function runCommand(action) {
   switch (action) {
     case 'open': openFiles(); break;
+    case 'openFolder': openFolders(); break;
     case 'newFile': newFile(); break;
     case 'closeTab': if (App.current) App.close(App.current.id); break;
     case 'settings': openSettings(); break;

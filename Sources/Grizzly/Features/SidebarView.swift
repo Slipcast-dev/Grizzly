@@ -28,7 +28,8 @@ struct SidebarIconButtonStyle: ButtonStyle {
         configuration.label
             .font(.system(size: 15))
             .foregroundColor(.primary)
-            .frame(width: 28, height: 28)
+            .frame(maxWidth: .infinity)
+            .frame(height: 30)
             .background(RoundedRectangle(cornerRadius: 7).fill(Color.primary.opacity(configuration.isPressed ? 0.16 : 0.07)))
             .contentShape(RoundedRectangle(cornerRadius: 7))
     }
@@ -88,6 +89,26 @@ struct SidebarView: View {
             .frame(height: 30)
             .background(RoundedRectangle(cornerRadius: 7).fill(Color.primary.opacity(0.07)))
             .padding(.horizontal, 12)
+            .padding(.top, 8)
+
+            // File actions in one row of equal buttons (they used to be split between the title bar and the list header).
+            HStack(spacing: 6) {
+                Button { state.presentNewFilePanel() } label: { Image(systemName: "doc.badge.plus") }
+                    .help("Новый файл (⌘N)")
+                Button { state.presentOpenPanel() } label: { Image(systemName: "folder") }
+                    .help("Открыть файл (⌘O)")
+                Button {
+                    section = .files
+                    pendingMove = nil
+                    beginNaming()
+                } label: { Image(systemName: "folder.badge.plus") }
+                    .help("Новая папка")
+                Button { state.presentSaveAsPanel() } label: { Image(systemName: "square.and.arrow.down") }
+                    .help("Сохранить как… (⇧⌘S)")
+                    .disabled(state.current == nil)
+            }
+            .buttonStyle(SidebarIconButtonStyle())
+            .padding(.horizontal, 12)
             .padding(.vertical, 8)
 
             List(selection: $state.selectedFileID) {
@@ -132,17 +153,7 @@ struct SidebarView: View {
             HStack {
                 Text("Файлы")
                 Spacer()
-                Button { state.presentNewFilePanel() } label: { Image(systemName: "doc.badge.plus") }
-                    .buttonStyle(SidebarIconButtonStyle())
-                    .help("Новый файл (⌘N)")
-                Button {
-                    pendingMove = nil
-                    beginNaming()
-                } label: { Image(systemName: "folder.badge.plus") }
-                .buttonStyle(SidebarIconButtonStyle())
-                .help("Новая папка")
             }
-            .padding(.trailing, 8)
         }
     }
 

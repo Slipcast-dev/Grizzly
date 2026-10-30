@@ -141,6 +141,7 @@ function buildMenu() {
       submenu: [
         item('Новый файл…', 'newFile', 'CmdOrCtrl+N'),
         item('Открыть…', 'open', 'CmdOrCtrl+O'),
+        item('Добавить папку с диска…', 'openFolder', 'CmdOrCtrl+Shift+O'),
         item('Сохранить', 'save', 'CmdOrCtrl+S'),
         item('Сохранить как…', 'saveAs', 'CmdOrCtrl+Shift+S'),
         item('Закрыть вкладку', 'closeTab', 'CmdOrCtrl+W'),
