@@ -54,6 +54,9 @@ final class Preferences: ObservableObject {
     @Published var headingSpacing: Double { didSet { defaults.set(headingSpacing, forKey: "headingSpacing") } }
     @Published var showLineNumbers: Bool { didSet { defaults.set(showLineNumbers, forKey: "showLineNumbers") } }
     @Published var autoReload: Bool { didSet { defaults.set(autoReload, forKey: "autoReload") } }
+    /// Syntax coloring: a master switch plus a list of file types that are switched off individually.
+    @Published var syntaxEnabled: Bool { didSet { defaults.set(syntaxEnabled, forKey: "syntaxEnabled") } }
+    @Published var syntaxOff: Set<String> { didSet { defaults.set(syntaxOff.sorted(), forKey: "syntaxOff") } }
     @Published var language: AppLanguage { didSet { language.apply() } }
     @Published private(set) var systemIsDark: Bool
 
@@ -66,6 +69,8 @@ final class Preferences: ObservableObject {
         headingSpacing = d.object(forKey: "headingSpacing") as? Double ?? 1
         showLineNumbers = d.object(forKey: "showLineNumbers") as? Bool ?? true
         autoReload = d.object(forKey: "autoReload") as? Bool ?? false
+        syntaxEnabled = d.object(forKey: "syntaxEnabled") as? Bool ?? true
+        syntaxOff = Set(d.stringArray(forKey: "syntaxOff") ?? [])
         language = AppLanguage.saved
         systemIsDark = Preferences.readSystemDark()
 
@@ -86,6 +91,12 @@ final class Preferences: ObservableObject {
         case .light: return false
         case .dark: return true
         }
+    }
+
+    func highlights(_ type: FileType) -> Bool { syntaxEnabled && !syntaxOff.contains(type.rawValue) }
+
+    func setHighlight(_ type: FileType, _ on: Bool) {
+        if on { syntaxOff.remove(type.rawValue) } else { syntaxOff.insert(type.rawValue) }
     }
 
     var theme: Theme { ThemeSet.find(themeID).variant(dark: wantsDark) }

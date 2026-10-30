@@ -7,6 +7,7 @@ enum Syntax {
 
     static func highlight(_ line: String, type: FileType, theme: Theme, state: Int = 0) -> AttributedString {
         var out = AttributedString(line)
+        guard Preferences.shared.highlights(type) else { return out }
         let spans = SyntaxEngine.spans(line, type: type, state: state).spans
         for span in spans {
             guard let r = Range(span.range, in: line) else { continue }
@@ -21,6 +22,7 @@ enum Syntax {
 
     /// A multi-line code block (Markdown fence) colored as one string; `\n` joins the lines.
     static func highlightBlock(_ code: String, type: FileType, theme: Theme) -> AttributedString {
+        guard Preferences.shared.highlights(type) else { return AttributedString(code) }
         let lines = code.components(separatedBy: "\n")
         let states = SyntaxEngine.states(lines, type: type)
         var out = AttributedString()

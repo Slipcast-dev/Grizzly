@@ -40,7 +40,7 @@ const fenceType = (tag) => FENCE_TAGS[(String(tag || '').split(/[\s{]/)[0] || ''
 
 const TYPE_TITLES = {
   markdown: 'Markdown', text: 'Text', json: 'JSON', yaml: 'YAML', csv: 'CSV', log: 'Log',
-  xml: 'XML', html: 'HTML', config: 'Config', tex: 'TeX', rtf: 'RTF',
+  xml: 'XML', html: 'HTML', config: 'INI / TOML', tex: 'TeX', rtf: 'RTF',
   python: 'Python', swift: 'Swift', cpp: 'C / C++', csharp: 'C#', javascript: 'JavaScript', typescript: 'TypeScript', css: 'CSS', php: 'PHP',
 };
 
@@ -609,8 +609,13 @@ const Syntax = (() => {
     return out;
   }
 
+  /** Settings: highlighting can be switched off altogether or per language. */
+  const isOn = (type) => typeof Prefs === 'undefined'
+    || (Prefs.values.syntaxOn !== false && !(Prefs.values.syntaxOff || []).includes(type));
+
   /** Returns [{start, end, role}] for a single line. A character claimed by an earlier rule is never recolored. */
   function spans(line, type, state = 0) {
+    if (!isOn(type)) return [];
     const lang = CODE[type];
     const rules = lang ? lang.rules : RULES[type];
     if (!rules || !line || line.length > MAX_LENGTH) return [];
@@ -669,7 +674,7 @@ const Syntax = (() => {
     return parent;
   }
 
-  return { hasHighlighting, render, renderBlock, states, spans };
+  return { hasHighlighting, isOn, render, renderBlock, states, spans };
 })();
 
 // ---- Search ----------------------------------------------------------------

@@ -74,10 +74,12 @@ struct PaneView: View {
             Text("Файл изменён на диске.")
             Spacer()
             Button("Обновить  ⌘R") { state.refresh(doc.id) }
+                .buttonStyle(.hoverFilled)
             Button("Не сейчас") { state.ignoreChange(doc.id) }
+                .buttonStyle(.hoverText)
         }
         .font(.callout)
-        .buttonStyle(.borderless)
+        .buttonStyle(.hoverText)
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(theme.warning.opacity(0.18))

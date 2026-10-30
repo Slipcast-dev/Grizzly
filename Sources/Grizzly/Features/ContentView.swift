@@ -33,18 +33,22 @@ struct ContentView: View {
                 Button { state.toggleSplit() } label: {
                     Image(systemName: state.isSplit ? "rectangle.split.2x1.fill" : "rectangle.split.2x1")
                 }
+                .buttonStyle(.hover)
                 .help("Два файла рядом (⌘\\)")
                 .disabled(state.documents.isEmpty)
 
                 Button { state.showFind() } label: { Image(systemName: "magnifyingglass") }
+                    .buttonStyle(.hover)
                     .help("Найти (⌘F)")
                     .disabled(state.documents.isEmpty)
 
                 BookmarksButton()
 
                 Button { prefs.resizeFont(by: -1) } label: { Image(systemName: "textformat.size.smaller") }
+                    .buttonStyle(.hover)
                     .help("Уменьшить текст")
                 Button { prefs.resizeFont(by: 1) } label: { Image(systemName: "textformat.size.larger") }
+                    .buttonStyle(.hover)
                     .help("Увеличить текст")
             }
         }
