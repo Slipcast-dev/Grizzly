@@ -210,7 +210,12 @@ function renderToolbar() {
       bmBtn,
       h('button', { class: 'tb text', title: t('Уменьшить текст'), onclick: () => Prefs.resizeFont(-1) }, 'A−'),
       h('button', { class: 'tb text big', title: t('Увеличить текст'), onclick: () => Prefs.resizeFont(1) }, 'A+'),
-      btn('gear', t('Настройки'), () => openSettings())),
+      btn('gear', t('Настройки'), () => openSettings()),
+      // Rightmost: the system emoji picker, for the text being edited.
+      h('button', {
+        class: 'tb text emoji-btn', title: t('Эмодзи и символы (Win+.)'), disabled: App.mode !== 'edit' || noDocs,
+        onclick: () => { const ta = document.querySelector('textarea.editor-text'); if (ta) { ta.focus(); window.api.showEmojiPanel(); } },
+      }, '😀')),
   );
   if ($('side-actions')) renderSideActions();
 }
@@ -991,13 +996,9 @@ function editorView(doc, pane, size) {
   const syncScroll = () => { back.scrollTop = area.scrollTop; };
 
   const status = h('span', { class: 'grow' });
-  const emoji = h('button', {
-    class: 'plain emoji-btn', title: t('Эмодзи и символы (Win+.)'),
-    onclick: () => { area.focus(); window.api.showEmojiPanel(); },
-  }, '😀');
   const revert = h('button', { class: 'plain link', onclick: () => App.discardDraft(doc.id) }, t('Отменить изменения'));
   const save = h('button', { class: 'plain link strong', onclick: () => App.save(doc.id) }, t('Сохранить  ⌘S'));
-  const bar = h('div', { class: 'edit-bar' }, status, emoji, revert, save);
+  const bar = h('div', { class: 'edit-bar' }, status, revert, save);
   const sync = () => {
     const dirty = App.isDirty(doc);
     bar.classList.toggle('dirty', dirty);

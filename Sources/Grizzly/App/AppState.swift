@@ -26,8 +26,6 @@ final class AppState: ObservableObject {
     @Published private(set) var changedOnDisk: Set<UUID> = []
     /// Edited text per open document, kept only while it differs from the file.
     @Published private(set) var drafts: [UUID: String] = [:]
-    /// "Select All" in Reading / Source: the whole document counts as selected and ⌘C copies all of it.
-    @Published var allSelected = false
     private var watcher: Timer?
 
     /// Polls open files once a second; called once the app has launched.
@@ -128,6 +126,7 @@ final class AppState: ObservableObject {
         do {
             var doc = try Document(url: url)
             doc.libraryID = libraryID
+            noteTags(in: doc)
             documents.append(doc)
             assign(doc.id, to: target)
             library.recordOpened(url)
@@ -177,6 +176,32 @@ final class AppState: ObservableObject {
         }
     }
 
+    // MARK: Hashtags in text
+
+    private static let proseTypes: Set<FileType> = [.markdown, .text, .rtf, .tex]
+
+    /// Hashtags written in a document become tags of its library file.
+    private func noteTags(in doc: Document) {
+        guard let id = doc.libraryID, Self.proseTypes.contains(doc.type) else { return }
+        library.setInlineTags(id, LibraryStore.extractTags(from: doc.normalized))
+    }
+
+    /// Reads every prose file of the library once at launch, so tags written in the texts show up in the sidebar.
+    func scanTagsInLibrary() {
+        // Paths are resolved here (the library is main-thread state); only the reading happens in the background.
+        let files = library.allFiles.filter { Self.proseTypes.contains($0.type) }
+            .compactMap { f in library.resolve(f.id).map { (f.id, $0) } }
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            var found: [(UUID, [String])] = []
+            for (id, url) in files {
+                guard let size = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int, size < 2_000_000,
+                      let loaded = try? FileLoader.read(url) else { continue }
+                found.append((id, LibraryStore.extractTags(from: loaded.text)))
+            }
+            DispatchQueue.main.async { for (id, tags) in found { self?.library.setInlineTags(id, tags) } }
+        }
+    }
+
     // MARK: File watching
 
     private func checkFiles() {
@@ -195,6 +220,7 @@ final class AppState: ObservableObject {
             var fresh = try Document(url: old.url)
             fresh.id = old.id
             fresh.libraryID = old.libraryID
+            noteTags(in: fresh)
             documents[i] = fresh
             drafts[id] = nil
             changedOnDisk.remove(id)
@@ -304,11 +330,6 @@ final class AppState: ObservableObject {
             url.appendPathExtension(Self.exportExtensions[popup.indexOfSelectedItem])
         }
         return url
-    }
-
-    func selectAllText() {
-        guard current != nil, mode != .edit else { return }
-        allSelected = true
     }
 
     /// Puts the whole text of the current document on the pasteboard.

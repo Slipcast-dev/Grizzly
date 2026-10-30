@@ -10,6 +10,7 @@
   buildUI();
   App.render(['all']);
   App.startWatching();
+  Library.scanInlineTags();
 
   window.api.onMenu(runCommand);
   window.api.onOpenFiles((paths) => App.open(paths));

@@ -51,16 +51,19 @@ struct ContentView: View {
                 Button { prefs.resizeFont(by: 1) } label: { Image(systemName: "textformat.size.larger") }
                     .buttonStyle(.hover)
                     .help("Увеличить текст")
+                // Rightmost: the system emoji picker, for the text being edited.
+                Button { NSApp.orderFrontCharacterPalette(nil) } label: { Text("😀") }
+                    .buttonStyle(.hover)
+                    .help("Эмодзи и символы (⌃⌘Пробел)")
+                    .disabled(state.mode != .edit || state.documents.isEmpty)
             }
         }
         .environment(\.theme, theme)
         .preferredColorScheme(theme.isDark ? .dark : .light)
         .onChange(of: state.mode) { _ in
-            state.allSelected = false
             state.recomputeMatches(reset: false)
         }
         .onChange(of: state.current?.id) { _ in
-            state.allSelected = false
             state.recomputeMatches(reset: true)
         }
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in

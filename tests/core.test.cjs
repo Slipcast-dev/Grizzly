@@ -127,6 +127,10 @@ test('tags: create, assign, rename, delete', () => {
   lib.renameTag('Работа', 'Дом');
   assert.strictEqual(lib.filesWithTag('Дом').length, 1);
   assert.strictEqual(lib.filesWithTag('Работа').length, 0);
+  assert.deepStrictEqual(Array.from(lib.extractTags('# T\n#12 и #работа, #Work-1 a#b http://x/#frag')), ['12', 'работа', 'Work-1']);
+  lib.setInlineTags(file.id, ['идея']);
+  assert.strictEqual(lib.filesWithTag('Идея').length, 1);
+  lib.setInlineTags(file.id, []);
   lib.deleteTag('Дом');
   assert.strictEqual(lib.allTags.length, 0);
   assert.strictEqual(lib.filesWithTag('Дом').length, 0);

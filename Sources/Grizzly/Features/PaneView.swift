@@ -16,11 +16,6 @@ struct PaneView: View {
             if let doc {
                 if state.changedOnDisk.contains(doc.id) { changedBanner(doc) }
                 content(for: doc)
-                    .overlay {
-                        if state.allSelected, state.mode != .edit, isTargetPane {
-                            Rectangle().fill(theme.accent.opacity(0.22)).allowsHitTesting(false)
-                        }
-                    }
                 StatusBar(document: doc)
             } else {
                 placeholder
@@ -28,11 +23,7 @@ struct PaneView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.background)
-        .overlay(alignment: .topTrailing) { selectAllBadge }
-        .simultaneousGesture(TapGesture().onEnded {
-            state.focus(pane)
-            if state.allSelected { state.allSelected = false }
-        })
+        .simultaneousGesture(TapGesture().onEnded { state.focus(pane) })
     }
 
     // MARK: Header (split view only)
@@ -74,21 +65,6 @@ struct PaneView: View {
             Rectangle()
                 .fill(state.focusedPane == pane ? theme.accent : theme.rule.opacity(0.5))
                 .frame(height: state.focusedPane == pane ? 2 : 0.5)
-        }
-    }
-
-    /// "Select All" in Reading / Source: tints the text area and tells how to copy it.
-    @ViewBuilder
-    private var selectAllBadge: some View {
-        if state.allSelected, state.mode != .edit, isTargetPane {
-            Text("Выделен весь текст — ⌘C копирует его")
-                .font(.caption.weight(.medium))
-                .foregroundColor(.white)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Capsule().fill(theme.accent))
-                .padding(10)
-                .allowsHitTesting(false)
         }
     }
 
@@ -149,40 +125,24 @@ struct PaneView: View {
         } else if let table = doc.csv {
             CSVTableView(table: table, size: fontSize - 1, highlight: highlight, isScrollTarget: isTargetPane)
         } else {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    Group {
-                        if doc.type == .markdown {
-                            MarkdownView(blocks: doc.blocks, size: fontSize, highlight: highlight)
-                        } else {
-                            plainText(doc)
-                        }
-                    }
-                    .frame(maxWidth: 760, alignment: .leading)
-                    .padding(.horizontal, 36)
-                    .padding(.vertical, 28)
-                    .frame(maxWidth: .infinity)
-                }
-                .onChange(of: state.scrollTarget) { target in
-                    guard isTargetPane, let target else { return }
-                    withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo(target.unit, anchor: .center) }
-                }
-            }
+            let key = ["read", doc.id.uuidString, "\(doc.modified?.timeIntervalSince1970 ?? 0)", "\(fontSize)", prefs.fontName,
+                       "\(prefs.headingSpacing)", prefs.themeID, "\(prefs.wantsDark)", "\(prefs.syntaxEnabled)",
+                       prefs.syntaxOff.sorted().joined(separator: ",")].joined(separator: "|")
+            ReadOnlyTextView(
+                contentKey: key,
+                build: {
+                    doc.type == .markdown
+                        ? TextBuilder.markdown(doc.blocks, size: fontSize, theme: theme, prefs: prefs)
+                        : TextBuilder.lines(doc, size: fontSize, theme: theme, prefs: prefs, monospaced: false)
+                },
+                theme: theme,
+                find: highlight,
+                scrollTarget: isTargetPane ? state.scrollTarget : nil,
+                initialScrollID: state.scrollTarget?.id,
+                grabFocus: isTargetPane,
+                maxColumn: 760)
+                .id(doc.id)
         }
-    }
-
-    /// One row per line, so search hits can be scrolled to.
-    private func plainText(_ doc: Document) -> some View {
-        RowStack(lazy: doc.lines.count > RowStackLimit.rows) {
-            ForEach(Array(doc.lines.enumerated()), id: \.offset) { index, line in
-                Text(Syntax.highlight(line.isEmpty ? " " : line, type: doc.type, theme: theme, state: doc.syntaxStates.isEmpty ? 0 : doc.syntaxStates[index])
-                        .highlighted(highlight, unit: index, offset: 0, theme: theme))
-                    .font(Syntax.hasHighlighting(doc.type) ? .system(size: fontSize, design: .monospaced) : prefs.font(size: fontSize))
-                    .lineSpacing(fontSize * 0.3)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-        .textSelection(.enabled)
     }
 }
 
