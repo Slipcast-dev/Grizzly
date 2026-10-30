@@ -361,6 +361,12 @@ struct ReadOnlyTextView: NSViewRepresentable {
         view.drawsBackground = true
         view.textContainerInset = NSSize(width: 14, height: 16)
         scroll.drawsBackground = true
+        // The window's content runs under the title bar; without this the line-number gutter spilled into the
+        // toolbar and tab bar as a thin vertical line.
+        scroll.automaticallyAdjustsContentInsets = false
+        scroll.contentInsets = NSEdgeInsetsZero
+        scroll.wantsLayer = true
+        scroll.layer?.masksToBounds = true
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = false
         if maxColumn != nil {

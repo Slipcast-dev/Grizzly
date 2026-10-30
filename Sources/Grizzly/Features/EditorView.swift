@@ -50,7 +50,7 @@ struct EditorView: View {
             Button { NSApp.sendAction(Selector(("undo:")), to: nil, from: nil) } label: {
                 Label("Отменить", systemImage: "arrow.uturn.backward")
             }
-            .help("Отменить последнее изменение (⌘Z)")
+            .help("Отменить последний шаг (⌘Z)")
             Button { state.save(document.id) } label: {
                 Label("Сохранить", systemImage: "square.and.arrow.down")
             }
@@ -166,6 +166,26 @@ private struct EditorTextView: NSViewRepresentable {
         }
 
         private var isCompleting = false
+        private var lastKind = 0
+        private var lastWasSpace = false
+        private var lastEdit = Date.distantPast
+
+        /// Undo goes step by step: macOS merges a whole run of typing into one undo step, so a new step is started
+        /// at every word, after a pause, when switching between typing and deleting, and for paste or Return.
+        func textView(_ textView: NSTextView, shouldChangeTextIn range: NSRange, replacementString: String?) -> Bool {
+            let s = replacementString ?? ""
+            let isSpace = s.utf16.count == 1 && s.rangeOfCharacter(from: .whitespaces) != nil
+            // 1 typing one character, 2 deleting, 3 anything else (Return, paste, replacing a selection)
+            let kind = s.isEmpty ? 2 : (s.utf16.count == 1 && !s.contains("\n") && range.length == 0 ? 1 : 3)
+            let now = Date()
+            if kind != lastKind || kind == 3 || (kind == 1 && lastWasSpace && !isSpace) || now.timeIntervalSince(lastEdit) > 1 {
+                textView.breakUndoCoalescing()
+            }
+            lastKind = kind
+            lastWasSpace = isSpace
+            lastEdit = now
+            return true
+        }
 
         func textDidChange(_ notification: Notification) {
             guard let view = notification.object as? NSTextView else { return }
