@@ -1,12 +1,12 @@
 # Installation
 
-Grizzly ships as three downloads (1.1.0) on the [Releases page](https://github.com/Slipcast-dev/Grizzly/releases).
+Grizzly ships as three downloads (1.2.0) on the [Releases page](https://github.com/Slipcast-dev/Grizzly/releases).
 
 | Platform | Asset | Requires |
 |---|---|---|
-| macOS, Apple Silicon (M1 and later) | `Grizzly-1.1.0-arm64.dmg` | macOS 13 Ventura or newer |
-| macOS, Intel | `Grizzly-1.1.0-x64.dmg` | macOS 13 Ventura or newer |
-| Windows x64 | `Grizzly-1.1.0-portable.exe` | Windows 10 or 11, 64-bit |
+| macOS, Apple Silicon (M1 and later) | `Grizzly-1.2.0-arm64.dmg` | macOS 13 Ventura or newer |
+| macOS, Intel | `Grizzly-1.2.0-x64.dmg` | macOS 13 Ventura or newer |
+| Windows x64 | `Grizzly-1.2.0-portable.exe` | Windows 10 or 11, 64-bit |
 
 Not sure which Mac you have? Apple menu → *About This Mac*: "Chip: Apple M…" means Apple Silicon, "Processor: Intel…" means Intel.
 
@@ -16,12 +16,12 @@ The release notes list a SHA-256 checksum for every file. Compare it with your d
 
 ```bash
 # macOS
-shasum -a 256 ~/Downloads/Grizzly-1.1.0-arm64.dmg
+shasum -a 256 ~/Downloads/Grizzly-1.2.0-arm64.dmg
 ```
 
 ```powershell
 # Windows (PowerShell)
-Get-FileHash $HOME\Downloads\Grizzly-1.1.0-portable.exe -Algorithm SHA256
+Get-FileHash $HOME\Downloads\Grizzly-1.2.0-portable.exe -Algorithm SHA256
 ```
 
 If the values differ, delete the file and download it again. Do not run it.
@@ -54,13 +54,13 @@ Troubleshooting:
 
 ## 3. Windows
 
-1. Put `Grizzly-1.1.0-portable.exe` anywhere you like (a folder, a USB drive). There is no installer.
+1. Put `Grizzly-1.2.0-portable.exe` anywhere you like (a folder, a USB drive). There is no installer.
 2. Double-click it. SmartScreen may show *"Windows protected your PC"* because the file is not signed:
    **More info → Run anyway**.
 3. Settings and the library are stored in a `GrizzlyData` folder **next to the .exe**
    (or in `%APPDATA%\Grizzly` if that folder is read-only). Move the folder with the .exe to take your data along.
 
-Command line: `Grizzly-1.1.0-portable.exe notes.md data.csv` opens the files. A second launch hands its files to the
+Command line: `Grizzly-1.2.0-portable.exe notes.md data.csv` opens the files. A second launch hands its files to the
 window that is already running.
 
 ## Updating and uninstalling

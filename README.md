@@ -36,9 +36,9 @@ Get the files from the **[latest release](https://github.com/Slipcast-dev/Grizzl
 
 | Platform | File | Notes |
 |---|---|---|
-| macOS 13+, Apple Silicon | `Grizzly-1.1.0-arm64.dmg` | Drag *Grizzly* to *Applications* |
-| macOS 13+, Intel | `Grizzly-1.1.0-x64.dmg` | Drag *Grizzly* to *Applications* |
-| Windows 10/11, x64 | `Grizzly-1.1.0-portable.exe` | Portable, no installer |
+| macOS 13+, Apple Silicon | `Grizzly-1.2.0-arm64.dmg` | Drag *Grizzly* to *Applications* |
+| macOS 13+, Intel | `Grizzly-1.2.0-x64.dmg` | Drag *Grizzly* to *Applications* |
+| Windows 10/11, x64 | `Grizzly-1.2.0-portable.exe` | Portable, no installer |
 
 > [!IMPORTANT]
 > The builds are **not code-signed or notarized**. macOS Gatekeeper and Windows SmartScreen will warn on first
@@ -56,7 +56,8 @@ Get the files from the **[latest release](https://github.com/Slipcast-dev/Grizzl
   ISO-8859-1) is preserved.
 - **CSV / TSV tables** with automatic delimiter detection.
 - **Save As…** — save a copy in any supported format and location, without touching the original.
-- **Find** with live highlighting, next / previous match.
+- **Find** with live highlighting, next / previous match; also in Edit mode.
+- **Search files, tags, spell check (RU/EN), emoji** and **in-app updates** (*Settings → Updates*).
 - **Tabs** and **two files side by side**.
 - **Virtual library** — folders and favorites that never touch your files, plus an open history that survives removing a file from the sidebar.
 - **Live reload** — a banner appears when the file changes on disk (handy for files written by scripts or AI tools).
