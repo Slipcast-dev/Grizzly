@@ -57,6 +57,8 @@ struct GrizzlyApp: App {
                     .keyboardShortcut("n")
                 Button("Открыть…") { state.presentOpenPanel() }
                     .keyboardShortcut("o")
+                Button("Добавить папку с диска…") { state.presentFolderPanel() }
+                    .keyboardShortcut("o", modifiers: [.command, .shift])
                 Button("Сохранить") { if let id = state.current?.id { state.save(id) } }
                     .keyboardShortcut("s")
                     .disabled(!(state.current.map { state.isDirty($0.id) } ?? false))

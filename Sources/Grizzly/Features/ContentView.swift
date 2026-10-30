@@ -18,32 +18,18 @@ struct ContentView: View {
         .background(WindowFrameSaver(name: "GrizzlyMainWindow"))
         .navigationTitle(state.current?.name ?? "Grizzly")
         .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                Menu {
-                    Button("Новый файл…") { state.presentNewFilePanel() }
-                    Button("Открыть файл…") { state.presentOpenPanel() }
-                    Button("Добавить папку с диска…") { state.presentFolderPanel() }
-                } label: {
-                    Label("Открыть", systemImage: "folder.badge.plus")
-                } primaryAction: {
-                    state.presentOpenPanel()
-                }
-                .help("Открыть файл (⌘O)")
-
-                Button { state.presentSaveAsPanel() } label: {
-                    Label("Сохранить как…", systemImage: "square.and.arrow.down")
-                }
-                .help("Сохранить как… (⇧⌘S)")
-                .disabled(state.current == nil)
-
+            // The view mode switch sits in the middle of the title bar; everything else for the current file is on the right.
+            ToolbarItem(placement: .principal) {
                 Picker("Режим", selection: $state.mode) {
                     Text("Чтение").tag(ReadMode.reading)
                     Text("Исходник").tag(ReadMode.source)
                     Text("Правка").tag(ReadMode.edit)
                 }
                 .pickerStyle(.segmented)
+                .frame(width: 270)
                 .help("Режим просмотра")
-
+            }
+            ToolbarItemGroup(placement: .primaryAction) {
                 Button { state.toggleSplit() } label: {
                     Image(systemName: state.isSplit ? "rectangle.split.2x1.fill" : "rectangle.split.2x1")
                 }

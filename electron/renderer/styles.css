@@ -64,8 +64,10 @@ button:disabled { opacity: .4; pointer-events: none; }
 button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* Toolbar */
-#toolbar { height: 42px; flex: none; display: flex; align-items: center; gap: 4px; padding: 0 10px; border-bottom: 1px solid var(--line); background: var(--side-bg); }
-#toolbar .title { flex: 1; text-align: center; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 10px; }
+#toolbar { height: 44px; flex: none; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; padding: 0 10px; border-bottom: 1px solid var(--line); background: var(--side-bg); }
+#toolbar .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 10px; min-width: 0; }
+.tb-left, .tb-right { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.tb-right { justify-content: flex-end; }
 .tb { background: none; border: 0; border-radius: 7px; width: 34px; height: 32px; display: inline-flex; align-items: center; justify-content: center; color: var(--text); }
 .tb:hover { background: var(--hover); }
 .tb:active { background: var(--press); }
@@ -266,3 +268,7 @@ mark.current { background: var(--current); color: #000; }
 .sec-tools { display: flex; gap: 6px; }
 button.plain.sq { width: 30px; height: 30px; padding: 0; justify-content: center; border-radius: 7px; background: var(--hover); color: var(--text); }
 button.plain.sq:hover { background: var(--press); }
+.side-actions { display: flex; gap: 6px; margin: 0 12px 6px; }
+.side-actions button.sq { flex: 1; height: 34px; border: 0; border-radius: 8px; background: var(--hover); color: var(--text); display: inline-flex; align-items: center; justify-content: center; }
+.side-actions button.sq:hover:not(:disabled) { background: var(--press); }
+.side-actions button.sq:disabled { opacity: .4; }
