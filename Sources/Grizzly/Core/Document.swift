@@ -42,6 +42,10 @@ struct Document: Identifiable, Hashable {
         (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
     }
 
-    static func == (a: Document, b: Document) -> Bool { a.id == b.id }
+    // Includes the content: SwiftUI skips views whose input compares equal, and a reloaded document (same id,
+    // new text after a save) must not be mistaken for the old one.
+    static func == (a: Document, b: Document) -> Bool {
+        a.id == b.id && a.modified == b.modified && a.text.utf8.count == b.text.utf8.count && a.encoding == b.encoding
+    }
     func hash(into h: inout Hasher) { h.combine(id) }
 }

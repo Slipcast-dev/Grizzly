@@ -20,6 +20,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "updater.js",
       "strings-en.json",
       "renderer/**/*",
       "assets/icon.png"

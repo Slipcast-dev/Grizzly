@@ -10,11 +10,12 @@ struct LibraryFile: Identifiable, Codable, Hashable {
     var lastOpened: Date?
     /// 1-based line numbers the reader has bookmarked.
     var bookmarks: [Int] = []
+    var tags: [String] = []
 
     var type: FileType { FileType(url: URL(fileURLWithPath: path)) }
 
     enum CodingKeys: String, CodingKey {
-        case id, bookmark, path, name, folderID, isFavorite, lastOpened, bookmarks
+        case id, bookmark, path, name, folderID, isFavorite, lastOpened, bookmarks, tags
     }
 }
 
@@ -30,6 +31,7 @@ extension LibraryFile {
         isFavorite = try c.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
         lastOpened = try c.decodeIfPresent(Date.self, forKey: .lastOpened)
         bookmarks = try c.decodeIfPresent([Int].self, forKey: .bookmarks) ?? []
+        tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
     }
 }
 
@@ -56,8 +58,10 @@ private struct LibraryData: Codable {
     var files: [LibraryFile] = []
     var folders: [LibraryFolder] = []
     var history: [HistoryEntry] = []
+    /// Tags created by the user, also those no file carries yet.
+    var tags: [String] = []
 
-    enum CodingKeys: String, CodingKey { case files, folders, history }
+    enum CodingKeys: String, CodingKey { case files, folders, history, tags }
 
     init() {}
 
@@ -67,6 +71,7 @@ private struct LibraryData: Codable {
         files = try c.decodeIfPresent([LibraryFile].self, forKey: .files) ?? []
         folders = try c.decodeIfPresent([LibraryFolder].self, forKey: .folders) ?? []
         history = try c.decodeIfPresent([HistoryEntry].self, forKey: .history) ?? []
+        tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
         // First launch with a history: seed it from the "last opened" dates of the library files.
         if history.isEmpty {
             history = files.compactMap { f in
@@ -245,6 +250,80 @@ final class LibraryStore: ObservableObject {
             if let folderID, let f = d.folders.firstIndex(where: { $0.id == folderID }) {
                 d.folders[f].isExpanded = true
             }
+        }
+    }
+
+    // MARK: Tags
+
+    /// Tag text as stored: trimmed, without a leading "#".
+    static func cleanTag(_ raw: String) -> String {
+        var t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        while t.hasPrefix("#") { t.removeFirst() }
+        return t.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Every known tag, alphabetically: the ones created by the user plus any a file still carries.
+    var allTags: [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for tag in data.tags + data.files.flatMap(\.tags) where seen.insert(tag.lowercased()).inserted { result.append(tag) }
+        return result.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
+
+    func files(withTag tag: String) -> [LibraryFile] {
+        data.files
+            .filter { $0.tags.contains { $0.caseInsensitiveCompare(tag) == .orderedSame } }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    func tagExists(_ tag: String) -> Bool { allTags.contains { $0.caseInsensitiveCompare(tag) == .orderedSame } }
+
+    /// Creates a tag (and returns its stored spelling); an existing tag is returned as it is. Nil for an empty name.
+    @discardableResult
+    func createTag(_ raw: String) -> String? {
+        let tag = Self.cleanTag(raw)
+        guard !tag.isEmpty else { return nil }
+        if let existing = allTags.first(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) { return existing }
+        mutate { $0.tags.append(tag) }
+        return tag
+    }
+
+    func hasTag(_ fileID: UUID, _ tag: String) -> Bool {
+        file(fileID)?.tags.contains { $0.caseInsensitiveCompare(tag) == .orderedSame } ?? false
+    }
+
+    func toggleTag(_ fileID: UUID, _ tag: String) {
+        mutate { d in
+            guard let i = d.files.firstIndex(where: { $0.id == fileID }) else { return }
+            if let at = d.files[i].tags.firstIndex(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) {
+                d.files[i].tags.remove(at: at)
+            } else {
+                d.files[i].tags.append(tag)
+            }
+        }
+    }
+
+    func renameTag(_ old: String, to raw: String) {
+        let new = Self.cleanTag(raw)
+        guard !new.isEmpty else { return }
+        func swap(_ list: inout [String]) {
+            var out: [String] = []
+            for t in list {
+                let value = t.caseInsensitiveCompare(old) == .orderedSame ? new : t
+                if !out.contains(where: { $0.caseInsensitiveCompare(value) == .orderedSame }) { out.append(value) }
+            }
+            list = out
+        }
+        mutate { d in
+            swap(&d.tags)
+            for i in d.files.indices { swap(&d.files[i].tags) }
+        }
+    }
+
+    func deleteTag(_ tag: String) {
+        mutate { d in
+            d.tags.removeAll { $0.caseInsensitiveCompare(tag) == .orderedSame }
+            for i in d.files.indices { d.files[i].tags.removeAll { $0.caseInsensitiveCompare(tag) == .orderedSame } }
         }
     }
 

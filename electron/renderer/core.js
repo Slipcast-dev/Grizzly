@@ -721,6 +721,26 @@ const Searcher = (() => {
     });
   }
 
+  /** Hits in plain lines (the text being edited), one unit per line. */
+  function matchesInLines(query, lines) {
+    const result = [];
+    if (!query) return result;
+    lines.forEach((line, unit) => { ranges(query, line).forEach((_, occurrence) => result.push({ unit, occurrence })); });
+    return result;
+  }
+
+  /**
+   * File and folder names: every word typed has to be the beginning of the name or of one of its words,
+   * so "гриз", "read me" and "me" all find "Read Me.md".
+   */
+  function nameMatches(name, query) {
+    const typed = String(query).toLowerCase().split(/\s+/).filter(Boolean);
+    if (!typed.length) return true;
+    const low = String(name).toLowerCase();
+    const words = low.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+    return typed.every((q) => low.startsWith(q) || words.some((w) => w.startsWith(q)));
+  }
+
   function matches(query, doc, mode) {
     if (!query) return [];
     const result = [];
@@ -770,5 +790,5 @@ const Searcher = (() => {
     }
   }
 
-  return { ranges, matches, offsets, usesBlocks, paint };
+  return { ranges, matches, matchesInLines, nameMatches, offsets, usesBlocks, paint };
 })();

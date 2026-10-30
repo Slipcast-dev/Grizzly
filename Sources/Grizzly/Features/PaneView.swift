@@ -16,6 +16,11 @@ struct PaneView: View {
             if let doc {
                 if state.changedOnDisk.contains(doc.id) { changedBanner(doc) }
                 content(for: doc)
+                    .overlay {
+                        if state.allSelected, state.mode != .edit, isTargetPane {
+                            Rectangle().fill(theme.accent.opacity(0.22)).allowsHitTesting(false)
+                        }
+                    }
                 StatusBar(document: doc)
             } else {
                 placeholder
@@ -23,7 +28,11 @@ struct PaneView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.background)
-        .simultaneousGesture(TapGesture().onEnded { state.focus(pane) })
+        .overlay(alignment: .topTrailing) { selectAllBadge }
+        .simultaneousGesture(TapGesture().onEnded {
+            state.focus(pane)
+            if state.allSelected { state.allSelected = false }
+        })
     }
 
     // MARK: Header (split view only)
@@ -65,6 +74,21 @@ struct PaneView: View {
             Rectangle()
                 .fill(state.focusedPane == pane ? theme.accent : theme.rule.opacity(0.5))
                 .frame(height: state.focusedPane == pane ? 2 : 0.5)
+        }
+    }
+
+    /// "Select All" in Reading / Source: tints the text area and tells how to copy it.
+    @ViewBuilder
+    private var selectAllBadge: some View {
+        if state.allSelected, state.mode != .edit, isTargetPane {
+            Text("Выделен весь текст — ⌘C копирует его")
+                .font(.caption.weight(.medium))
+                .foregroundColor(.white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Capsule().fill(theme.accent))
+                .padding(10)
+                .allowsHitTesting(false)
         }
     }
 
@@ -119,7 +143,7 @@ struct PaneView: View {
     @ViewBuilder
     private func content(for doc: Document) -> some View {
         if state.mode == .edit {
-            EditorView(document: doc, size: fontSize - 2)
+            EditorView(document: doc, size: fontSize - 2, highlight: highlight, isScrollTarget: isTargetPane)
         } else if state.mode == .source {
             SourceView(document: doc, size: fontSize - 2, highlight: highlight, isScrollTarget: isTargetPane)
         } else if let table = doc.csv {

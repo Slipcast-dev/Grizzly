@@ -25,6 +25,10 @@ Object.assign(table, {
   'Все файлы': 'All files',
   'Готово.': 'Done.',
   'Сохранить как… (Ctrl+Shift+S)': 'Save As… (Ctrl+Shift+S)',
+  'Нет вариантов': 'No suggestions',
+  'Добавить в словарь': 'Add to Dictionary',
+  'Эмодзи и символы (Win+.)': 'Emoji & Symbols (Win+.)',
+  'Скачанное обновление открыто в проводнике: запустите его вручную.': 'The downloaded update is shown in Explorer: run it manually.',
 });
 
 const root = path.join(__dirname, '..');

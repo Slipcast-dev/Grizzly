@@ -57,6 +57,8 @@ final class Preferences: ObservableObject {
     /// Syntax coloring: a master switch plus a list of file types that are switched off individually.
     @Published var syntaxEnabled: Bool { didSet { defaults.set(syntaxEnabled, forKey: "syntaxEnabled") } }
     @Published var syntaxOff: Set<String> { didSet { defaults.set(syntaxOff.sorted(), forKey: "syntaxOff") } }
+    /// Spelling and grammar checking (Russian and English) with underlined mistakes in Edit mode.
+    @Published var spellCheck: Bool { didSet { defaults.set(spellCheck, forKey: "spellCheck") } }
     @Published var language: AppLanguage { didSet { language.apply() } }
     @Published private(set) var systemIsDark: Bool
 
@@ -71,6 +73,7 @@ final class Preferences: ObservableObject {
         autoReload = d.object(forKey: "autoReload") as? Bool ?? false
         syntaxEnabled = d.object(forKey: "syntaxEnabled") as? Bool ?? true
         syntaxOff = Set(d.stringArray(forKey: "syntaxOff") ?? [])
+        spellCheck = d.object(forKey: "spellCheck") as? Bool ?? true
         language = AppLanguage.saved
         systemIsDark = Preferences.readSystemDark()
 

@@ -6,12 +6,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         AppState.shared.startWatching()
+        installKeyMonitor()
+        // Every launch asks GitHub whether a newer version is out; the answer appears only if there is one.
+        Task { await UpdateManager.shared.check(silent: true) }
 
         let paths = CommandLine.arguments.dropFirst().filter { !$0.hasPrefix("-") }
         let urls = paths.map { URL(fileURLWithPath: $0) }.filter { FileManager.default.fileExists(atPath: $0.path) }
         AppState.shared.openExternal(urls)
         // Let a file-open event that is already on its way land first, then open everything that was queued.
         DispatchQueue.main.async { AppState.shared.markReady() }
+    }
+
+    private var keyMonitor: Any?
+
+    /// ⌘A / ⌘C in Reading and Source, where there is no text view to answer them: select the whole document and copy it.
+    private func installKeyMonitor() {
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            guard flags == .command, let key = event.charactersIgnoringModifiers?.lowercased(),
+                  key == "a" || key == "c" else { return event }
+            let responder = NSApp.keyWindow?.firstResponder
+            guard NSApp.keyWindow?.delegate is CloseGuardDelegate, !(responder is NSText), !(responder is NSTableView) else { return event }
+            let state = AppState.shared
+            guard state.mode != .edit, state.current != nil else { return event }
+            if key == "a" {
+                state.selectAllText()
+                return nil
+            }
+            if state.allSelected {
+                state.copyAllText()
+                return nil
+            }
+            return event
+        }
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -42,6 +69,7 @@ struct GrizzlyApp: App {
         // A single window: files opened while the app runs become tabs, never a second window.
         Window("Grizzly", id: "main") {
             ContentView()
+                .background(CloseGuard())
                 .environmentObject(state)
                 .environmentObject(state.library)
                 .environmentObject(settings)
@@ -92,6 +120,8 @@ struct GrizzlyApp: App {
                 Button("Исходник") { state.mode = .source }.keyboardShortcut("2", modifiers: [.command, .option])
                 Button("Правка") { state.mode = .edit }.keyboardShortcut("3", modifiers: [.command, .option])
                 Divider()
+                Button("Выделить весь текст") { state.selectAllText() }
+                    .disabled(state.current == nil || state.mode == .edit)
                 Button("Копировать весь текст") { state.copyAllText() }
                     .keyboardShortcut("c", modifiers: [.command, .option])
                     .disabled(state.current == nil)
@@ -119,5 +149,43 @@ enum AppRestart {
         task.arguments = ["-c", "sleep 1; /usr/bin/open \"$0\"", path]
         try? task.run()
         NSApp.terminate(nil)
+    }
+}
+
+
+/// Asks about unsaved edits when the window's close button is pressed, then closes it.
+struct CloseGuard: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            guard let window = view.window, !(window.delegate is CloseGuardDelegate) else { return }
+            let guardian = CloseGuardDelegate(original: window.delegate)
+            context.coordinator.delegate = guardian
+            window.delegate = guardian
+        }
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {}
+    func makeCoordinator() -> Holder { Holder() }
+    final class Holder { var delegate: CloseGuardDelegate? }
+}
+
+/// Wraps the window's own delegate (SwiftUI's) and only adds the unsaved-changes question.
+final class CloseGuardDelegate: NSObject, NSWindowDelegate {
+    private weak var original: NSWindowDelegate?
+    init(original: NSWindowDelegate?) { self.original = original }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        guard AppState.shared.confirmCloseWindow() else { return false }
+        return original?.windowShouldClose?(sender) ?? true
+    }
+
+    override func responds(to selector: Selector!) -> Bool {
+        super.responds(to: selector) || (original?.responds(to: selector) ?? false)
+    }
+
+    override func forwardingTarget(for selector: Selector!) -> Any? {
+        original?.responds(to: selector) == true ? original : super.forwardingTarget(for: selector)
     }
 }

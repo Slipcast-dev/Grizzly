@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case appearance, text, syntax, files, language, types
+    case appearance, text, syntax, files, language, updates, types
     var id: String { rawValue }
 
     var title: LocalizedStringKey {
@@ -11,6 +11,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .syntax: return "Подсветка синтаксиса"
         case .files: return "Файлы"
         case .language: return "Язык"
+        case .updates: return "Обновления"
         case .types: return "Типы файлов"
         }
     }
@@ -22,6 +23,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .syntax: return "chevron.left.forwardslash.chevron.right"
         case .files: return "doc.text"
         case .language: return "globe"
+        case .updates: return "arrow.down.circle"
         case .types: return "square.grid.2x2"
         }
     }
@@ -32,6 +34,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
 struct SettingsView: View {
     @EnvironmentObject private var settings: Preferences
     @AppStorage("settingsPane") private var pane: SettingsPane = .appearance
+    @ObservedObject private var updater = UpdateManager.shared
 
     var body: some View {
         let theme = settings.theme
@@ -112,6 +115,11 @@ struct SettingsView: View {
             card("Исходник") {
                 Toggle("Показывать номера строк", isOn: $settings.showLineNumbers)
             }
+            card("Проверка текста") {
+                Toggle("Проверять орфографию и грамматику в режиме правки", isOn: $settings.spellCheck)
+                Text("Русский и английский: ошибки подчёркиваются, исправление — в контекстном меню. Работает в Markdown, TXT, RTF и TeX; в исходном коде проверка выключена.")
+                    .font(.caption).foregroundColor(.secondary)
+            }
             preview(theme)
 
         case .syntax:
@@ -142,6 +150,19 @@ struct SettingsView: View {
                 .labelsHidden()
                 .onChange(of: settings.language) { _ in AppRestart.offer() }
                 Text("После смены языка Grizzly предложит перезапуститься.")
+                    .font(.caption).foregroundColor(.secondary)
+            }
+
+        case .updates:
+            card("Обновления") {
+                row("Установленная версия") { Text(updater.currentVersion).monospacedDigit() }
+                HStack {
+                    Button("Проверить обновления") { Task { await updater.check(silent: false) } }
+                        .buttonStyle(.hoverFilled)
+                        .disabled(updater.phase == .checking || updater.phase == .installing)
+                }
+                UpdateView(updater: updater)
+                Text("Grizzly проверяет GitHub при каждом запуске. Новая версия скачивается и устанавливается прямо из приложения.")
                     .font(.caption).foregroundColor(.secondary)
             }
 

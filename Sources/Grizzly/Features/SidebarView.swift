@@ -36,6 +36,7 @@ struct SidebarView: View {
     @AppStorage("sidebarSection") private var section: SidebarSection = .files
 
     @State private var query = ""
+    @State private var selectedTag: String?
     @State private var isNaming = false
     @State private var newName = ""
     @State private var nameError: String?
@@ -66,7 +67,7 @@ struct SidebarView: View {
 
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass").foregroundColor(.secondary)
-                TextField("Фильтр файлов", text: $query)
+                TextField("Поиск файлов", text: $query)
                     .textFieldStyle(.plain)
                 if !query.isEmpty {
                     Button { query = "" } label: { Image(systemName: "xmark.circle.fill") }
@@ -101,10 +102,14 @@ struct SidebarView: View {
             .padding(.vertical, 8)
 
             List(selection: $state.selectedFileID) {
-                switch section {
-                case .files: filesContent
-                case .recent: recentContent
-                case .favorites: favoritesContent
+                if let tag = selectedTag {
+                    tagContent(tag)
+                } else {
+                    switch section {
+                    case .files: filesContent
+                    case .recent: recentContent
+                    case .favorites: favoritesContent
+                    }
                 }
             }
             .listStyle(.sidebar)
@@ -113,6 +118,8 @@ struct SidebarView: View {
                 return drop(items, into: nil)
             }
             .overlay { emptyState }
+
+            TagPanel(selected: $selectedTag)
         }
         .onChange(of: state.selectedFileID) { id in
             // Option-click opens the file in the right pane.
@@ -173,8 +180,33 @@ struct SidebarView: View {
         }
     }
 
+    /// All files that carry the tag, wherever they live in the library.
+    @ViewBuilder
+    private func tagContent(_ tag: String) -> some View {
+        Section {
+            ForEach(filtered(library.files(withTag: tag))) { file in fileRow(file) }
+        } header: {
+            HStack {
+                Text("Тег: #\(tag)")
+                Spacer()
+                Button("Сбросить") { selectedTag = nil }.buttonStyle(.borderless)
+            }
+        }
+    }
+
     @ViewBuilder
     private var emptyState: some View {
+        if let tag = selectedTag {
+            if library.files(withTag: tag).isEmpty {
+                hint("tag", "Нет файлов с этим тегом. Добавьте тег файлу через контекстное меню.")
+            }
+        } else {
+            sectionEmptyState
+        }
+    }
+
+    @ViewBuilder
+    private var sectionEmptyState: some View {
         switch section {
         case .files where library.folders.isEmpty && library.files(in: nil).isEmpty && !isNaming:
             hint("doc.badge.plus", "Откройте файл (⌘O) или перетащите его в окно.")
@@ -198,21 +230,33 @@ struct SidebarView: View {
 
     // MARK: Rows
 
+    /// A folder stays when its name matches (then all its files show) or when some file inside matches.
     private var visibleFolders: [LibraryFolder] {
         guard !query.isEmpty else { return library.folders }
-        return library.folders.filter { !filtered(library.files(in: $0.id)).isEmpty }
+        return library.folders.filter { Searcher.nameMatches($0.name, query: query) || !filtered(library.files(in: $0.id)).isEmpty }
     }
 
     private func filtered(_ entries: [HistoryEntry]) -> [HistoryEntry] {
-        query.isEmpty ? entries : entries.filter { $0.name.localizedCaseInsensitiveContains(query) }
+        query.isEmpty ? entries : entries.filter { Searcher.nameMatches($0.name, query: query) }
+    }
+
+    /// Matches by the beginning of the name or of any word in it; "#word" searches the tags the same way.
+    private func matches(_ file: LibraryFile) -> Bool {
+        let q = query.trimmingCharacters(in: .whitespaces)
+        if q.hasPrefix("#") {
+            let tag = LibraryStore.cleanTag(q)
+            return tag.isEmpty ? !file.tags.isEmpty : file.tags.contains { Searcher.nameMatches($0, query: tag) }
+        }
+        return Searcher.nameMatches(file.name, query: q)
     }
 
     private func filtered(_ files: [LibraryFile]) -> [LibraryFile] {
-        query.isEmpty ? files : files.filter { $0.name.localizedCaseInsensitiveContains(query) }
+        query.isEmpty ? files : files.filter(matches)
     }
 
     private func folderRow(_ folder: LibraryFolder) -> some View {
-        let files = filtered(library.files(in: folder.id))
+        let all = library.files(in: folder.id)
+        let files = !query.isEmpty && Searcher.nameMatches(folder.name, query: query) ? all : filtered(all)
         return DisclosureGroup(
             isExpanded: Binding(
                 get: { folder.isExpanded },
@@ -340,6 +384,20 @@ struct SidebarView: View {
         Button("Быстрый просмотр") { quickLook(file.id) }
         Button(LocalizedStringKey(file.isFavorite ? "Убрать из избранного" : "Добавить в избранное")) {
             library.toggleFavorite(file.id)
+        }
+        Menu("Теги") {
+            ForEach(library.allTags, id: \.self) { tag in
+                Button { library.toggleTag(file.id, tag) } label: {
+                    if library.hasTag(file.id, tag) { Label("#\(tag)", systemImage: "checkmark") } else { Text("#\(tag)") }
+                }
+            }
+            if !library.allTags.isEmpty { Divider() }
+            Button("Новый тег…") {
+                if let name = TextPrompt.ask(title: L("Новый тег"), confirm: L("Создать")),
+                   let tag = library.createTag(name), !library.hasTag(file.id, tag) {
+                    library.toggleTag(file.id, tag)
+                }
+            }
         }
         Menu("Переместить в…") {
             ForEach(library.folders) { folder in

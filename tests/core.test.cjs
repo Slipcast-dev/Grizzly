@@ -9,7 +9,7 @@ const src = fs.readFileSync(path.join(__dirname, '..', 'electron', 'renderer', '
 const ctx = { crypto: { randomUUID: () => 'id' }, console };
 vm.createContext(ctx);
 // Top-level const/function declarations are exposed through a trailing expression.
-const api = vm.runInContext(`${src}\n({ fileTypeOf, baseName, MarkdownParser, CSV, makeDocument, plain, Syntax, fenceType })`, ctx);
+const api = vm.runInContext(`${src}\n({ fileTypeOf, baseName, MarkdownParser, CSV, makeDocument, plain, Syntax, fenceType, Searcher })`, ctx);
 
 test('file types by extension', () => {
   assert.strictEqual(api.fileTypeOf('a/b/Notes.MD'), 'markdown');
@@ -98,4 +98,36 @@ test('highlighting can be switched off, altogether or per language', () => {
   ctx.Prefs = { values: { syntaxOn: false, syntaxOff: [] } };
   assert.strictEqual(api.Syntax.spans('const a = 1;', 'javascript').length, 0);
   delete ctx.Prefs;
+});
+
+test('file search matches the beginning of the name or of any word', () => {
+  const m = api.Searcher.nameMatches;
+  assert.ok(m('Read Me.md', 'read') && m('Read Me.md', 'me') && m('Read Me.md', 'read m') && m('Гризли заметки.md', 'гриз'));
+  assert.ok(m('Гризли заметки.md', 'ЗАМ') && m('notes', ''));
+  assert.ok(!m('Read Me.md', 'ead') && !m('Read Me.md', 'xyz'));
+});
+
+test('find in edited text counts hits per line', () => {
+  const hits = api.Searcher.matchesInLines('ab', ['ab AB', 'x', 'cab']);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(hits)), [{ unit: 0, occurrence: 0 }, { unit: 0, occurrence: 1 }, { unit: 2, occurrence: 0 }]);
+});
+
+test('tags: create, assign, rename, delete', () => {
+  const stateSrc = fs.readFileSync(path.join(__dirname, '..', 'electron', 'renderer', 'state.js'), 'utf8');
+  const c = { crypto: { randomUUID: (() => { let n = 0; return () => 'id' + ++n; })() }, window: { api: { saveLibrary() {}, mtimes: async () => ({}), loadLibrary: async () => null } },
+    console, setTimeout, clearTimeout, baseName: (p) => p.split('/').pop(), Intl };
+  vm.createContext(c);
+  const lib = vm.runInContext(`${stateSrc}\nLibrary`, c);
+  const file = lib.add('/a/x.md');
+  assert.strictEqual(lib.createTag('#Работа'), 'Работа');
+  assert.strictEqual(lib.createTag('работа'), 'Работа');
+  assert.strictEqual(lib.createTag('  '), null);
+  lib.toggleTag(file.id, 'Работа');
+  assert.strictEqual(lib.filesWithTag('РАБОТА').length, 1);
+  lib.renameTag('Работа', 'Дом');
+  assert.strictEqual(lib.filesWithTag('Дом').length, 1);
+  assert.strictEqual(lib.filesWithTag('Работа').length, 0);
+  lib.deleteTag('Дом');
+  assert.strictEqual(lib.allTags.length, 0);
+  assert.strictEqual(lib.filesWithTag('Дом').length, 0);
 });

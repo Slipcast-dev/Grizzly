@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     @EnvironmentObject private var state: AppState
     @EnvironmentObject private var prefs: Preferences
+    @ObservedObject private var updater = UpdateManager.shared
 
     var body: some View {
         let theme = prefs.theme
@@ -54,8 +55,14 @@ struct ContentView: View {
         }
         .environment(\.theme, theme)
         .preferredColorScheme(theme.isDark ? .dark : .light)
-        .onChange(of: state.mode) { _ in state.recomputeMatches(reset: false) }
-        .onChange(of: state.current?.id) { _ in state.recomputeMatches(reset: true) }
+        .onChange(of: state.mode) { _ in
+            state.allSelected = false
+            state.recomputeMatches(reset: false)
+        }
+        .onChange(of: state.current?.id) { _ in
+            state.allSelected = false
+            state.recomputeMatches(reset: true)
+        }
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             for provider in providers {
                 provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
@@ -66,6 +73,7 @@ struct ContentView: View {
             }
             return true
         }
+        .sheet(isPresented: $updater.sheetVisible) { UpdateSheet(updater: updater) }
         .alert("Ошибка", isPresented: Binding(
             get: { state.errorMessage != nil },
             set: { if !$0 { state.errorMessage = nil } })

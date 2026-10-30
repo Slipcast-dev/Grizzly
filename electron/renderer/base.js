@@ -21,7 +21,7 @@ function keyNames(s) {
 function t(key, ...args) {
   const raw = LANG === 'ru' ? key : ((window.STRINGS_EN || {})[key] || key);
   let i = 0;
-  const formatted = args.length ? raw.replace(/%(?:@|d|lld)/g, () => String(args[i++])) : raw;
+  const formatted = args.length ? raw.replace(/%(?:@|d|lld)/g, () => String(args[i++])).replace(/%%/g, '%') : raw;
   return keyNames(formatted);
 }
 
@@ -97,8 +97,10 @@ const themeVariant = (set, dark) => (dark ? set.dark : (set.light || set.dark));
 
 const SYSTEM_FONT = 'system';
 const FONTS = [SYSTEM_FONT, 'Georgia', 'Palatino Linotype', 'Times New Roman', 'Segoe UI', 'Calibri', 'Cambria', 'Consolas'];
-const SANS_STACK = "system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
-const MONO_STACK = "'Cascadia Mono', Consolas, Menlo, 'SF Mono', 'Courier New', monospace";
+// Color emoji fonts come last so emoji render the same everywhere.
+const EMOJI = "'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji'";
+const SANS_STACK = `system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif, ${EMOJI}`;
+const MONO_STACK = `'Cascadia Mono', Consolas, Menlo, 'SF Mono', 'Courier New', monospace, ${EMOJI}`;
 
 const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
@@ -111,6 +113,7 @@ const Prefs = {
     headingSpacing: 1,
     showLineNumbers: true,
     autoReload: false,
+    spellCheck: true, // spelling check of prose in Edit mode (Russian and English)
     syntaxOn: true,
     syntaxOff: [], // file types with highlighting switched off
   },
