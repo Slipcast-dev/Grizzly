@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1280" height="400" viewBox="0 0 1280 400" role="img" aria-labelledby="t d">
   <title id="t">Grizzly</title>
-  <desc id="d">Grizzly — a fast native reader for Markdown and text files on macOS and Windows</desc>
+  <desc id="d">Grizzly — a fast native reader for Markdown, text and source code files on macOS and Windows</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1b1f3b"/><stop offset="0.55" stop-color="#2a1f45"/><stop offset="1" stop-color="#4a2a3a"/></linearGradient>
     <linearGradient id="ac" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#7fd4c1"/><stop offset="0.5" stop-color="#ffd60a"/><stop offset="1" stop-color="#ff9f0a"/></linearGradient>

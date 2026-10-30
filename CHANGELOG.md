@@ -5,38 +5,22 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [1.1.0] - 2026-10-30
 
-This release also contains everything developed as 1.0.0 and 1.0.1 (below), which were never published separately.
-
 ### Added
-- **Syntax highlighting settings** (*Settings → Syntax highlighting*): one switch for all highlighting plus a switch for every language (Python, Swift, C/C++, C#, JavaScript, TypeScript, CSS, PHP, JSON, YAML, INI/TOML, XML, HTML, TeX, Log), with *Turn On All* / *Turn Off All*. Applies to Reading, Source and Edit modes and to Markdown code blocks.
-- **Hover and press effects on every button**: a soft tint of the theme's accent color on hover, a stronger tint and a small shrink while pressed. Selected controls use the accent color.
+- **Syntax highlighting for programming languages**: Python, Swift, C / C++, C#, JavaScript (JSX), TypeScript (TSX), CSS / SCSS and PHP, next to the existing JSON, YAML, INI/TOML, XML/HTML, TeX and log coloring. Keywords, types, literals, numbers, strings, comments, decorators / attributes, preprocessor lines and CSS properties follow the current theme. Multi-line block comments, triple-quoted strings and template literals are tracked across lines. Fenced code blocks in Markdown (```` ```python ````, `cpp`, `cs`, `js`, ...) use the same colors, and macOS colors the text live in Edit mode.
+- **Syntax highlighting settings** (*Settings → Syntax highlighting*): one switch for everything and a switch per language, with *Turn On All* / *Turn Off All*.
+- **New file** (`⌘N` / `Ctrl+N`, also a sidebar button): choose name, folder and format; the file is created from a small template and opens in Edit mode.
+- Source-code extensions are supported: `py pyw swift c h cpp cc cxx hpp hh hxx cs js mjs cjs jsx ts tsx css scss php`. On macOS Grizzly is offered under *Open With* for them without claiming them as the default app. Sample files for every language are in `samples/`.
+- **Hover and press effects on every button**: a soft tint of the theme's accent color on hover, a stronger tint and a small shrink while pressed.
 
 ### Changed
-- **Settings reorganized into sections** (Appearance, Text, Syntax highlighting, Files, Language, File types on macOS), shown as a list on the left and cards on the right. The window can be resized in width and height; long sections scroll, scrollbars are always visible on Windows.
-
-## [1.0.1] - 2026-10-30 (shipped in 1.1.0)
+- **Settings are split into sections** (Appearance, Text, Syntax highlighting, Files, Language, and File types on macOS): a list on the left, cards on the right. The window can be resized in width and height, long sections scroll, scrollbars are always visible on Windows.
+- **File actions live in the sidebar**: one row of equal buttons — New File, Open File, New Folder, Save As…. *Add Folder from Disk…* is in the File menu (`⇧⌘O` / `Ctrl+Shift+O`). The Reading / Source / Edit switch is centered at the top of the window.
+- Sidebar and toolbar controls share one set of sizes and corner radii.
 
 ### Fixed
-- **Select all**: text of an open file can now be selected in one go (drag across lines or Select All). The rows were lazily built, which limited selection to a single line; they are now built together (lazily only for files over 4000 lines). New command *View → Copy All Text* (`⌥⌘C`) copies the whole document. Windows: `Ctrl+A` selects the whole document text.
-- **Window size is remembered**: the window reopens with the size and position it had when closed (macOS; Windows already did).
-- **Save As… / New File dialog**: the *Format* row is centered under the panel's own fields instead of sticking to the left edge.
-- **Settings window**: content scrolls and the window can be resized vertically; it no longer runs off the screen.
-
-### Changed
-- **File actions moved into the sidebar**: one row of four equal buttons — New File, Open File, New Folder, Save As… — replaces the toolbar's open menu and Save As button (no duplicates, no drop-down). *Add Folder from Disk…* is now in the File menu (`⇧⌘O` / `Ctrl+Shift+O`).
-- **The Reading / Source / Edit switch is centered** at the top of the window in both versions; the remaining tools stay on the right.
-- Sidebar and toolbar controls share one set of sizes (30–34 pt height, equal square buttons, same corner radii): the sidebar section switcher and the folder button were too small.
-
-## [1.0.0] - 2026-10-30 (shipped in 1.1.0)
-
-### Added
-- **Syntax highlighting for programming languages**: Python, Swift, C / C++, C#, JavaScript (JSX), TypeScript (TSX), CSS / SCSS and PHP. Keywords, types, literals, numbers, strings, comments, decorators / attributes, preprocessor lines and CSS properties are colored with the current theme. Multi-line block comments, triple-quoted strings and template literals are tracked across lines. Fenced code blocks in Markdown (```` ```python ````, `cpp`, `cs`, `js`, ...) use the same colors. macOS also colors the text live in Edit mode.
-- **New file** (`⌘N` / `Ctrl+N`, also in the toolbar's open menu): choose name, folder and format; the file is created with a small template and opens in Edit mode. Works for every supported format.
-- Source-code extensions are now supported: `py pyw swift c h cpp cc cxx hpp hh hxx cs js mjs cjs jsx ts tsx css scss php`. On macOS Grizzly is offered under *Open With* for them without claiming them as the default app.
-- Sample files for every new language in `samples/`.
-
-### Changed
-- First stable release: all features of the 0.x line are included and documented in English and Russian.
+- **Select all**: the whole text of an open file can be selected at once (rows are lazily built only for files over 4000 lines). *View → Copy All Text* (`⌥⌘C`) copies the document; `Ctrl+A` on Windows.
+- **Window size is remembered** between launches (macOS).
+- The *Format* row of the Save As / New File dialog is centered like the other rows.
 
 ## [0.4.0] - 2026-10-30
 
