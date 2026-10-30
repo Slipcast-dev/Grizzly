@@ -84,7 +84,7 @@ In Edit mode the *Undo* button (top right) reverts one step at a time (a word, a
 
 ## Updates
 
-*Settings → Updates → Check for Updates* looks for a newer release on GitHub. If there is one, Grizzly downloads and installs it (verifying the SHA-256 from the release notes) and restarts. The check also runs silently at every launch. On macOS the app must be in a folder you can write to (normally *Applications*).
+*Settings → Updates → Check for Updates* looks for a newer release on GitHub. If there is one, Grizzly downloads and installs it (verifying the SHA-256 from the release notes) and restarts. After the restart your tabs, split view, mode and scroll position are restored. The check also runs silently at every launch. On macOS the app must be in a folder you can write to (normally *Applications*).
 
 ## Two files side by side
 

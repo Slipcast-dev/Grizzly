@@ -84,40 +84,71 @@ async function fetchTrusted(url, headers) {
   throw new Error('too many redirects');
 }
 
-/** Streams the release file into a temporary folder, reporting progress. A published SHA-256 is mandatory. */
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** SHA-256 of a finished file, read in a stream. */
+function hashFile(file) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    fs.createReadStream(file).on('data', (c) => hash.update(c)).on('error', reject).on('end', () => resolve(hash.digest('hex')));
+  });
+}
+
+/** Downloads the release file into a temporary folder, reporting progress. A dropped connection is retried and
+ *  continues where it stopped (HTTP Range). A published SHA-256 is mandatory and checked over the finished file. */
 async function download(release, currentVersion, onProgress) {
   if (!isTrustedDownload(release.assetURL)) throw new Error('untrusted download address');
   if (!release.sha256) throw Object.assign(new Error('no checksum published for this release'), { code: 'ENOCHECKSUM' });
-  const res = await fetchTrusted(release.assetURL, { 'User-Agent': `Grizzly/${currentVersion}` });
-  if (!res.ok || !res.body) throw new Error(`download failed (${res.status})`);
-  const total = Number(res.headers.get('content-length')) || 0;
-  if (total > MAX_DOWNLOAD) throw Object.assign(new Error('download too large'), { code: 'ETOOLARGE' });
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'grizzly-update-'));
   const file = path.join(dir, path.basename(release.assetName));
-  const hash = crypto.createHash('sha256');
-  const out = fs.createWriteStream(file);
+  const fail = (err) => { fs.rmSync(dir, { recursive: true, force: true }); throw err; };
   let received = 0;
-  let writeError = null; // a full disk must fail the download, not crash the app or hang on 'drain'
-  out.on('error', (err) => { writeError = err; });
-  try {
-    for await (const chunk of res.body) {
+  let total = 0;
+  let finished = false;
+  let lastError = null;
+
+  for (let attempt = 0; attempt < 5 && !finished; attempt++) {
+    if (attempt) await sleep(attempt * 1500);
+    try {
+      const headers = { 'User-Agent': `Grizzly/${currentVersion}` };
+      if (received) headers.Range = `bytes=${received}-`;
+      const res = await fetchTrusted(release.assetURL, headers);
+      if (!(res.status === 200 || res.status === 206) || !res.body) throw new Error(`download failed (${res.status})`);
+      if (res.status === 200) received = 0; // the server sent the whole file again
+      const length = Number(res.headers.get('content-length')) || 0;
+      total = received + length;
+      if (total > MAX_DOWNLOAD) throw Object.assign(new Error('download too large'), { code: 'ETOOLARGE' });
+      const out = fs.createWriteStream(file, { flags: received ? 'a' : 'w' });
+      let writeError = null; // a full disk must fail the download, not crash the app or hang on 'drain'
+      out.on('error', (err) => { writeError = err; });
+      try {
+        for await (const chunk of res.body) {
+          if (writeError) throw writeError;
+          received += chunk.length;
+          if (received > MAX_DOWNLOAD) throw Object.assign(new Error('download too large'), { code: 'ETOOLARGE' });
+          if (!out.write(chunk)) {
+            await new Promise((r) => {
+              const done = () => { out.off('drain', done); out.off('error', done); r(); };
+              out.once('drain', done); out.once('error', done);
+            });
+          }
+          if (total) onProgress(received / total);
+        }
+      } finally {
+        await new Promise((resolve) => out.end(resolve));
+      }
       if (writeError) throw writeError;
-      hash.update(chunk);
-      received += chunk.length;
-      if (received > MAX_DOWNLOAD) throw Object.assign(new Error('download too large'), { code: 'ETOOLARGE' });
-      if (!out.write(chunk)) await new Promise((r) => { out.once('drain', r); out.once('error', r); });
-      if (total) onProgress(received / total);
+      if (length && received !== total) throw new Error('connection lost');
+      finished = true;
+    } catch (err) {
+      if (err.code === 'ETOOLARGE' || err.code === 'ENOSPC' || err.message === 'untrusted download address') fail(err);
+      lastError = err;
+      // Keep only what was really written, so the next attempt resumes from there.
+      try { received = fs.statSync(file).size; } catch { received = 0; }
     }
-    await new Promise((resolve, reject) => { out.end((err) => (err ? reject(err) : resolve())); });
-  } catch (err) {
-    out.destroy();
-    fs.rmSync(dir, { recursive: true, force: true });
-    throw err;
   }
-  if (hash.digest('hex') !== release.sha256) {
-    fs.rmSync(dir, { recursive: true, force: true });
-    throw Object.assign(new Error('checksum mismatch'), { code: 'ECHECKSUM' });
-  }
+  if (!finished) fail(Object.assign(new Error(lastError ? lastError.message : 'download failed'), { code: 'ENETWORK' }));
+  if ((await hashFile(file)) !== release.sha256) fail(Object.assign(new Error('checksum mismatch'), { code: 'ECHECKSUM' }));
   return file;
 }
 

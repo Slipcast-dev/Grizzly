@@ -40,3 +40,48 @@ test('downloads are limited to GitHub over HTTPS', () => {
   assert.ok(!u.isTrustedDownload('https://github.com.evil.example/a.exe'));
   assert.ok(!u.isTrustedDownload('not a url'));
 });
+
+test('a release without a published checksum is refused before any download', async () => {
+  await assert.rejects(
+    u.download({ assetURL: 'https://github.com/a/b/c-portable.exe', assetName: 'c-portable.exe', sha256: null }, '1.0.0', () => {}),
+    { code: 'ENOCHECKSUM' });
+});
+
+test('a dropped connection is resumed with a Range request and the checksum is verified', async () => {
+  const crypto = require('node:crypto');
+  const fs = require('node:fs');
+  const data = crypto.randomBytes(400_000);
+  const sha = crypto.createHash('sha256').update(data).digest('hex');
+  const realFetch = global.fetch;
+  let calls = 0;
+  global.fetch = async (_url, opts) => {
+    calls++;
+    const range = opts.headers.Range;
+    const start = range ? Number(/bytes=(\d+)-/.exec(range)[1]) : 0;
+    const body = data.subarray(start);
+    const failAt = calls === 1 ? 150_000 : Infinity;
+    const stream = new ReadableStream({
+      start(c) {
+        let off = 0;
+        const push = () => {
+          if (off >= failAt) return c.error(new Error('connection reset'));
+          if (off >= body.length) return c.close();
+          c.enqueue(body.subarray(off, Math.min(off + 50_000, body.length)));
+          off += 50_000;
+          setImmediate(push);
+        };
+        push();
+      },
+    });
+    return new Response(stream, { status: range ? 206 : 200, headers: { 'content-length': String(body.length) } });
+  };
+  try {
+    const file = await u.download({ assetURL: 'https://github.com/a/b/c-portable.exe', assetName: 'c-portable.exe', sha256: sha }, '1.0.0', () => {});
+    assert.strictEqual(calls, 2);
+    assert.ok(fs.readFileSync(file).equals(data));
+    fs.rmSync(require('node:path').dirname(file), { recursive: true, force: true });
+    await assert.rejects(
+      u.download({ assetURL: 'https://github.com/a/b/c-portable.exe', assetName: 'c-portable.exe', sha256: '0'.repeat(64) }, '1.0.0', () => {}),
+      { code: 'ECHECKSUM' });
+  } finally { global.fetch = realFetch; }
+});

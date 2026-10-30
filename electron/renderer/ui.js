@@ -1584,18 +1584,59 @@ async function checkForUpdates(silent) {
   }
 }
 
+/** What is open right now: tabs, panes, mode and scroll positions, so the restarted app can put it back. */
+function sessionSnapshot() {
+  document.querySelectorAll('#panes .scroll').forEach((s) => { if (s.dataset.key) scrollMemory.set(s.dataset.key, s.scrollTop); });
+  const index = (id) => App.documents.findIndex((d) => d.id === id);
+  return {
+    paths: App.documents.map((d) => d.path),
+    scroll: App.documents.map((d) => scrollMemory.get(`${d.id}:${App.mode}`) || 0),
+    left: index(App.selection),
+    right: index(App.rightSelection),
+    split: App.isSplit,
+    mode: App.mode,
+  };
+}
+
+/** Reopens what sessionSnapshot saved before the update restart. */
+async function restoreSession(s) {
+  if (!s || !Array.isArray(s.paths) || !s.paths.length) return;
+  const ids = new Map();
+  for (let i = 0; i < s.paths.length; i++) {
+    const p = s.paths[i];
+    if (typeof p !== 'string') continue;
+    const known = Library.fileByPath(p);
+    await App.show(known ? known.id : null, p, 'left', false);
+    const doc = App.documents.find((d) => d.path === p);
+    if (doc) ids.set(i, doc.id);
+  }
+  if (!App.documents.length) return;
+  if (['reading', 'source', 'edit'].includes(s.mode)) App.mode = s.mode;
+  const left = ids.get(s.left) || App.documents[0].id;
+  const right = ids.get(s.right);
+  App.selection = left;
+  App.isSplit = !!s.split && !!right && right !== left;
+  App.rightSelection = App.isSplit ? right : null;
+  App.focusedPane = 'left';
+  s.paths.forEach((_, i) => { if (ids.has(i) && s.scroll && s.scroll[i] > 0) scrollMemory.set(`${ids.get(i)}:${App.mode}`, s.scroll[i]); });
+  App.render(['all']);
+}
+
 async function installUpdate() {
   Update.set({ phase: 'downloading', progress: 0 });
   const downloaded = await window.api.downloadUpdate();
   if (!downloaded.ok) {
     Update.set({ phase: 'failed', message: downloaded.code === 'ECHECKSUM'
       ? t('Контрольная сумма файла не совпала. Обновление не установлено.')
-      : t('Не удалось скачать обновление.') });
+      : downloaded.code === 'ENETWORK'
+        ? t('Не удалось скачать обновление. Проверьте подключение к интернету.')
+        : t('Не удалось скачать обновление.') });
     return;
   }
   // Ask about unsaved edits before the app quits; the new version is started by a helper once it has exited.
   if (!(await App.confirmDiscard(App.documents.map((d) => d.id)))) { Update.set({ phase: 'available' }); return; }
   Update.set({ phase: 'installing' });
+  await window.api.saveSession(sessionSnapshot());
   const applied = await window.api.applyUpdate();
   if (!applied.ok) {
     Update.set({ phase: 'failed', message: t('Скачанное обновление открыто в проводнике: запустите его вручную.') });

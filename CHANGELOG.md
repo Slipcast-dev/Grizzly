@@ -3,6 +3,14 @@
 All notable changes are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.2.2] - 2026-10-30
+
+### Fixed
+- **Updating from inside the app**: a dropped or slow connection no longer ends with "couldn't install". The download is retried up to five times and continues where it stopped; the message now says what went wrong. The macOS helper that swaps the app keeps the old copy until the new one is in place and writes a log (`grizzly-update.log` in the temporary folder).
+
+### Added
+- **The app comes back where you left it after an update**: open tabs, the active tab, split view, the Reading / Source / Edit mode and the scroll position are restored after the automatic restart (macOS and Windows).
+
 ## [1.2.1] - 2026-10-30
 
 ### Security

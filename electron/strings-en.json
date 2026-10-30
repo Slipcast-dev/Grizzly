@@ -184,6 +184,7 @@
  "Не удалось проверить обновления. Проверьте подключение к интернету.": "Couldn’t check for updates. Check your internet connection.",
  "Не удалось установить обновление.": "Couldn’t install the update.",
  "Не удалось скачать обновление.": "Couldn’t download the update.",
+ "Не удалось скачать обновление. Проверьте подключение к интернету.": "Couldn’t download the update. Check your internet connection.",
  "Контрольная сумма файла не совпала. Обновление не установлено.": "The file’s checksum does not match. The update was not installed.",
  "Не удалось открыть образ диска с обновлением.": "Couldn’t open the update disk image.",
  "В образе диска нет Grizzly.app.": "The disk image has no Grizzly.app.",

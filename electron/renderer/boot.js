@@ -15,6 +15,7 @@
   window.api.onMenu(runCommand);
   window.api.onOpenFiles((paths) => App.open(paths));
   window.api.ready();
+  restoreSession(await window.api.takeSession());
   // Every launch asks GitHub whether a newer version is out; the answer appears only if there is one.
   checkForUpdates(true);
 })();

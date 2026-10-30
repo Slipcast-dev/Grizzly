@@ -685,6 +685,28 @@ ipcMain.handle('update:apply', (e) => {
   return { ok: true };
 });
 
+// What was open when an update restarted the app; the new copy takes it once and puts it back.
+const sessionPath = () => path.join(app.getPath('userData'), 'session.json');
+
+ipcMain.handle('session:save', (e, session) => {
+  if (!trusted(e) || !session || typeof session !== 'object') return false;
+  try {
+    const json = JSON.stringify({ ...session, date: Date.now() });
+    if (json.length > 1024 * 1024) return false;
+    fs.writeFileSync(sessionPath(), json);
+    return true;
+  } catch { return false; }
+});
+
+ipcMain.handle('session:take', (e) => {
+  if (!trusted(e)) return null;
+  try {
+    const session = JSON.parse(fs.readFileSync(sessionPath(), 'utf8'));
+    fs.rmSync(sessionPath(), { force: true });
+    return Date.now() - session.date < 10 * 60 * 1000 ? session : null;
+  } catch { return null; }
+});
+
 const libraryPath = () => path.join(app.getPath('userData'), 'library.json');
 
 ipcMain.handle('library:load', (e) => {
