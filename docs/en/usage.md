@@ -80,7 +80,7 @@ Closing a tab or the window with unsaved edits asks whether to save, discard or 
 
 ## Edit mode buttons and notifications
 
-In Edit mode the *Undo* button (top right) reverts the last change and *Save* writes the file. Short pop-up notifications confirm actions such as saving, copying all text, creating a file, reloading, and changing tags, bookmarks or favorites.
+In Edit mode the *Undo* button (top right) reverts one step at a time (a word, a deletion, a paste) and *Save* writes the file. Short pop-up notifications confirm actions such as saving, copying all text, creating a file, reloading, and changing tags, bookmarks or favorites.
 
 ## Updates
 

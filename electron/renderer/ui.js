@@ -1078,6 +1078,15 @@ function rememberEditors() {
 
 // Spelling is checked in prose (PROSE_TYPES); in source code and data files every identifier would be an "error".
 
+/** Undo / redo stacks per document: the browser merges a whole run of typing into one step, so the editor keeps its own. */
+const editorHistory = new Map(); // document id -> {undo, redo, last, sel, kind, space, time}
+function historyFor(doc, value) {
+  let hst = editorHistory.get(doc.id);
+  if (!hst) { hst = { undo: [], redo: [], kind: 0, space: false, time: 0, before: [0, 0] }; editorHistory.set(doc.id, hst); }
+  hst.last = value;
+  return hst;
+}
+
 function editorView(doc, pane, size) {
   const area = h('textarea', {
     class: 'editor-text', dataset: { doc: doc.id }, wrap: 'soft', 'aria-label': doc.name,
@@ -1107,12 +1116,47 @@ function editorView(doc, pane, size) {
 
   // Undo and Save, in the same style as the other buttons; saving and similar events are announced by notifications.
   const revert = h('button', {
-    class: 'btn sm', title: t('Отменить последнее изменение (⌘Z)'),
-    onclick: () => { area.focus(); document.execCommand('undo'); },
+    class: 'btn sm', title: t('Отменить последний шаг (⌘Z)'),
+    onclick: () => undo(),
   }, icon('undo', 14), t('Отменить'));
   const save = h('button', { class: 'btn sm', title: t('Сохранить (⌘S)'), onclick: () => App.save(doc.id) }, icon('download', 14), t('Сохранить'));
   const bar = h('div', { class: 'edit-bar' }, h('span', { class: 'grow' }), revert, save);
-  const sync = () => { revert.disabled = save.disabled = !App.isDirty(doc); };
+  const hst = historyFor(doc, area.value);
+  const sync = () => { revert.disabled = !hst.undo.length; save.disabled = !App.isDirty(doc); };
+  // A new step starts at every word, after a pause, when switching between typing and deleting, and for paste or Return.
+  const recordStep = () => {
+    const before = hst.last;
+    if (area.value === before) return;
+    // What changed, read from the text itself: the common start and end of the old and new text.
+    let prefix = 0;
+    while (prefix < before.length && prefix < area.value.length && before[prefix] === area.value[prefix]) prefix++;
+    let suffix = 0;
+    while (suffix < before.length - prefix && suffix < area.value.length - prefix
+      && before[before.length - 1 - suffix] === area.value[area.value.length - 1 - suffix]) suffix++;
+    const removed = before.length - prefix - suffix;
+    const added = area.value.length - prefix - suffix;
+    const data = area.value.slice(prefix, prefix + added);
+    const isSpace = added === 1 && /[ \t]/.test(data);
+    const kind = added === 1 && removed === 0 && data !== '\n' ? 1 : (added === 0 && removed > 0 ? 2 : 3);
+    const now = Date.now();
+    const fresh = kind !== hst.kind || kind === 3 || (kind === 1 && hst.space && !isSpace) || now - hst.time > 1000 || !hst.undo.length;
+    if (fresh) { hst.undo.push({ value: before, start: prefix + removed, end: prefix + removed }); if (hst.undo.length > 500) hst.undo.shift(); }
+    hst.redo.length = 0;
+    hst.kind = kind; hst.space = isSpace; hst.time = now; hst.last = area.value;
+  };
+  const applyHistory = (from, to) => {
+    const snap = from.pop();
+    if (!snap) return;
+    to.push({ value: area.value, start: area.selectionStart, end: area.selectionEnd });
+    area.value = snap.value;
+    area.setSelectionRange(snap.start, snap.end);
+    hst.last = area.value; hst.kind = 0; hst.time = 0;
+    App.setDraft(doc, area.value);
+    sync(); paintBack(); renderFind();
+    area.focus();
+  };
+  const undo = () => applyHistory(hst.undo, hst.redo);
+  const redo = () => applyHistory(hst.redo, hst.undo);
   sync();
 
   // Typing `#` or `#wo` lists the known tags under the caret; Up / Down choose, Enter or Tab inserts, Esc closes.
@@ -1164,6 +1208,7 @@ function editorView(doc, pane, size) {
   };
 
   area.addEventListener('input', (e) => {
+    recordStep();
     App.setDraft(doc, area.value);
     sync();
     paintBack();
@@ -1182,6 +1227,9 @@ function editorView(doc, pane, size) {
   }, true);
   area.addEventListener('scroll', syncScroll);
   area.addEventListener('keydown', (e) => {
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && !e.altKey && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
+    if (mod && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
     if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
       e.preventDefault();
       document.execCommand('insertText', false, '\t');

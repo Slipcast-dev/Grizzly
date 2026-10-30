@@ -200,7 +200,7 @@ window.STRINGS_EN = {
  "Тег будет убран из списка и из текста файлов (%lld).": "The tag will be removed from the list and from the text of %lld file(s).",
  "Тег будет убран из списка и у всех файлов.": "The tag will be removed from the list and from all files.",
  "Отменить": "Undo",
- "Отменить последнее изменение (⌘Z)": "Undo the last change (⌘Z)",
+ "Отменить последний шаг (⌘Z)": "Undo the last step (⌘Z)",
  "Сохранить (⌘S)": "Save (⌘S)",
  "Сохранено: %@": "Saved: %@",
  "Файл RTF сохранён без форматирования.": "The RTF file was saved without formatting.",
