@@ -3,6 +3,23 @@
 All notable changes are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **Check for updates** (*Settings → Updates*): asks GitHub for the latest release, says whether a newer version is out and, if so, downloads and installs it from inside the app (macOS: replaces the app from the `.dmg`; Windows: replaces the portable `.exe`). The SHA-256 from the release notes is verified when present, downloads are limited to GitHub over HTTPS. The check also runs silently on every launch and only speaks up when there is something new.
+- **Spelling and grammar check** (Russian and English) in Edit mode for Markdown, TXT, RTF and TeX, with underlined mistakes (macOS: system checker with grammar; Windows: spelling with suggestions in the context menu). Switch in *Settings → Text*.
+- **Tags**: create, rename and delete tags, assign them from a file's context menu, see all tags as chips at the bottom of the sidebar, click a tag to list its files. `#tag` in the search field searches tags.
+- **Emoji**: an emoji button in Edit mode; saving a file in an 8-bit encoding (Windows-1251, ISO-8859-1) that cannot hold emoji offers UTF-8 instead of failing.
+
+### Changed
+- The sidebar filter is now **Search files**: it matches the beginning of a file or folder name, or of any word in it.
+- Closing the window with unsaved edits asks about every changed file: save, don't save or cancel (macOS and Windows).
+
+### Fixed
+- **Find** works in Edit mode too (hits are highlighted in the text being edited).
+- macOS: after saving in Edit mode the text no longer disappears until the mode is switched.
+- macOS: ⌘A in Reading and Source selects the whole document, ⌘C copies all of it (also *View → Select All Text*).
+
 ## [1.1.0] - 2026-10-30
 
 ### Added

@@ -1,6 +1,9 @@
 const { app, BrowserWindow, Menu, dialog, ipcMain, shell, nativeTheme } = require('electron');
+const { spawn } = require('child_process');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
+const updater = require('./updater');
 
 const EXTENSIONS = ['md', 'markdown', 'mdown', 'txt', 'text', 'json', 'yaml', 'yml', 'csv', 'tsv', 'log',
   'xml', 'html', 'htm', 'ini', 'conf', 'toml', 'tex', 'rtf',
@@ -43,6 +46,7 @@ const resolveLocale = () => (languagePref === 'auto' ? (app.getLocale().toLowerC
 const T = (key) => (resolveLocale() === 'ru' ? key : (STRINGS_EN[key] || key));
 
 let win = null;
+let forceClose = false;
 let rendererReady = false;
 let pendingFiles = [];
 
@@ -86,6 +90,7 @@ function createWindow() {
       nodeIntegration: false,
     },
   });
+  setupSpellcheck();
   if (saved.maximized) win.maximize();
   win.once('ready-to-show', () => win.show());
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
@@ -103,21 +108,41 @@ function createWindow() {
     try { fs.writeFileSync(statePath(), JSON.stringify({ ...b, maximized })); } catch { /* ignore */ }
   };
   win.on('close', (e) => {
-    if (hasUnsaved) {
-      const choice = dialog.showMessageBoxSync(win, {
-        type: 'warning',
-        message: T('Есть несохранённые изменения.'),
-        detail: T('Изменения будут потеряны, если их не сохранить.'),
-        buttons: [T('Закрыть без сохранения'), T('Отмена')],
-        defaultId: 1,
-        cancelId: 1,
-        noLink: true,
-      });
-      if (choice !== 0) { e.preventDefault(); return; }
+    if (hasUnsaved && !forceClose) {
+      // The page asks about every unsaved file (save / don't save / cancel) and then calls app:closeWindow.
+      e.preventDefault();
+      win.webContents.send('menu', 'closeWindow');
+      return;
     }
     saveBounds();
   });
   win.on('closed', () => { win = null; rendererReady = false; });
+}
+
+/** Russian and English spelling check in text fields, with suggestions in the context menu. */
+function setupSpellcheck() {
+  const ses = win.webContents.session;
+  try {
+    const wanted = ['ru', 'en-US'].filter((l) => ses.availableSpellCheckerLanguages.includes(l));
+    if (wanted.length) ses.setSpellCheckerLanguages(wanted);
+  } catch { /* the system spell checker decides */ }
+  win.webContents.on('context-menu', (_e, params) => {
+    if (!params.isEditable && !params.selectionText) return;
+    const items = [];
+    if (params.misspelledWord) {
+      for (const word of params.dictionarySuggestions.slice(0, 5)) {
+        items.push({ label: word, click: () => win.webContents.replaceMisspelling(word) });
+      }
+      if (!params.dictionarySuggestions.length) items.push({ label: T('Нет вариантов'), enabled: false });
+      items.push({ label: T('Добавить в словарь'), click: () => ses.addWordToSpellCheckerDictionary(params.misspelledWord) },
+        { type: 'separator' });
+    }
+    if (params.isEditable) items.push({ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' });
+    items.push({ role: 'copy' });
+    if (params.isEditable) items.push({ role: 'paste' });
+    items.push({ role: 'selectAll' });
+    Menu.buildFromTemplate(items).popup({ window: win });
+  });
 }
 
 function openExternal(url) {
@@ -540,6 +565,84 @@ ipcMain.handle('file:mtimes', (e, files) => {
 
 ipcMain.handle('shell:reveal', (e, file) => { if (trusted(e) && typeof file === 'string' && path.isAbsolute(file)) shell.showItemInFolder(file); });
 ipcMain.handle('shell:external', (e, url) => { if (trusted(e)) openExternal(String(url)); });
+
+ipcMain.handle('dialog:confirmUtf8', async (e, name, encoding) => {
+  if (!trusted(e)) return false;
+  const { response } = await dialog.showMessageBox(win, {
+    type: 'warning',
+    message: T('В тексте есть символы (например, эмодзи), которых нет в кодировке %@.').replace('%@', String(encoding)),
+    detail: T('Сохранить файл «%@» в кодировке UTF-8?').replace('%@', String(name)),
+    buttons: [T('Сохранить в UTF-8'), T('Отмена')],
+    defaultId: 0,
+    cancelId: 1,
+    noLink: true,
+  });
+  return response === 0;
+});
+
+ipcMain.handle('app:emoji', (e) => { if (trusted(e)) app.showEmojiPanel(); });
+
+/** Called by the page once every unsaved file was saved or its edits were dropped on purpose. */
+ipcMain.handle('app:closeWindow', (e) => {
+  if (!trusted(e) || !win) return;
+  forceClose = true;
+  win.close();
+});
+
+// ---- Updates ----------------------------------------------------------------
+
+let pendingRelease = null; // what the page may install; the page never supplies a download address
+let downloadedUpdate = null;
+
+ipcMain.handle('update:check', async (e) => {
+  if (!trusted(e)) return { ok: false };
+  const current = app.getVersion();
+  try {
+    const release = await updater.fetchLatest(current);
+    if (release && updater.isNewer(release.version, current)) {
+      pendingRelease = release;
+      return { ok: true, available: true, current, version: release.version, notes: release.notes };
+    }
+    pendingRelease = null;
+    return { ok: true, available: false, current };
+  } catch {
+    return { ok: false, current };
+  }
+});
+
+ipcMain.handle('update:download', async (e) => {
+  if (!trusted(e) || !pendingRelease) return { ok: false };
+  try {
+    downloadedUpdate = await updater.download(pendingRelease, app.getVersion(), (progress) => {
+      if (win) win.webContents.send('update:progress', progress);
+    });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, code: err.code || 'EDOWNLOAD' };
+  }
+});
+
+/** Replaces the portable exe once the app has exited (a helper script waits for it), then starts the new version. */
+ipcMain.handle('update:apply', (e) => {
+  if (!trusted(e) || !downloadedUpdate) return { ok: false };
+  const target = process.env.PORTABLE_EXECUTABLE_FILE;
+  if (process.platform !== 'win32' || !target) {
+    // Not the portable build: leave the downloaded file for the user to run.
+    shell.showItemInFolder(downloadedUpdate);
+    return { ok: false, code: 'MANUAL' };
+  }
+  try {
+    const script = path.join(os.tmpdir(), `grizzly-update-${process.pid}.cmd`);
+    fs.writeFileSync(script, updater.REPLACE_SCRIPT);
+    spawn('cmd.exe', ['/c', script, downloadedUpdate, target], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+  } catch {
+    shell.showItemInFolder(downloadedUpdate);
+    return { ok: false, code: 'MANUAL' };
+  }
+  forceClose = true;
+  setTimeout(() => app.quit(), 100);
+  return { ok: true };
+});
 
 const libraryPath = () => path.join(app.getPath('userData'), 'library.json');
 

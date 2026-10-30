@@ -73,5 +73,31 @@ check(SyntaxEngine.states(["a", "b"], type: .json).isEmpty, "stateless formats c
 check(FileType.fromFenceTag("Python title=x") == .python && FileType.fromFenceTag("c++") == .cpp && FileType.fromFenceTag("nope") == nil, "fenced code language tags")
 check(FileType.template(forExtension: "json") == "{\n  \n}\n" && FileType.template(forExtension: "xyz") == "", "new file templates")
 
+// Tags
+let tagFile = lib.add(url: histFile)
+check(lib.createTag("#Работа") == "Работа" && lib.createTag("работа") == "Работа" && lib.createTag("  ") == nil, "tags are cleaned and not duplicated")
+lib.toggleTag(tagFile.id, "Работа")
+check(lib.files(withTag: "работа").count == 1 && lib.hasTag(tagFile.id, "РАБОТА"), "files are found by tag, case-insensitively")
+check(LibraryStore(storeURL: dir.appendingPathComponent("lib.json")).files(withTag: "Работа").count == 1, "tags are saved to disk")
+lib.renameTag("Работа", to: "Дом")
+check(lib.files(withTag: "Дом").count == 1 && lib.files(withTag: "Работа").isEmpty, "renaming a tag moves its files")
+lib.deleteTag("Дом")
+check(lib.allTags.isEmpty && lib.files(withTag: "Дом").isEmpty, "deleting a tag removes it from files")
+
+// Updates
+check(UpdateCheck.isNewer("1.2.0", than: "1.1.0") && UpdateCheck.isNewer("v1.10.0", than: "1.9.9") && UpdateCheck.isNewer("2.0", than: "1.99.9"), "newer versions are detected")
+check(!UpdateCheck.isNewer("1.1.0", than: "1.1.0") && !UpdateCheck.isNewer("1.1", than: "1.1.0") && !UpdateCheck.isNewer("1.0.9", than: "1.1.0"), "same or older versions are not updates")
+let notes = "## SHA-256\n`\(String(repeating: "A", count: 64))`  Grizzly-1.2.0-arm64.dmg\n\(String(repeating: "b", count: 64)) Grizzly-1.2.0-x64.dmg"
+check(UpdateCheck.checksum(in: notes, for: "Grizzly-1.2.0-arm64.dmg") == String(repeating: "a", count: 64)
+      && UpdateCheck.checksum(in: notes, for: "Grizzly-1.2.0-x64.dmg") == String(repeating: "b", count: 64)
+      && UpdateCheck.checksum(in: notes, for: "other.dmg") == nil, "checksum is read from the release notes")
+let base = "https://github.com/Slipcast-dev/Grizzly/releases/download/v1.2.0/"
+let release = "{\"tag_name\":\"v1.2.0\",\"body\":\"notes\",\"assets\":[{\"name\":\"Grizzly-1.2.0-x64.dmg\",\"browser_download_url\":\"\(base)Grizzly-1.2.0-x64.dmg\"},{\"name\":\"Grizzly-1.2.0-arm64.dmg\",\"browser_download_url\":\"\(base)Grizzly-1.2.0-arm64.dmg\"}]}"
+let parsed = try UpdateCheck.parse(Data(release.utf8), assetSuffix: "-arm64.dmg")
+check(parsed?.version == "1.2.0" && parsed?.assetName == "Grizzly-1.2.0-arm64.dmg", "release JSON: version and the asset for this architecture")
+check(try UpdateCheck.parse(Data(release.utf8), assetSuffix: "-win.exe") == nil, "release without a matching asset is ignored")
+check(!UpdateCheck.isTrustedDownload(URL(string: "https://evil.example/a.dmg")!) && !UpdateCheck.isTrustedDownload(URL(string: "http://github.com/a.dmg")!)
+      && UpdateCheck.isTrustedDownload(URL(string: "https://objects.githubusercontent.com/a.dmg")!), "downloads are limited to GitHub over HTTPS")
+
 try? FileManager.default.removeItem(at: dir)
 exit(failures == 0 ? 0 : 1)

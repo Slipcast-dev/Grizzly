@@ -26,6 +26,8 @@ final class AppState: ObservableObject {
     @Published private(set) var changedOnDisk: Set<UUID> = []
     /// Edited text per open document, kept only while it differs from the file.
     @Published private(set) var drafts: [UUID: String] = [:]
+    /// "Select All" in Reading / Source: the whole document counts as selected and ⌘C copies all of it.
+    @Published var allSelected = false
     private var watcher: Timer?
 
     /// Polls open files once a second; called once the app has launched.
@@ -223,6 +225,8 @@ final class AppState: ObservableObject {
     func setDraft(_ text: String, for doc: Document) {
         let value: String? = text == doc.normalized ? nil : text
         if drafts[doc.id] != value { drafts[doc.id] = value }
+        // Hits move while the text is being typed; recount them without jumping the caret.
+        if isFindVisible, mode == .edit, !findQuery.isEmpty { recomputeMatches(reset: false, reveal: false) }
     }
 
     func discardDraft(_ id: UUID) { drafts[id] = nil }
@@ -233,16 +237,29 @@ final class AppState: ObservableObject {
         guard let doc = documents.first(where: { $0.id == id }), let draft = drafts[id] else { return true }
         let text = doc.text.contains("\r\n") ? draft.replacingOccurrences(of: "\n", with: "\r\n") : draft
         do {
-            try FileLoader.write(text, to: doc.url, encoding: doc.encoding)
-        } catch let error as CocoaError where error.code == .fileWriteInapplicableStringEncoding {
-            errorMessage = L("Не удалось сохранить «%@»: в тексте есть символы, которых нет в кодировке %@.", doc.name, doc.encoding)
-            return false
+            do {
+                try FileLoader.write(text, to: doc.url, encoding: doc.encoding)
+            } catch let error as CocoaError where error.code == .fileWriteInapplicableStringEncoding {
+                // Emoji and other characters outside an 8-bit encoding: offer UTF-8 instead of losing them.
+                guard confirmUTF8(for: doc) else { return false }
+                try FileLoader.write(text, to: doc.url, encoding: "UTF-8")
+            }
         } catch {
             errorMessage = L("Не удалось сохранить «%@».", doc.name)
             return false
         }
         reload(id)
         return drafts[id] == nil
+    }
+
+    private func confirmUTF8(for doc: Document) -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = L("В тексте есть символы (например, эмодзи), которых нет в кодировке %@.", doc.encoding)
+        alert.informativeText = L("Сохранить файл «%@» в кодировке UTF-8?", doc.name)
+        alert.addButton(withTitle: L("Сохранить в UTF-8"))
+        alert.addButton(withTitle: L("Отмена"))
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     // MARK: Save As
@@ -287,6 +304,11 @@ final class AppState: ObservableObject {
             url.appendPathExtension(Self.exportExtensions[popup.indexOfSelectedItem])
         }
         return url
+    }
+
+    func selectAllText() {
+        guard current != nil, mode != .edit else { return }
+        allSelected = true
     }
 
     /// Puts the whole text of the current document on the pasteboard.
@@ -379,15 +401,20 @@ final class AppState: ObservableObject {
     }
 
     /// Hits are counted in the focused pane's document; every pane paints the same query.
-    func recomputeMatches(reset: Bool) {
-        guard isFindVisible, !findQuery.isEmpty, mode != .edit, let doc = current else {
+    func recomputeMatches(reset: Bool, reveal: Bool = true) {
+        guard isFindVisible, !findQuery.isEmpty, let doc = current else {
             matches = []
             matchIndex = 0
             return
         }
-        matches = Searcher.matches(query: findQuery, in: doc, mode: mode)
+        if mode == .edit {
+            // The editor is searched as it is right now, unsaved changes included.
+            matches = Searcher.matches(query: findQuery, inLines: text(for: doc).components(separatedBy: "\n"))
+        } else {
+            matches = Searcher.matches(query: findQuery, in: doc, mode: mode)
+        }
         matchIndex = reset ? 0 : min(matchIndex, max(0, matches.count - 1))
-        revealCurrentMatch()
+        if reveal { revealCurrentMatch() }
     }
 
     func stepMatch(_ delta: Int) {
@@ -469,6 +496,14 @@ final class AppState: ObservableObject {
             focusedPane = .left
         }
         selectedFileID = current?.libraryID
+        return true
+    }
+
+    /// The window's close button: asks about every unsaved document, then drops the edits that were not saved.
+    func confirmCloseWindow() -> Bool {
+        guard documents.contains(where: { isDirty($0.id) }) else { return true }
+        guard confirmDiscard(documents.map(\.id)) else { return false }
+        drafts = [:]
         return true
     }
 

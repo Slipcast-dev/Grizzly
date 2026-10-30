@@ -52,6 +52,9 @@ const ICONS = {
   table: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16M15 4v16"/>',
   list: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h.01M7 12h.01M7 15h.01M11 9h6M11 12h6M11 15h6"/>',
   warning: '<path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/>',
+  tag: '<path d="M3 12V4h8l10 10-8 8z"/><path d="M7.5 8.5h.01"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  check: '<path d="m5 12 5 5 9-10"/>',
   refresh: '<path d="M20 11a8 8 0 0 0-14-4L4 9M4 4v5h5M4 13a8 8 0 0 0 14 4l2-2M20 20v-5h-5"/>',
 };
 
@@ -264,6 +267,7 @@ function syncBookmarks() {
 
 const SidebarUI = {
   query: '',
+  tag: null, // tag whose files are listed
   isNaming: false,
   newName: '',
   nameError: null,
@@ -287,7 +291,7 @@ function buildSidebarFrame() {
     h('div', { class: 'filter' },
       icon('search', 14),
       h('input', {
-        id: 'filter-input', type: 'text', placeholder: t('Фильтр файлов'), spellcheck: false,
+        id: 'filter-input', type: 'text', placeholder: t('Поиск файлов'), spellcheck: false,
         oninput: (e) => { SidebarUI.query = e.target.value; renderSidebarList(); renderFilterClear(); },
       }),
       h('button', { id: 'filter-clear', class: 'plain', hidden: true, onclick: () => {
@@ -295,6 +299,7 @@ function buildSidebarFrame() {
       } }, icon('xCircle', 14))),
     h('div', { class: 'side-actions', id: 'side-actions' }),
     h('div', { id: 'side-list', class: 'side-list' }),
+    h('div', { id: 'tag-panel', class: 'tag-panel' }),
   );
   const list = $('side-list');
   list.addEventListener('dragover', (e) => {
@@ -324,12 +329,88 @@ function renderSidebar() {
   const seg = $('side-seg');
   seg.replaceChildren(...SECTIONS.map((s) => h('button', {
     class: App.ui.sidebarSection === s.id ? 'on' : '', title: s.title(),
-    onclick: () => { App.ui.sidebarSection = s.id; cancelNaming(); App.render(['sidebar']); },
+    onclick: () => { App.ui.sidebarSection = s.id; SidebarUI.tag = null; cancelNaming(); App.render(['sidebar']); },
   }, icon(s.icon, 17))));
   renderSidebarList();
+  renderTagPanel();
 }
 
-const matchesQuery = (file) => !SidebarUI.query || file.name.toLowerCase().includes(SidebarUI.query.toLowerCase());
+// ---- Tags ----------------------------------------------------------------------
+
+/** A small text question as an in-app dialog (Electron has no prompt()). Resolves to the text, or null when cancelled. */
+function askText(title, initial, confirmLabel) {
+  return new Promise((resolve) => {
+    const root = $('overlay-root');
+    const done = (value) => { back.remove(); resolve(value); };
+    const input = h('input', {
+      class: 'text-input', type: 'text', value: initial || '', spellcheck: false,
+      onkeydown: (e) => {
+        if (e.key === 'Enter') done(input.value.trim() || null);
+        else if (e.key === 'Escape') { e.stopPropagation(); done(null); }
+      },
+    });
+    const back = h('div', { class: 'modal-back modal-ask', onmousedown: (e) => { if (e.target === e.currentTarget) done(null); } },
+      h('div', { class: 'dialog small' },
+        h('div', { class: 'dialog-title' }, title),
+        h('div', { class: 'dialog-body' }, input),
+        h('div', { class: 'dialog-actions' },
+          h('button', { class: 'btn', onclick: () => done(null) }, t('Отмена')),
+          h('button', { class: 'btn primary', onclick: () => done(input.value.trim() || null) }, confirmLabel))));
+    root.append(back);
+    input.focus();
+    input.select();
+  });
+}
+
+async function newTag(forFile) {
+  const name = await askText(t('Новый тег'), '', t('Создать'));
+  const tag = name && Library.createTag(name);
+  if (!tag) return;
+  if (forFile && !Library.hasTag(forFile, tag)) Library.toggleTag(forFile, tag);
+  else if (!forFile) { SidebarUI.tag = tag; App.render(['sidebar']); }
+}
+
+async function renameTag(tag) {
+  const name = await askText(t('Переименовать тег'), tag, t('Переименовать'));
+  if (!name) return;
+  const wasSelected = SidebarUI.tag && Library.sameTag(SidebarUI.tag, tag);
+  Library.renameTag(tag, name);
+  if (wasSelected) SidebarUI.tag = Library.cleanTag(name);
+  App.render(['sidebar']);
+}
+
+/** Bottom of the sidebar: every tag as a chip. A click shows the files that carry the tag, a second click leaves the filter. */
+function renderTagPanel() {
+  const panel = $('tag-panel');
+  if (!panel) return;
+  const tags = Library.allTags;
+  const chips = h('div', { class: 'chips' }, tags.map((tag) => {
+    const on = !!SidebarUI.tag && Library.sameTag(SidebarUI.tag, tag);
+    return h('button', {
+      class: 'chip' + (on ? ' on' : ''),
+      onclick: () => { SidebarUI.tag = on ? null : tag; App.render(['sidebar']); },
+      oncontextmenu: (e) => Menus.at(e, [
+        { label: t('Переименовать…'), action: () => renameTag(tag) },
+        { label: t('Удалить тег'), danger: true, action: () => { if (on) SidebarUI.tag = null; Library.deleteTag(tag); } },
+      ]),
+    }, h('span', { class: 'ellipsis' }, '#' + tag), h('span', { class: 'chip-count' }, Library.filesWithTag(tag).length));
+  }));
+  panel.replaceChildren(
+    h('div', { class: 'tag-head' }, icon('tag', 13), h('span', { class: 'grow' }, t('Теги')),
+      h('button', { class: 'plain tag-add', title: t('Новый тег'), onclick: () => newTag(null) }, icon('plus', 14))),
+    tags.length ? chips : h('div', { class: 'small muted' }, t('Создайте тег кнопкой + или через контекстное меню файла.')));
+}
+
+/** By the beginning of the name or of any word in it; "#word" searches the tags the same way. */
+function matchesQuery(file) {
+  const q = SidebarUI.query.trim();
+  if (!q) return true;
+  if (q.startsWith('#')) {
+    const tag = Library.cleanTag(q);
+    return tag ? file.tags.some((x) => Searcher.nameMatches(x, tag)) : file.tags.length > 0;
+  }
+  return Searcher.nameMatches(file.name, q);
+}
 const filtered = (files) => files.filter(matchesQuery);
 
 function renderSidebarList() {
@@ -338,13 +419,20 @@ function renderSidebarList() {
   const section = App.ui.sidebarSection;
   const frag = document.createDocumentFragment();
 
-  if (section === 'files') {
+  if (SidebarUI.tag) {
+    // All files that carry the tag, wherever they live in the library.
+    frag.append(h('div', { class: 'sec-head' }, h('span', null, t('Тег: #%@', SidebarUI.tag)),
+      h('button', { class: 'plain link', onclick: () => { SidebarUI.tag = null; App.render(['sidebar']); } }, t('Сбросить'))));
+    filtered(Library.filesWithTag(SidebarUI.tag)).forEach((f) => frag.append(fileRow(f)));
+    if (!Library.filesWithTag(SidebarUI.tag).length) frag.append(hint('tag', t('Нет файлов с этим тегом. Добавьте тег файлу через контекстное меню.')));
+  } else if (section === 'files') {
     const head = h('div', { class: 'sec-head' }, h('span', null, t('Файлы')),
       h('span'));
     frag.append(head);
     if (SidebarUI.isNaming) frag.append(nameField());
+    // A folder stays when its name matches (then all its files show) or when some file inside matches.
     const folders = SidebarUI.query
-      ? Library.folders.filter((f) => filtered(Library.filesIn(f.id)).length)
+      ? Library.folders.filter((f) => Searcher.nameMatches(f.name, SidebarUI.query) || filtered(Library.filesIn(f.id)).length)
       : Library.folders;
     folders.forEach((f) => frag.append(folderRow(f)));
     filtered(Library.filesIn(null)).forEach((f) => frag.append(fileRow(f)));
@@ -352,7 +440,7 @@ function renderSidebarList() {
       frag.append(hint('docPlus', t('Откройте файл (⌘O) или перетащите его в окно.')));
     }
   } else if (section === 'recent') {
-    const items = filtered(Library.recents);
+    const items = Library.recents.filter((e) => Searcher.nameMatches(e.name, SidebarUI.query));
     if (items.length) {
       frag.append(h('div', { class: 'sec-head' }, h('span', null, t('Недавно открытые')),
         h('button', { class: 'plain link', onclick: () => Library.clearRecents() }, t('Очистить'))));
@@ -438,7 +526,8 @@ function dropFile(fileID, folderID) {
 }
 
 function folderRow(folder) {
-  const files = filtered(Library.filesIn(folder.id));
+  const all = Library.filesIn(folder.id);
+  const files = SidebarUI.query && Searcher.nameMatches(folder.name, SidebarUI.query) ? all : filtered(all);
   const wrap = h('div', { class: 'folder' });
   const expanded = folder.isExpanded;
 
@@ -542,6 +631,14 @@ function fileMenu(file) {
     { label: t('Открыть справа'), action: () => App.openLibraryFile(file.id, true) },
     { label: t('Быстрый просмотр'), action: () => quickLook(file.id) },
     { label: file.isFavorite ? t('Убрать из избранного') : t('Добавить в избранное'), action: () => Library.toggleFavorite(file.id) },
+    {
+      label: t('Теги'),
+      submenu: [
+        ...Library.allTags.map((tag) => ({ label: (Library.hasTag(file.id, tag) ? '✓ ' : '    ') + '#' + tag, action: () => Library.toggleTag(file.id, tag) })),
+        ...(Library.allTags.length ? [{ separator: true }] : []),
+        { label: t('Новый тег…'), action: () => newTag(file.id) },
+      ],
+    },
     {
       label: t('Переместить в…'),
       submenu: [
@@ -721,6 +818,12 @@ function renderPanes() {
     lastScrollToken = target.token;
     const pane = App.isSplit ? App.focusedPane : 'left';
     const scroller = panes.querySelector(`.pane[data-pane="${pane}"] .scroll`);
+    const area = panes.querySelector(`.pane[data-pane="${pane}"] textarea.editor-text`);
+    const mark = area && area.parentElement.querySelector('.editor-back mark.current');
+    if (mark) {
+      area.scrollTop = Math.max(0, mark.offsetTop - area.clientHeight / 2);
+      area.parentElement.querySelector('.editor-back').scrollTop = area.scrollTop;
+    }
     if (scroller) {
       const el = (target.match && scroller.querySelector('mark.current')) || scroller.querySelector(`[data-unit="${target.unit}"]`);
       if (el) el.scrollIntoView({ block: 'center' });
@@ -858,18 +961,43 @@ function rememberEditors() {
   });
 }
 
+/** Spelling is checked in prose; in source code and data files every identifier would be an "error". */
+const PROSE_TYPES = ['markdown', 'text', 'rtf', 'tex'];
+
 function editorView(doc, pane, size) {
   const area = h('textarea', {
-    class: 'editor-text', dataset: { doc: doc.id }, spellcheck: false, wrap: 'soft',
-    'aria-label': doc.name,
+    class: 'editor-text', dataset: { doc: doc.id }, wrap: 'soft', 'aria-label': doc.name,
+    spellcheck: Prefs.values.spellCheck && PROSE_TYPES.includes(doc.type),
   });
   area.style.fontSize = size + 'px';
   area.value = App.textFor(doc);
+  // Find hits are painted on a copy of the text behind the (transparent) textarea.
+  const back = h('div', { class: 'editor-back', 'aria-hidden': 'true' });
+  back.style.fontSize = size + 'px';
+  const paintBack = () => {
+    const hl = highlightFor(pane);
+    const text = area.value;
+    back.replaceChildren();
+    const inner = h('div', { class: 'editor-back-inner' });
+    back.append(inner);
+    if (!hl) return;
+    const lines = text.split('\n');
+    lines.forEach((line, i) => {
+      const row = h('span', { class: 'eb-line' }, line);
+      Searcher.paint(row, hl, i, 0);
+      inner.append(row, '\n');
+    });
+  };
+  const syncScroll = () => { back.scrollTop = area.scrollTop; };
 
   const status = h('span', { class: 'grow' });
+  const emoji = h('button', {
+    class: 'plain emoji-btn', title: t('Эмодзи и символы (Win+.)'),
+    onclick: () => { area.focus(); window.api.showEmojiPanel(); },
+  }, '😀');
   const revert = h('button', { class: 'plain link', onclick: () => App.discardDraft(doc.id) }, t('Отменить изменения'));
   const save = h('button', { class: 'plain link strong', onclick: () => App.save(doc.id) }, t('Сохранить  ⌘S'));
-  const bar = h('div', { class: 'edit-bar' }, status, revert, save);
+  const bar = h('div', { class: 'edit-bar' }, status, emoji, revert, save);
   const sync = () => {
     const dirty = App.isDirty(doc);
     bar.classList.toggle('dirty', dirty);
@@ -880,7 +1008,12 @@ function editorView(doc, pane, size) {
   };
   sync();
 
-  area.addEventListener('input', () => { App.setDraft(doc, area.value); sync(); });
+  area.addEventListener('input', () => {
+    App.setDraft(doc, area.value);
+    sync();
+    if (App.isFindVisible && App.findQuery) { paintBack(); renderFind(); }
+  });
+  area.addEventListener('scroll', syncScroll);
   area.addEventListener('keydown', (e) => {
     if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
       e.preventDefault();
@@ -896,12 +1029,14 @@ function editorView(doc, pane, size) {
       if (!area.isConnected) return;
       area.setSelectionRange(saved.start, saved.end);
       area.scrollTop = saved.top;
+      syncScroll();
       if (saved.focused) area.focus();
     }, 0);
   } else if (!App.isSplit || App.focusedPane === pane) {
     setTimeout(() => { if (area.isConnected) area.focus(); }, 0);
   }
-  return h('div', { class: 'editor' }, bar, area);
+  paintBack();
+  return h('div', { class: 'editor' }, bar, h('div', { class: 'editor-wrap' }, back, area));
 }
 
 function sourceView(doc, scroller, size, hl, upTo) {
@@ -1070,6 +1205,7 @@ const SETTINGS_PANES = [
   ['syntax', 'Подсветка синтаксиса', 'code'],
   ['files', 'Файлы', 'doc'],
   ['language', 'Язык', 'globe'],
+  ['updates', 'Обновления', 'refresh'],
 ];
 let settingsPane = 'appearance';
 
@@ -1160,6 +1296,9 @@ function openSettings() {
     text: () => [
       card('Шрифт и размер', row('Шрифт', fontSelect), row('Размер', sizeInput, sizeLabel), row('Отступы заголовков', spacingInput, spacingLabel)),
       card('Исходник', check('Показывать номера строк', 'showLineNumbers')),
+      card('Проверка текста',
+        check('Проверять орфографию и грамматику в режиме правки', 'spellCheck'),
+        h('div', { class: 'small muted' }, t('Русский и английский: ошибки подчёркиваются, исправление — в контекстном меню. Работает в Markdown, TXT, RTF и TeX; в исходном коде проверка выключена.'))),
       previews[1]],
     syntax: () => [
       card('Подсветка синтаксиса',
@@ -1170,6 +1309,7 @@ function openSettings() {
       h('div', { class: 'btn-row' }, allBtn('Включить все', false), allBtn('Выключить все', true))],
     files: () => [card('Обновление', check('Обновлять файл автоматически, когда он изменился на диске', 'autoReload'))],
     language: () => [card('Язык интерфейса', language, h('div', { class: 'small muted' }, t('Язык меняется сразу.')))],
+    updates: () => [card('Обновления', ...updatesCard())],
   };
 
   const paintNav = () => nav.replaceChildren(...SETTINGS_PANES.map(([id, label, ic]) => h('button', {
@@ -1203,6 +1343,121 @@ function openSettings() {
       h('div', { class: 'settings-layout' }, nav, body))));
 }
 
+// ---- Updates ------------------------------------------------------------------
+
+/** Where an update stands: idle | checking | upToDate | available | downloading | installing | failed. */
+const Update = {
+  phase: 'idle', version: null, notes: '', progress: 0, message: '',
+  set(patch) { Object.assign(this, patch); updateViews.forEach((fn) => fn()); },
+};
+const updateViews = new Set();
+
+async function checkForUpdates(silent) {
+  if (['checking', 'downloading', 'installing'].includes(Update.phase)) return;
+  Update.set({ phase: 'checking' });
+  const res = await window.api.checkUpdate();
+  if (!res.ok) {
+    Update.set({ phase: silent ? 'idle' : 'failed', message: t('Не удалось проверить обновления. Проверьте подключение к интернету.') });
+  } else if (res.available) {
+    Update.set({ phase: 'available', version: res.version, notes: res.notes || '' });
+    if (silent) openUpdateDialog();
+  } else {
+    Update.set({ phase: 'upToDate' });
+  }
+}
+
+async function installUpdate() {
+  Update.set({ phase: 'downloading', progress: 0 });
+  const downloaded = await window.api.downloadUpdate();
+  if (!downloaded.ok) {
+    Update.set({ phase: 'failed', message: downloaded.code === 'ECHECKSUM'
+      ? t('Контрольная сумма файла не совпала. Обновление не установлено.')
+      : t('Не удалось скачать обновление.') });
+    return;
+  }
+  // Ask about unsaved edits before the app quits; the new version is started by a helper once it has exited.
+  if (!(await App.confirmDiscard(App.documents.map((d) => d.id)))) { Update.set({ phase: 'available' }); return; }
+  Update.set({ phase: 'installing' });
+  const applied = await window.api.applyUpdate();
+  if (!applied.ok) {
+    Update.set({ phase: 'failed', message: t('Скачанное обновление открыто в проводнике: запустите его вручную.') });
+  }
+}
+
+/** The status block with its buttons: used in Settings and in the dialog shown after the check at launch. */
+function updatesCard() {
+  const box = h('div', { class: 'update-box' });
+  const paint = () => {
+    const U = Update;
+    const busy = ['checking', 'downloading', 'installing'].includes(U.phase);
+    const kids = [];
+    if (U.phase === 'checking') kids.push(h('div', null, t('Проверяем обновления…')));
+    if (U.phase === 'upToDate') kids.push(h('div', { class: 'ok' }, '✓ ' + t('У вас установлена последняя версия.')));
+    if (U.phase === 'available') {
+      kids.push(h('div', { class: 'update-title' }, t('Вышла новая версия %@', U.version)),
+        h('div', { class: 'small muted' }, t('Установлена версия %@.', appVersion)),
+        U.notes ? h('pre', { class: 'update-notes' }, U.notes) : null,
+        h('div', { class: 'btn-row' },
+          h('button', { class: 'btn primary', onclick: installUpdate }, t('Скачать и установить')),
+          h('button', { class: 'btn', onclick: closeUpdateDialog }, t('Позже'))));
+    }
+    if (U.phase === 'downloading') {
+      kids.push(h('div', null, t('Загрузка обновления… %lld%%', Math.round(U.progress * 100))),
+        h('progress', { max: 1, value: U.progress }));
+    }
+    if (U.phase === 'installing') kids.push(h('div', null, t('Устанавливаем… Grizzly перезапустится.')));
+    if (U.phase === 'failed') kids.push(h('div', { class: 'warn' }, U.message));
+    box.replaceChildren(
+      h('div', { class: 'srow' }, h('div', { class: 'slabel' }, t('Установленная версия')), h('span', null, appVersion)),
+      h('div', { class: 'btn-row' }, h('button', { class: 'btn', disabled: busy, onclick: () => checkForUpdates(false) }, t('Проверить обновления'))),
+      ...kids,
+      h('div', { class: 'small muted' }, t('Grizzly проверяет GitHub при каждом запуске. Новая версия скачивается и устанавливается прямо из приложения.')));
+  };
+  paint();
+  const view = () => { if (box.isConnected) paint(); else updateViews.delete(view); };
+  updateViews.add(view);
+  return [box];
+}
+
+function closeUpdateDialog() { document.querySelectorAll('.modal-update').forEach((n) => n.remove()); }
+
+/** Shown over the window when the check at launch finds a newer version. */
+function openUpdateDialog() {
+  if (document.querySelector('.modal-update')) return;
+  const box = h('div', { class: 'update-box' });
+  const paint = () => {
+    const U = Update;
+    box.replaceChildren();
+    if (U.phase === 'available') {
+      box.append(h('div', { class: 'update-title' }, t('Вышла новая версия %@', U.version)),
+        h('div', { class: 'small muted' }, t('Установлена версия %@.', appVersion)),
+        U.notes ? h('pre', { class: 'update-notes' }, U.notes) : null,
+        h('div', { class: 'dialog-actions' },
+          h('button', { class: 'btn', onclick: closeUpdateDialog }, t('Позже')),
+          h('button', { class: 'btn primary', onclick: installUpdate }, t('Скачать и установить'))));
+    } else if (U.phase === 'downloading') {
+      box.append(h('div', null, t('Загрузка обновления… %lld%%', Math.round(U.progress * 100))), h('progress', { max: 1, value: U.progress }));
+    } else if (U.phase === 'installing') {
+      box.append(h('div', null, t('Устанавливаем… Grizzly перезапустится.')));
+    } else if (U.phase === 'failed') {
+      box.append(h('div', { class: 'warn' }, U.message),
+        h('div', { class: 'dialog-actions' }, h('button', { class: 'btn', onclick: closeUpdateDialog }, t('Закрыть'))));
+    } else {
+      closeUpdateDialog();
+    }
+  };
+  paint();
+  const view = () => { if (box.isConnected) paint(); else updateViews.delete(view); };
+  updateViews.add(view);
+  $('overlay-root').append(h('div', { class: 'modal-back modal-update' }, h('div', { class: 'dialog update' }, box)));
+}
+
+let appVersion = '';
+function initUpdates(version) {
+  appVersion = version;
+  window.api.onUpdateProgress((p) => Update.set({ progress: p }));
+}
+
 // ---- Commands shared by menu, toolbar and boot ------------------------------
 
 async function openFolders() {
@@ -1226,12 +1481,18 @@ async function openFiles() {
   if (paths && paths.length) App.open(paths);
 }
 
+/** The window is closing with unsaved edits: ask about every file (save / don't save / cancel), then really close. */
+async function closeWindow() {
+  if (await App.confirmDiscard(App.documents.map((d) => d.id))) await window.api.closeWindow();
+}
+
 function runCommand(action) {
   switch (action) {
     case 'open': openFiles(); break;
     case 'openFolder': openFolders(); break;
     case 'newFile': newFile(); break;
     case 'closeTab': if (App.current) App.close(App.current.id); break;
+    case 'closeWindow': closeWindow(); break;
     case 'settings': openSettings(); break;
     case 'find': App.showFind(); break;
     case 'findNext': App.stepMatch(1); break;

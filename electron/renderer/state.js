@@ -7,7 +7,7 @@ const byName = (a, b) => collator.compare(a.name, b.name);
 const Library = {
   RECENT_LIMIT: 20,
   HISTORY_STORED: 200,
-  data: { files: [], folders: [], history: [] },
+  data: { files: [], folders: [], history: [], tags: [] },
   missing: new Set(),
   caseInsensitive: false,
   onChange: () => {},
@@ -23,10 +23,12 @@ const Library = {
           files: (parsed.files || []).map((f) => ({
             id: f.id, path: f.path, name: f.name || baseName(f.path), folderID: f.folderID || null,
             isFavorite: !!f.isFavorite, lastOpened: f.lastOpened || null, bookmarks: f.bookmarks || [],
+            tags: Array.isArray(f.tags) ? f.tags.filter((x) => typeof x === 'string') : [],
           })),
           folders: (parsed.folders || []).map((f) => ({ id: f.id, name: f.name, isExpanded: f.isExpanded !== false, sourcePath: f.sourcePath || null })),
           // The history lives apart from the files, so removing a file from the sidebar keeps its record.
           history: (parsed.history || []).filter((h) => h && h.path && h.date).map((h) => ({ path: h.path, name: h.name || baseName(h.path), date: h.date })),
+          tags: Array.isArray(parsed.tags) ? parsed.tags.filter((x) => typeof x === 'string') : [],
         };
         if (!parsed.history) {
           this.data.history = this.data.files.filter((f) => f.lastOpened)
@@ -74,7 +76,7 @@ const Library = {
     if (existing) return existing;
     const entry = {
       id: crypto.randomUUID(), path, name: baseName(path), folderID: null,
-      isFavorite: false, lastOpened: null, bookmarks: [],
+      isFavorite: false, lastOpened: null, bookmarks: [], tags: [],
     };
     this.mutate((d) => d.files.push(entry));
     return entry;
@@ -136,6 +138,59 @@ const Library = {
       f.folderID = folderID || null;
       const folder = folderID && d.folders.find((x) => x.id === folderID);
       if (folder) folder.isExpanded = true;
+    });
+  },
+
+  // Tags
+
+  /** Tag text as stored: trimmed, without a leading "#". */
+  cleanTag(raw) { return String(raw || '').trim().replace(/^#+/, '').trim(); },
+  sameTag(a, b) { return a.toLowerCase() === b.toLowerCase(); },
+  /** Every known tag, alphabetically: the ones created by the user plus any a file still carries. */
+  get allTags() {
+    const seen = new Set();
+    const out = [];
+    for (const tag of [...this.data.tags, ...this.data.files.flatMap((f) => f.tags)]) {
+      if (!seen.has(tag.toLowerCase())) { seen.add(tag.toLowerCase()); out.push(tag); }
+    }
+    return out.sort((a, b) => collator.compare(a, b));
+  },
+  filesWithTag(tag) { return this.data.files.filter((f) => f.tags.some((x) => this.sameTag(x, tag))).sort(byName); },
+  hasTag(fileID, tag) { const f = this.file(fileID); return !!f && f.tags.some((x) => this.sameTag(x, tag)); },
+  /** Creates a tag and returns its stored spelling; an existing tag is returned as it is. Null for an empty name. */
+  createTag(raw) {
+    const tag = this.cleanTag(raw);
+    if (!tag) return null;
+    const existing = this.allTags.find((x) => this.sameTag(x, tag));
+    if (existing) return existing;
+    this.mutate((d) => d.tags.push(tag));
+    return tag;
+  },
+  toggleTag(fileID, tag) {
+    this.mutate((d) => {
+      const f = d.files.find((x) => x.id === fileID);
+      if (!f) return;
+      const at = f.tags.findIndex((x) => this.sameTag(x, tag));
+      if (at >= 0) f.tags.splice(at, 1); else f.tags.push(tag);
+    });
+  },
+  renameTag(old, raw) {
+    const next = this.cleanTag(raw);
+    if (!next) return;
+    const swap = (list) => {
+      const out = [];
+      for (const x of list) {
+        const v = this.sameTag(x, old) ? next : x;
+        if (!out.some((y) => this.sameTag(y, v))) out.push(v);
+      }
+      return out;
+    };
+    this.mutate((d) => { d.tags = swap(d.tags); d.files.forEach((f) => { f.tags = swap(f.tags); }); });
+  },
+  deleteTag(tag) {
+    this.mutate((d) => {
+      d.tags = d.tags.filter((x) => !this.sameTag(x, tag));
+      d.files.forEach((f) => { f.tags = f.tags.filter((x) => !this.sameTag(x, tag)); });
     });
   },
 
@@ -347,6 +402,8 @@ const App = {
   setDraft(doc, text) {
     if (text === this.baseText(doc)) this.drafts.delete(doc.id); else this.drafts.set(doc.id, text);
     this.syncDirty();
+    // Hits move while the text is typed; recount them without jumping to the current one.
+    if (this.isFindVisible && this.mode === 'edit' && this.findQuery) this.recomputeMatches(false, false);
   },
 
   discardDraft(id) {
@@ -369,11 +426,14 @@ const App = {
     try {
       let text = this.drafts.get(id);
       if (doc.text.includes('\r\n')) text = text.replace(/\n/g, '\r\n');
-      const result = await window.api.writeFile(doc.path, text, doc.encoding);
+      let result = await window.api.writeFile(doc.path, text, doc.encoding);
+      if (!result.ok && result.code === 'EENCODE' && doc.encoding !== 'UTF-8') {
+        // Emoji and other characters outside an 8-bit encoding: offer UTF-8 instead of losing them.
+        if (!(await window.api.confirmUtf8(doc.name, doc.encoding))) return false;
+        result = await window.api.writeFile(doc.path, text, 'UTF-8');
+      }
       if (!result.ok) {
-        this.fail(result.code === 'EENCODE'
-          ? t('Не удалось сохранить «%@»: в тексте есть символы, которых нет в кодировке %@.', doc.name, doc.encoding)
-          : t('Не удалось сохранить «%@».', doc.name));
+        this.fail(t('Не удалось сохранить «%@».', doc.name));
         return false;
       }
       await this.reload(id);
@@ -429,16 +489,19 @@ const App = {
   },
 
   /** Hits are counted in the focused pane's document; every pane paints the same query. */
-  recomputeMatches(reset) {
+  recomputeMatches(reset, reveal = true) {
     const doc = this.current;
-    if (!this.isFindVisible || !this.findQuery || !doc || this.mode === 'edit') {
+    if (!this.isFindVisible || !this.findQuery || !doc) {
       this.matches = [];
       this.matchIndex = 0;
       return;
     }
-    this.matches = Searcher.matches(this.findQuery, doc, this.mode);
+    // The editor is searched as it is right now, unsaved changes included.
+    this.matches = this.mode === 'edit'
+      ? Searcher.matchesInLines(this.findQuery, this.textFor(doc).split('\n'))
+      : Searcher.matches(this.findQuery, doc, this.mode);
     this.matchIndex = reset ? 0 : Math.min(this.matchIndex, Math.max(0, this.matches.length - 1));
-    this.revealCurrentMatch();
+    if (reveal) this.revealCurrentMatch();
   },
 
   stepMatch(delta) {

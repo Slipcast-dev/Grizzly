@@ -36,6 +36,29 @@ enum Searcher {
         mode == .reading && doc.type == .markdown
     }
 
+    /// Hits in plain lines (the text being edited), one unit per line.
+    static func matches(query: String, inLines lines: [String]) -> [SearchMatch] {
+        guard !query.isEmpty else { return [] }
+        var result: [SearchMatch] = []
+        for (i, line) in lines.enumerated() {
+            for k in ranges(of: query, in: line).indices { result.append(SearchMatch(unit: i, occurrence: k)) }
+        }
+        return result
+    }
+
+    /// File and folder names: every word typed has to be the beginning of the name or of one of its words,
+    /// so "гриз", "read me" and "me" all find "Read Me.md".
+    static func nameMatches(_ name: String, query: String) -> Bool {
+        let typed = query.split { $0.isWhitespace }.map(String.init)
+        guard !typed.isEmpty else { return true }
+        let opts: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
+        let words = name.split { !$0.isLetter && !$0.isNumber }.map(String.init)
+        return typed.allSatisfy { t in
+            name.range(of: t, options: opts.union(.anchored)) != nil
+                || words.contains { $0.range(of: t, options: opts.union(.anchored)) != nil }
+        }
+    }
+
     static func matches(query: String, in doc: Document, mode: ReadMode) -> [SearchMatch] {
         guard !query.isEmpty else { return [] }
         var result: [SearchMatch] = []
