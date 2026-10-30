@@ -15,6 +15,7 @@ struct ContentView: View {
             DetailView(fontSize: CGFloat(prefs.fontSize))
                 .background(theme.background)
         }
+        .background(WindowFrameSaver(name: "GrizzlyMainWindow"))
         .navigationTitle(state.current?.name ?? "Grizzly")
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -120,4 +121,17 @@ struct DetailView: View {
             }
         }
     }
+}
+
+/// Remembers the window's size and position between launches (AppKit stores it under `name`).
+struct WindowFrameSaver: NSViewRepresentable {
+    let name: String
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { view.window?.setFrameAutosaveName(name) }
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {}
 }

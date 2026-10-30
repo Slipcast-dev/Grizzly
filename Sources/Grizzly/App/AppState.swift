@@ -269,9 +269,17 @@ final class AppState: ObservableObject {
         popup.selectItem(at: Self.exportExtensions.firstIndex(of: ext) ?? 0)
         let label = NSTextField(labelWithString: L("Формат:"))
         let stack = NSStackView(views: [label, popup])
-        stack.spacing = 8
-        stack.edgeInsets = NSEdgeInsets(top: 8, left: 0, bottom: 8, right: 0)
-        panel.accessoryView = stack
+        stack.spacing = 10
+        stack.alignment = .centerY
+        // A fixed-width container keeps the row centered under the panel's own fields instead of hugging the left edge.
+        let box = NSView(frame: NSRect(x: 0, y: 0, width: 460, height: 44))
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        box.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.centerXAnchor.constraint(equalTo: box.centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: box.centerYAnchor),
+        ])
+        panel.accessoryView = box
 
         panel.nameFieldStringValue = base
         guard panel.runModal() == .OK, var url = panel.url else { return nil }
@@ -279,6 +287,13 @@ final class AppState: ObservableObject {
             url.appendPathExtension(Self.exportExtensions[popup.indexOfSelectedItem])
         }
         return url
+    }
+
+    /// Puts the whole text of the current document on the pasteboard.
+    func copyAllText() {
+        guard let doc = current else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text(for: doc), forType: .string)
     }
 
     /// Saves a copy of the current document (with unsaved edits) in a chosen format and place.

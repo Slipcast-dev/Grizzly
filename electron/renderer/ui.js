@@ -314,7 +314,7 @@ function renderSidebar() {
   seg.replaceChildren(...SECTIONS.map((s) => h('button', {
     class: App.ui.sidebarSection === s.id ? 'on' : '', title: s.title(),
     onclick: () => { App.ui.sidebarSection = s.id; cancelNaming(); App.render(['sidebar']); },
-  }, icon(s.icon, 16))));
+  }, icon(s.icon, 17))));
   renderSidebarList();
 }
 
@@ -329,10 +329,12 @@ function renderSidebarList() {
 
   if (section === 'files') {
     const head = h('div', { class: 'sec-head' }, h('span', null, t('Файлы')),
-      h('button', {
-        class: 'plain', title: t('Новая папка'),
-        onclick: () => { SidebarUI.pendingMove = null; beginNaming(); },
-      }, icon('folderPlus', 16)));
+      h('div', { class: 'sec-tools' },
+        h('button', { class: 'plain sq', title: t('Новый файл (⌘N)'), onclick: () => runCommand('newFile') }, icon('docPlus', 17)),
+        h('button', {
+          class: 'plain sq', title: t('Новая папка'),
+          onclick: () => { SidebarUI.pendingMove = null; beginNaming(); },
+        }, icon('folderPlus', 17))));
     frag.append(head);
     if (SidebarUI.isNaming) frag.append(nameField());
     const folders = SidebarUI.query
@@ -1206,6 +1208,20 @@ function initDragAndDrop() {
 }
 
 document.addEventListener('keydown', (e) => {
+  // Select All outside of text fields selects the whole document text, not just the visible part of the page.
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'a'
+      && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement && document.activeElement.tagName)) {
+    const area = (document.querySelector('.pane-header.focused') || {}).parentElement?.querySelector('.scroll') || document.querySelector('.scroll');
+    if (area) {
+      e.preventDefault();
+      const range = document.createRange();
+      range.selectNodeContents(area);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+    return;
+  }
   if (e.key === ' ' && !e.ctrlKey && !e.metaKey && !e.altKey && !/^(INPUT|TEXTAREA|BUTTON)$/.test(document.activeElement && document.activeElement.tagName)) {
     if (document.querySelector('.modal-preview')) { e.preventDefault(); closeQuickLook(); return; }
     if (App.selectedFileID && !document.querySelector('.modal-back')) { e.preventDefault(); quickLook(App.selectedFileID); return; }
