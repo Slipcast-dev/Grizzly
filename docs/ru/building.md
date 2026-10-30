@@ -13,9 +13,11 @@
 Другая архитектура и отдельная папка вывода:
 
 ```bash
-ARCH=arm64  OUT=build/arm64 ./scripts/build-app.sh && ARCH=arm64  OUT=build/arm64 ./scripts/make-dmg.sh
-ARCH=x86_64 OUT=build/x64   ./scripts/build-app.sh && ARCH=x86_64 OUT=build/x64   ./scripts/make-dmg.sh
+ARCH=arm64  OUT=build/arm64 ./scripts/build-app.sh && ARCH=arm64 OUT=build/arm64 ./scripts/make-dmg.sh   # -> Grizzly-<версия>-arm64.dmg
+ARCH=x86_64 OUT=build/x64   ./scripts/build-app.sh && ARCH=x64   OUT=build/x64   ./scripts/make-dmg.sh   # -> Grizzly-<версия>-x64.dmg
 ```
+
+`build-app.sh` принимает архитектуру компилятора (`x86_64`), `make-dmg.sh` — метку для имени файла (`x64`): встроенное обновление ищет `*-arm64.dmg` и `*-x64.dmg`.
 
 Подпись и нотаризация для собственной раздачи (по желанию):
 

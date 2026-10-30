@@ -4,7 +4,7 @@ Grizzly is two implementations of one design: a native macOS app and an Electron
 translation tables and file-type rules, not code.
 
 ```
-Sources/Grizzly/          macOS app (SwiftUI, ~5.4k lines)
+Sources/Grizzly/          macOS app (SwiftUI, ~5.5k lines)
   App/        AppState (tabs, drafts, tags, notifications), Settings, Theme, `UpdateManager` (check, download, install), entry point and menu commands
   Core/       Document model, file loading/encodings, Markdown parser, CSV, syntax coloring (`SyntaxEngine` scans comments/strings across lines, `Syntax` maps roles to theme colors), search, `Updater` (release parsing, versions, checksums)
   Features/   Tab bar, panes, `SelectableText` (one selectable text view for Reading and Source, line-number gutter), editor, find bar, sidebar with tag browser, settings, notifications
@@ -31,16 +31,17 @@ samples/      One file of each supported type for manual testing
 3. `FileType` maps the extension to a type; `Document` builds the representation (Markdown blocks, CSV table, or
    syntax-colored lines).
 4. Panes render the document in the selected mode; `Search` produces matches that panes highlight.
-5. A file watcher flags on-disk changes; the pane shows a reload banner and never overwrites unsaved edits silently.
+5. After an in-app update the app saves its tabs, panes, mode and scroll position (UserDefaults on macOS, `session.json` on Windows), restarts, and restores them once; a record older than ten minutes is ignored.
+6. A file watcher flags on-disk changes; the pane shows a reload banner and never overwrites unsaved edits silently.
 
 ## Security model
 
 - The only network code is the update check: a GET to `api.github.com/repos/Slipcast-dev/Grizzly/releases/latest` at launch and from Settings. Downloads are accepted only from `github.com` / `*.githubusercontent.com` over HTTPS, must match the SHA-256 in the release notes (a release without one is refused), are limited in size, every redirect must stay on GitHub, and are installed only after unsaved edits were dealt with. There is no telemetry.
 - HTML files are displayed as source, never rendered or executed.
 - Electron renderer: `sandbox: true`, `contextIsolation: true`, `nodeIntegration: false`, and a
-  Content-Security-Policy of `default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:`.
-  File access happens in the main process through the preload bridge.
-- The Electron main process answers file IPC only to the app's own page and only for absolute paths with supported extensions.
+  Content-Security-Policy of `default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'`.
+  File access happens in the main process through the preload bridge. The page cannot request device permissions, and DevTools are disabled in the packaged app.
+- Every Electron IPC handler answers only the app's own page. File IPC accepts only absolute paths with supported extensions; writing is further limited to files the user opened, created or chose in a dialog, and files over 100 MB are not read.
 - Quick Look HTML escapes quotes and makes only `http`, `https` and `mailto` links clickable.
 - The library stores references (paths) and tags only. The one operation that edits the files it points to is *Rename tag* / *Delete tag*, which rewrites `#tag` in their text after a confirmation (RTF files and files with unsaved edits are skipped).
 - Release builds are unsigned/ad-hoc signed; integrity is established with published SHA-256 checksums.

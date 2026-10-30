@@ -36,9 +36,9 @@ Get the files from the **[latest release](https://github.com/Slipcast-dev/Grizzl
 
 | Platform | File | Notes |
 |---|---|---|
-| macOS 13+, Apple Silicon | `Grizzly-1.2.1-arm64.dmg` | Drag *Grizzly* to *Applications* |
-| macOS 13+, Intel | `Grizzly-1.2.1-x64.dmg` | Drag *Grizzly* to *Applications* |
-| Windows 10/11, x64 | `Grizzly-1.2.1-portable.exe` | Portable, no installer |
+| macOS 13+, Apple Silicon | `Grizzly-1.2.2-arm64.dmg` | Drag *Grizzly* to *Applications* |
+| macOS 13+, Intel | `Grizzly-1.2.2-x64.dmg` | Drag *Grizzly* to *Applications* |
+| Windows 10/11, x64 | `Grizzly-1.2.2-portable.exe` | Portable, no installer |
 
 > [!IMPORTANT]
 > The builds are **not code-signed or notarized**. macOS Gatekeeper and Windows SmartScreen will warn on first

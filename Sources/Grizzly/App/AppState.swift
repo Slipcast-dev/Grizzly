@@ -89,6 +89,7 @@ final class AppState: ObservableObject {
     /// Called once the app has launched: opens whatever arrived while it was starting.
     func markReady() {
         isReady = true
+        restoreSessionIfAny()
         let queued = pendingExternal
         pendingExternal = []
         if !queued.isEmpty { open(urls: queued) }
@@ -103,6 +104,77 @@ final class AppState: ObservableObject {
             }
             let entry = library.add(url: url)
             show(entry.id, url: url, pane: inRight ? .right : nil)
+        }
+    }
+
+    // MARK: Session kept across an update restart
+
+    private static let sessionKey = "sessionForRestart"
+
+    /// The text views of the window, left to right (the sidebar has none).
+    private func textScrollViews() -> [NSScrollView] {
+        var found: [NSScrollView] = []
+        func walk(_ v: NSView) {
+            if let s = v as? NSScrollView, s.documentView is NSTextView, s.frame.width > 120 { found.append(s) }
+            v.subviews.forEach(walk)
+        }
+        if let root = (NSApp.keyWindow ?? NSApp.windows.first)?.contentView { walk(root) }
+        return found.sorted { $0.convert($0.bounds, to: nil).minX < $1.convert($1.bounds, to: nil).minX }
+    }
+
+    /// Writes what is open (tabs, panes, mode, scroll) so that the next launch can put it back.
+    func saveSessionForRestart() {
+        func index(_ id: UUID?) -> Int { documents.firstIndex { $0.id == id } ?? -1 }
+        let scrolls = textScrollViews().map { v -> Double in
+            let room = (v.documentView?.frame.height ?? 0) - v.contentView.bounds.height
+            return room > 1 ? Double(v.contentView.bounds.origin.y / room) : 0
+        }
+        let session: [String: Any] = [
+            "paths": documents.map { $0.url.path },
+            "left": index(selection), "right": index(rightSelection),
+            "split": isSplit, "mode": mode.rawValue, "scroll": scrolls,
+            "date": Date().timeIntervalSince1970,
+        ]
+        UserDefaults.standard.set(session, forKey: Self.sessionKey)
+    }
+
+    /// Reopens the tabs saved before an update restart (only a fresh record is used, once).
+    private func restoreSessionIfAny() {
+        let defaults = UserDefaults.standard
+        guard let s = defaults.dictionary(forKey: Self.sessionKey) else { return }
+        defaults.removeObject(forKey: Self.sessionKey)
+        guard let paths = s["paths"] as? [String], !paths.isEmpty,
+              Date().timeIntervalSince1970 - (s["date"] as? Double ?? 0) < 600 else { return }
+
+        var ids: [Int: UUID] = [:]
+        for (i, path) in paths.enumerated() {
+            let url = URL(fileURLWithPath: path)
+            guard FileManager.default.fileExists(atPath: path) else { continue }
+            show(library.file(atPath: url.standardizedFileURL.path)?.id, url: url, pane: .left)
+            if let doc = documents.first(where: { $0.url.standardizedFileURL == url.standardizedFileURL }) { ids[i] = doc.id }
+        }
+        if let m = s["mode"] as? String, let mode = ReadMode(rawValue: m) { self.mode = mode }
+        let left = ids[s["left"] as? Int ?? -1] ?? documents.first?.id
+        let right = ids[s["right"] as? Int ?? -1]
+        selection = left
+        if (s["split"] as? Bool) == true, let right, right != left {
+            rightSelection = right
+            isSplit = true
+        }
+        if let id = selection { selectedFileID = documents.first { $0.id == id }?.libraryID }
+
+        // The text views appear a moment later; put each back at its saved position.
+        let scrolls = s["scroll"] as? [Double] ?? []
+        for delay in [0.4, 1.0, 2.0] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self else { return }
+                for (view, fraction) in zip(self.textScrollViews(), scrolls) where fraction > 0 {
+                    let room = (view.documentView?.frame.height ?? 0) - view.contentView.bounds.height
+                    guard room > 1 else { continue }
+                    view.contentView.scroll(to: NSPoint(x: 0, y: fraction * room))
+                    view.reflectScrolledClipView(view.contentView)
+                }
+            }
         }
     }
 

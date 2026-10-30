@@ -27,5 +27,7 @@ contextBridge.exposeInMainWorld('api', {
   pathForFile: (file) => webUtils.getPathForFile(file),
   onMenu: (cb) => ipcRenderer.on('menu', (_e, action) => cb(action)),
   onOpenFiles: (cb) => ipcRenderer.on('open-files', (_e, paths) => cb(paths)),
+  saveSession: (session) => ipcRenderer.invoke('session:save', session),
+  takeSession: () => ipcRenderer.invoke('session:take'),
   ready: () => ipcRenderer.send('renderer:ready'),
 });

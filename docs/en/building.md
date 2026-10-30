@@ -13,9 +13,11 @@ the scripts call `swiftc` directly.
 Other architecture, separate output folder:
 
 ```bash
-ARCH=arm64  OUT=build/arm64 ./scripts/build-app.sh && ARCH=arm64  OUT=build/arm64 ./scripts/make-dmg.sh
-ARCH=x86_64 OUT=build/x64   ./scripts/build-app.sh && ARCH=x86_64 OUT=build/x64   ./scripts/make-dmg.sh
+ARCH=arm64  OUT=build/arm64 ./scripts/build-app.sh && ARCH=arm64 OUT=build/arm64 ./scripts/make-dmg.sh   # -> Grizzly-<version>-arm64.dmg
+ARCH=x86_64 OUT=build/x64   ./scripts/build-app.sh && ARCH=x64   OUT=build/x64   ./scripts/make-dmg.sh   # -> Grizzly-<version>-x64.dmg
 ```
+
+`build-app.sh` takes the compiler architecture (`x86_64`), `make-dmg.sh` takes the label for the file name (`x64`): the in-app updater looks for `*-arm64.dmg` and `*-x64.dmg`.
 
 Optional signing and notarization for your own distribution:
 

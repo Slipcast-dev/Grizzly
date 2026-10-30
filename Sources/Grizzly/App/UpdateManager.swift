@@ -78,7 +78,7 @@ final class UpdateManager: ObservableObject {
             } catch let error as UpdateError {
                 self.phase = .failed(error.message)
             } catch {
-                self.phase = .failed(L("Не удалось установить обновление."))
+                self.phase = .failed(L("Не удалось установить обновление.") + " (\(error.localizedDescription))")
             }
         }
     }
@@ -87,58 +87,94 @@ final class UpdateManager: ObservableObject {
 
     private struct UpdateError: Error { let message: String }
 
-    private static let maxDownload = 500.0 * 1024 * 1024
+    private static let maxDownload: Int64 = 500 * 1024 * 1024
 
+    /// Downloads the disk image. A dropped connection is retried and continues where it stopped (HTTP Range);
+    /// the SHA-256 from the release notes is checked over the finished file.
     private func download(_ release: ReleaseInfo) async throws -> URL {
         // A release without a published SHA-256 is never installed.
-        guard release.sha256 != nil else { throw UpdateError(message: L("Не удалось скачать обновление.")) }
+        guard let expected = release.sha256 else { throw UpdateError(message: L("Не удалось скачать обновление.")) }
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("grizzly-update-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let file = dir.appendingPathComponent((release.assetName as NSString).lastPathComponent)
         FileManager.default.createFile(atPath: file.path, contents: nil)
-        let out = try FileHandle(forWritingTo: file)
-        defer { try? out.close() }
 
-        var request = URLRequest(url: release.assetURL, timeoutInterval: 30)
-        request.setValue("Grizzly/\(currentVersion)", forHTTPHeaderField: "User-Agent")
-        let (bytes, response) = try await URLSession.shared.bytes(for: request)
-        guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw UpdateError(message: L("Не удалось скачать обновление.")) }
-        // Redirects must still end on a trusted GitHub host.
-        guard let finalURL = response.url, UpdateCheck.isTrustedDownload(finalURL) else {
-            throw UpdateError(message: L("Не удалось скачать обновление."))
-        }
-        let total = Double(response.expectedContentLength)
-        if total > Self.maxDownload { throw UpdateError(message: L("Не удалось скачать обновление.")) }
-
-        var hasher = SHA256()
-        var chunk = Data()
-        var received = 0.0
+        var received: Int64 = 0
+        var total: Int64 = 0
         var lastShown = 0.0
-        for try await byte in bytes {
-            chunk.append(byte)
-            if chunk.count >= 1 << 16 {
-                try out.write(contentsOf: chunk)
-                hasher.update(data: chunk)
-                received += Double(chunk.count)
-                if received > Self.maxDownload { throw UpdateError(message: L("Не удалось скачать обновление.")) }
-                chunk.removeAll(keepingCapacity: true)
-                try Task.checkCancellation()
-                if total > 0, received / total - lastShown > 0.01 {
-                    lastShown = received / total
-                    phase = .downloading(lastShown)
+        var lastError: Error?
+        var finished = false
+
+        for attempt in 0..<5 where !finished {
+            if attempt > 0 { try await Task.sleep(nanoseconds: UInt64(attempt) * 1_500_000_000) }
+            do {
+                var request = URLRequest(url: release.assetURL, timeoutInterval: 30)
+                request.setValue("Grizzly/\(currentVersion)", forHTTPHeaderField: "User-Agent")
+                if received > 0 { request.setValue("bytes=\(received)-", forHTTPHeaderField: "Range") }
+                let (bytes, response) = try await URLSession.shared.bytes(for: request)
+                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                // Redirects must still end on a trusted GitHub host.
+                guard status == 200 || status == 206, let finalURL = response.url, UpdateCheck.isTrustedDownload(finalURL) else {
+                    throw UpdateError(message: L("Не удалось скачать обновление."))
                 }
+                let out = try FileHandle(forWritingTo: file)
+                defer { try? out.close() }
+                if status == 206 {
+                    try out.seekToEnd()
+                } else {
+                    // The server sent the whole file again.
+                    try out.truncate(atOffset: 0)
+                    received = 0
+                }
+                let length = max(response.expectedContentLength, 0)
+                total = received + length
+                if total > Self.maxDownload { throw UpdateError(message: L("Не удалось скачать обновление.")) }
+
+                var chunk = Data()
+                for try await byte in bytes {
+                    chunk.append(byte)
+                    if chunk.count >= 1 << 16 {
+                        try out.write(contentsOf: chunk)
+                        received += Int64(chunk.count)
+                        chunk.removeAll(keepingCapacity: true)
+                        try Task.checkCancellation()
+                        if total > 0, Double(received) / Double(total) - lastShown > 0.01 {
+                            lastShown = Double(received) / Double(total)
+                            phase = .downloading(lastShown)
+                        }
+                    }
+                }
+                if !chunk.isEmpty { try out.write(contentsOf: chunk); received += Int64(chunk.count) }
+                if length > 0 && received != total { throw URLError(.networkConnectionLost) }
+                finished = true
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch let error as UpdateError {
+                throw error
+            } catch {
+                lastError = error
             }
         }
-        if !chunk.isEmpty { try out.write(contentsOf: chunk); hasher.update(data: chunk) }
+        guard finished else {
+            try? FileManager.default.removeItem(at: dir)
+            let why = lastError?.localizedDescription ?? ""
+            throw UpdateError(message: L("Не удалось скачать обновление. Проверьте подключение к интернету.") + (why.isEmpty ? "" : " (\(why))"))
+        }
 
-        if let expected = release.sha256 {
-            let actual = hasher.finalize().map { String(format: "%02x", $0) }.joined()
-            guard actual == expected else {
-                try? FileManager.default.removeItem(at: dir)
-                throw UpdateError(message: L("Контрольная сумма файла не совпала. Обновление не установлено."))
-            }
+        let actual = try Self.sha256(of: file)
+        guard actual == expected else {
+            try? FileManager.default.removeItem(at: dir)
+            throw UpdateError(message: L("Контрольная сумма файла не совпала. Обновление не установлено."))
         }
         return file
+    }
+
+    nonisolated private static func sha256(of file: URL) throws -> String {
+        let handle = try FileHandle(forReadingFrom: file)
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        while let data = try handle.read(upToCount: 1 << 20), !data.isEmpty { hasher.update(data: data) }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
     // MARK: Install
@@ -192,10 +228,16 @@ final class UpdateManager: ObservableObject {
             phase = .idle
             return
         }
+        // Remember tabs, mode and scroll position: the new copy puts them back when it starts.
+        state.saveSessionForRestart()
         let script = """
+        exec >>"${TMPDIR:-/tmp}/grizzly-update.log" 2>&1
         for i in $(seq 1 300); do kill -0 "$1" 2>/dev/null || break; sleep 0.2; done
         kill -0 "$1" 2>/dev/null && exit 1
-        ditto "$2" "$3.update" && rm -rf "$3" && mv "$3.update" "$3"
+        rm -rf "$3.update" "$3.old"
+        ditto "$2" "$3.update" || exit 1
+        mv "$3" "$3.old" || exit 1
+        if mv "$3.update" "$3"; then rm -rf "$3.old"; else mv "$3.old" "$3"; fi
         open "$3"
         """
         let helper = Process()
