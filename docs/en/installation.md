@@ -50,7 +50,7 @@ Grizzly ships a Quick Look extension that previews Markdown, YAML, CSV/TSV and l
 
 Troubleshooting:
 - *Grizzly* appears twice in the Quick Look list: macOS found more than one copy of the app. Keep only `/Applications/Grizzly.app` (delete other copies, e.g. from the Downloads folder or the mounted disk image), then run `qlmanage -r`.
-- The preview does not appear or never loads: make sure you run version 0.3.2 or later, the extension is switched on, then run `qlmanage -r` and press Space again.
+- The preview does not appear or never loads: make sure the extension is switched on, then run `qlmanage -r` and press Space again.
 
 ## 3. Windows
 

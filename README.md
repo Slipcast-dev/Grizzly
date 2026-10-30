@@ -16,7 +16,8 @@
 
 ---
 
-**Grizzly** is a small reader for Markdown and plain-text files. It opens a document, renders it the way you
+**Grizzly** is a small reader for Markdown, plain-text and source-code files (with syntax highlighting for Python, Swift,
+C/C++, C#, JavaScript, TypeScript, CSS and PHP). It opens a document, renders it the way you
 would like to read it, and gets out of the way. The macOS app is native (SwiftUI); the Windows app is a
 portable Electron port with the same features.
 
