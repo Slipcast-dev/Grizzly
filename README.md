@@ -47,19 +47,22 @@ Get the files from the **[latest release](https://github.com/Slipcast-dev/Grizzl
 
 ## Features
 
-- **Reading mode** — Markdown with headings, lists, task lists, quotes, code blocks, tables and links.
+- **Reading mode** — Markdown with headings, lists, task lists, quotes, code blocks, tables and links. Reading and Source are real text views: drag across lines, `⌘A` / `Ctrl+A` selects the whole document, `⌘C` copies it.
 - **Source mode** — line numbers, clickable line **bookmarks** (kept between sessions), syntax colors for
   **Python, Swift, C/C++, C#, JavaScript, TypeScript, CSS and PHP** (also inside fenced code blocks in Markdown) as well as
   JSON, YAML, INI/TOML, XML/HTML, TeX and log files. Colors follow the theme; comments and strings that span several lines are handled.
 - **New file** — `⌘N` / `Ctrl+N`: pick a name, folder and format; the file is created with a small template and opens for editing.
 - **Edit mode** — edit and save in place; the original encoding (UTF-8 with/without BOM, UTF-16, Windows-1251,
-  ISO-8859-1) is preserved.
+  ISO-8859-1) is preserved (a file that cannot hold emoji is offered UTF-8). *Undo* steps back one word at a time; spelling and grammar are checked in Russian and English (Markdown, TXT, RTF, TeX).
 - **CSV / TSV tables** with automatic delimiter detection.
 - **Save As…** — save a copy in any supported format and location, without touching the original.
 - **Find** with live highlighting, next / previous match; also in Edit mode.
-- **Search files, tags, spell check (RU/EN), emoji** and **in-app updates** (*Settings → Updates*).
+- **Search files** by the beginning of a name or of any word in it (files and folders).
+- **Tags like in Apple Notes** — `#hashtags` (emoji allowed) written in a file are its tags: colored in the text, suggested while typing, listed in the sidebar; click one or several to list the files that carry them; rename or delete a tag everywhere.
+- **Notifications** for saving, copying, tags and other actions; an emoji picker button in Edit mode.
+- **Updates** — *Settings → Updates* checks GitHub (also at every launch) and installs a new version from inside the app.
 - **Tabs** and **two files side by side**.
-- **Virtual library** — folders and favorites that never touch your files, plus an open history that survives removing a file from the sidebar.
+- **Virtual library** — folders and favorites that never touch your files (only renaming or deleting a tag edits the text of files that use it, after a confirmation), plus an open history that survives removing a file from the sidebar.
 - **Live reload** — a banner appears when the file changes on disk (handy for files written by scripts or AI tools).
 - **7 themes** (Xcode, GitHub, Solarized, Dracula, Monokai, Nord, One Dark), light / dark / follow system,
   font and size choices.
@@ -88,13 +91,15 @@ Supported extensions: `md markdown mdown txt text log json yaml yml csv tsv xml 
 | Reading / Source / Edit | `⌥⌘1` / `⌥⌘2` / `⌥⌘3` | `Ctrl+Alt+1` / `2` / `3` |
 | Save As… | `⇧⌘S` | `Ctrl+Shift+S` |
 | Reload file | `⌘R` | `Ctrl+R` |
+| Select all / copy (Reading, Source) | `⌘A` / `⌘C` | `Ctrl+A` / `Ctrl+C` |
+| Undo / redo (Edit) | `⌘Z` / `⇧⌘Z` | `Ctrl+Z` / `Ctrl+Shift+Z` |
 | Larger / smaller text | `⌘+` / `⌘-` | `Ctrl++` / `Ctrl+-` |
 
 More in the [User guide](docs/en/usage.md).
 
 ## Privacy and security
 
-Grizzly works fully offline: no telemetry, no network access, no accounts. The Windows app runs its UI in a
+Grizzly has no telemetry and no accounts. Its only network access is the update check against the public GitHub Releases API (at launch and from *Settings → Updates*); a download is installed only from GitHub over HTTPS and is verified against the SHA-256 in the release notes. The Windows app runs its UI in a
 sandboxed renderer with context isolation and a strict Content-Security-Policy. Report vulnerabilities
 privately — see [SECURITY.md](SECURITY.md).
 

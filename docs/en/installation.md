@@ -65,7 +65,7 @@ window that is already running.
 
 ## Updating and uninstalling
 
-Grizzly does not update itself and never contacts the network. To update, download the new release.
+Grizzly checks GitHub for a newer release at every launch and in *Settings → Updates*, and can download and install it for you (the app must be in a folder you can write to, normally *Applications*; on Windows the portable .exe is replaced). You can still update by hand: download the new release and replace the old file. The checksum from the release notes is verified before installing.
 
 - **macOS:** drag Grizzly to the Trash. Optional data: `~/Library/Application Support/Grizzly` (library) and the
   `app.grizzly.Grizzly` preferences.

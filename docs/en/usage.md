@@ -100,7 +100,7 @@ The open document is not changed. *Save* (`⌘S`) still writes edits back to the
 ## Library
 
 The sidebar holds a **virtual library**: your own folders and favorites (⭐), plus the history of opened files on the clock tab. It is only a list of
-references — it never moves, copies or changes your files.
+references and tags — it never moves or copies your files. (The one thing that edits files is *Rename tag* / *Delete tag*, which rewrites `#tag` in the text of files that use it, after a confirmation.)
 
 - **New folder** (the folder button in the sidebar header): type a name and press Return (leaving the field also saves it). Drag files onto a folder to move them; right-click a folder to rename or delete it.
 - The sidebar has one row of equal buttons: **New File**, **Open File**, **New Folder** (virtual) and **Save As…**. *File → Add Folder from Disk…* (`⇧⌘O` / `Ctrl+Shift+O`) adds a whole folder from disk (subfolders become sidebar folders; use
@@ -150,4 +150,7 @@ Open Settings (`⌘,` / `Ctrl+,`):
 | Split view | `⌘\` | `Ctrl+\` |
 | Reading / Source / Edit | `⌥⌘1` / `2` / `3` | `Ctrl+Alt+1` / `2` / `3` |
 | Reload | `⌘R` | `Ctrl+R` |
+| Select all / copy (Reading, Source) | `⌘A` / `⌘C` | `Ctrl+A` / `Ctrl+C` |
+| Undo / redo (Edit) | `⌘Z` / `⇧⌘Z` | `Ctrl+Z` / `Ctrl+Shift+Z` |
+| Emoji picker (Edit) | `⌃⌘Space` | `Win+.` |
 | Font larger / smaller | `⌘+` / `⌘-` | `Ctrl++` / `Ctrl+-` |

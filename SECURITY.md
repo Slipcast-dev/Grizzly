@@ -23,7 +23,7 @@ advisory unless you prefer to stay anonymous.
 ## Scope
 
 In scope: crashes or code execution triggered by a crafted document, path or encoding handling bugs, weaknesses in
-the Electron configuration (sandbox, preload bridge, CSP), and problems in the build scripts.
+the Electron configuration (sandbox, preload bridge, CSP), the update mechanism (check, download, checksum verification, installation), and problems in the build scripts.
 
 Out of scope: the lack of Apple notarization / Windows code signing (known and documented), and issues that
 require an attacker who already controls the user's machine.
