@@ -80,6 +80,7 @@ struct FileAssociationsView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Button("Сделать Grizzly приложением по умолчанию для всех") { assoc.makeDefault(assoc.extensions) }
+                    .buttonStyle(.hoverFilled)
                 Spacer()
             }
             Text("Нажмите на расширение, чтобы открывать такие файлы в Grizzly. macOS может запросить подтверждение.")
@@ -92,7 +93,9 @@ struct FileAssociationsView: View {
             HStack {
                 TextField("Другое расширение, например py", text: $newExtension, onCommit: add)
                     .textFieldStyle(.roundedBorder).frame(width: 240)
-                Button("Добавить", action: add).disabled(newExtension.trimmingCharacters(in: .whitespaces).isEmpty)
+                Button("Добавить", action: add)
+                    .buttonStyle(.hoverFilled)
+                    .disabled(newExtension.trimmingCharacters(in: .whitespaces).isEmpty)
             }
 
             if let message = assoc.message {
@@ -116,10 +119,9 @@ struct FileAssociationsView: View {
                 Text(".\(ext)").font(.system(.callout, design: .monospaced))
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 8).padding(.vertical, 5)
-            .background(RoundedRectangle(cornerRadius: 6).fill(Color.gray.opacity(0.12)))
+            .padding(.horizontal, 8)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(HoverButtonStyle(size: .row, base: 0.08))
         .help(isDefault ? L("Открывается в Grizzly") : L("Сейчас: %@", assoc.handlerName(ext)))
         .contextMenu {
             if assoc.customExtensions.contains(ext) { Button("Убрать из списка") { assoc.removeCustom(ext) } }

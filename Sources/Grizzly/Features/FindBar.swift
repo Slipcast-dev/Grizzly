@@ -25,8 +25,9 @@ struct FindBar: View {
             Button { state.stepMatch(1) } label: { Image(systemName: "chevron.down") }
                 .help("Следующее совпадение (⌘G)")
             Button("Готово") { state.hideFind() }
+                .buttonStyle(.hoverText)
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(.hover)
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(theme.codeBackground.opacity(0.6))
@@ -54,6 +55,7 @@ struct BookmarksButton: View {
         Button { shown.toggle() } label: {
             Image(systemName: lines.isEmpty ? "bookmark" : "bookmark.fill")
         }
+        .buttonStyle(.hover)
         .help("Закладки")
         .disabled(state.current == nil)
         .popover(isPresented: $shown, arrowEdge: .bottom) { list }

@@ -7,6 +7,7 @@ struct EditorView: View {
     let size: CGFloat
 
     @EnvironmentObject private var state: AppState
+    @EnvironmentObject private var prefs: Preferences
     @Environment(\.theme) private var theme
 
     var body: some View {
@@ -19,6 +20,7 @@ struct EditorView: View {
                 font: .monospacedSystemFont(ofSize: size, weight: .regular),
                 textColor: NSColor(theme.text),
                 type: document.type,
+                highlightOn: prefs.highlights(document.type),
                 theme: theme,
                 background: NSColor(theme.background))
                 .id(document.id)
@@ -51,6 +53,7 @@ private struct EditorTextView: NSViewRepresentable {
     let font: NSFont
     let textColor: NSColor
     let type: FileType
+    let highlightOn: Bool
     let theme: Theme
     let background: NSColor
 
@@ -99,7 +102,7 @@ private struct EditorTextView: NSViewRepresentable {
 
     /// Syntax colors for the whole text (skipped for very large files, where rescanning on every key would lag).
     private func colorize(_ view: NSTextView) {
-        guard SyntaxEngine.hasHighlighting(type), let storage = view.textStorage else { return }
+        guard highlightOn, SyntaxEngine.hasHighlighting(type), let storage = view.textStorage else { return }
         let text = view.string
         guard text.utf16.count <= 200_000 else { return }
         let lines = text.components(separatedBy: "\n")

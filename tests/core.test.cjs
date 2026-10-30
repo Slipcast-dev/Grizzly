@@ -89,3 +89,13 @@ test('stateless formats carry no state; fence tags resolve', () => {
   const doc = api.makeDocument('/tmp/a.cpp', { text: '/* a\nb */', encoding: 'UTF-8', mtimeMs: 1 });
   assert.deepStrictEqual(Array.from(doc.syntaxStates), [0, 1]);
 });
+
+test('highlighting can be switched off, altogether or per language', () => {
+  assert.ok(api.Syntax.spans('def x(): pass', 'python').length > 0);
+  ctx.Prefs = { values: { syntaxOn: true, syntaxOff: ['python'] } };
+  assert.strictEqual(api.Syntax.spans('def x(): pass', 'python').length, 0);
+  assert.ok(api.Syntax.spans('const a = 1;', 'javascript').length > 0);
+  ctx.Prefs = { values: { syntaxOn: false, syntaxOff: [] } };
+  assert.strictEqual(api.Syntax.spans('const a = 1;', 'javascript').length, 0);
+  delete ctx.Prefs;
+});

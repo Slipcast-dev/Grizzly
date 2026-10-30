@@ -97,6 +97,8 @@ never overwritten without asking.
 Open Settings (`⌘,` / `Ctrl+,`):
 
 - **Appearance:** follow system, light or dark.
+- **Sections:** Appearance, Text, Syntax highlighting, Files, Language and (macOS) File types are listed on the left; the window can be resized in both directions.
+- **Syntax highlighting:** one switch for everything and a switch per language (Settings → Syntax highlighting).
 - **Theme:** Xcode, GitHub, Solarized, Dracula, Monokai, Nord, One Dark. Themes without a light variant stay dark in light mode.
 - **Font** and **size** (`⌘+` / `⌘-` while reading), heading spacing (compact / normal / spacious).
 - **Language:** *Settings → Language* switches between *Follow System*, Русский and English. On first launch the interface follows the system language (Russian on a Russian system, English otherwise). On macOS the app offers to restart after a change; on Windows it switches instantly.

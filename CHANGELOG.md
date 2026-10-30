@@ -3,7 +3,18 @@
 All notable changes are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
-## [1.0.1] - 2026-10-30
+## [1.1.0] - 2026-10-30
+
+This release also contains everything developed as 1.0.0 and 1.0.1 (below), which were never published separately.
+
+### Added
+- **Syntax highlighting settings** (*Settings → Syntax highlighting*): one switch for all highlighting plus a switch for every language (Python, Swift, C/C++, C#, JavaScript, TypeScript, CSS, PHP, JSON, YAML, INI/TOML, XML, HTML, TeX, Log), with *Turn On All* / *Turn Off All*. Applies to Reading, Source and Edit modes and to Markdown code blocks.
+- **Hover and press effects on every button**: a soft tint of the theme's accent color on hover, a stronger tint and a small shrink while pressed. Selected controls use the accent color.
+
+### Changed
+- **Settings reorganized into sections** (Appearance, Text, Syntax highlighting, Files, Language, File types on macOS), shown as a list on the left and cards on the right. The window can be resized in width and height; long sections scroll, scrollbars are always visible on Windows.
+
+## [1.0.1] - 2026-10-30 (shipped in 1.1.0)
 
 ### Fixed
 - **Select all**: text of an open file can now be selected in one go (drag across lines or Select All). The rows were lazily built, which limited selection to a single line; they are now built together (lazily only for files over 4000 lines). New command *View → Copy All Text* (`⌥⌘C`) copies the whole document. Windows: `Ctrl+A` selects the whole document text.
@@ -16,7 +27,7 @@ versions follow [Semantic Versioning](https://semver.org/).
 - **The Reading / Source / Edit switch is centered** at the top of the window in both versions; the remaining tools stay on the right.
 - Sidebar and toolbar controls share one set of sizes (30–34 pt height, equal square buttons, same corner radii): the sidebar section switcher and the folder button were too small.
 
-## [1.0.0] - 2026-10-30
+## [1.0.0] - 2026-10-30 (shipped in 1.1.0)
 
 ### Added
 - **Syntax highlighting for programming languages**: Python, Swift, C / C++, C#, JavaScript (JSX), TypeScript (TSX), CSS / SCSS and PHP. Keywords, types, literals, numbers, strings, comments, decorators / attributes, preprocessor lines and CSS properties are colored with the current theme. Multi-line block comments, triple-quoted strings and template literals are tracked across lines. Fenced code blocks in Markdown (```` ```python ````, `cpp`, `cs`, `js`, ...) use the same colors. macOS also colors the text live in Edit mode.

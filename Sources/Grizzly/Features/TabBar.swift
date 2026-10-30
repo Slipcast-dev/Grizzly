@@ -50,8 +50,8 @@ private struct TabItem: View {
             Button { state.close(doc.id) } label: {
                 Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
             }
-            .buttonStyle(.plain)
-            .foregroundColor(theme.secondary)
+            .buttonStyle(HoverButtonStyle(size: .compact))
+            .frame(width: 20)
             .opacity(hovering || isFocused ? 1 : 0)
             .help("Закрыть вкладку")
         }

@@ -82,7 +82,7 @@ enum FileType: String, CaseIterable {
         case .log: return "Log"
         case .xml: return "XML"
         case .html: return "HTML"
-        case .config: return "Config"
+        case .config: return "INI / TOML"
         case .tex: return "TeX"
         case .rtf: return "RTF"
         case .python: return "Python"

@@ -22,16 +22,11 @@ enum SidebarSection: String, CaseIterable, Identifiable {
     }
 }
 
-/// Square sidebar button: one size for every icon button so the header controls line up.
+/// Sidebar action buttons: equal width, tinted on hover, shrink while pressed.
 struct SidebarIconButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
+        HoverButtonStyle(size: .row, base: 0.07).makeBody(configuration: configuration)
             .font(.system(size: 15))
-            .foregroundColor(.primary)
-            .frame(maxWidth: .infinity)
-            .frame(height: 30)
-            .background(RoundedRectangle(cornerRadius: 7).fill(Color.primary.opacity(configuration.isPressed ? 0.16 : 0.07)))
-            .contentShape(RoundedRectangle(cornerRadius: 7))
     }
 }
 
@@ -58,20 +53,14 @@ struct SidebarView: View {
             HStack(spacing: 2) {
                 ForEach(SidebarSection.allCases) { s in
                     Button { section = s } label: {
-                        Image(systemName: s.symbol)
-                            .font(.system(size: 14))
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 26)
-                            .foregroundColor(section == s ? .white : .primary)
-                            .background(RoundedRectangle(cornerRadius: 6).fill(section == s ? Color.accentColor : Color.clear))
-                            .contentShape(Rectangle())
+                        Image(systemName: s.symbol).font(.system(size: 14))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(HoverButtonStyle(size: .row, selected: section == s))
                     .help(s.title)
                 }
             }
             .padding(2)
-            .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.07)))
+            .background(RoundedRectangle(cornerRadius: 9).fill(Color.primary.opacity(0.07)))
             .padding(.horizontal, 12)
             .padding(.top, 8)
 

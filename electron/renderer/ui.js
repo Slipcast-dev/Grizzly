@@ -44,6 +44,9 @@ const ICONS = {
   docPlain: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 12h6M9 15h6M9 18h4"/>',
   docSearch: '<path d="M13 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4"/><path d="M13 3l5 5v2"/><circle cx="16" cy="16" r="3.5"/><path d="m21 21-2.5-2.5"/>',
   docPlus: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 11v6M9 14h6"/>',
+  palette: '<circle cx="12" cy="12" r="9"/><circle cx="8" cy="10" r="1.2"/><circle cx="12" cy="7.5" r="1.2"/><circle cx="16" cy="10" r="1.2"/><path d="M12 21c-1.5 0-2-1-1.5-2s1-1.5 0-2.5-1.5-1.5-.5-2.5 2.5-.5 4-.5c1.5 0 3 0 3 1.5"/>',
+  type: '<path d="M5 7V5h14v2M12 5v14M9 19h6"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>',
   code: '<path d="M8 7l-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/>',
   braces: '<path d="M8 4c-2 0-3 1-3 3v2c0 1-1 3-2 3 1 0 2 2 2 3v2c0 2 1 3 3 3M16 4c2 0 3 1 3 3v2c0 1 1 3 2 3-1 0-2 2-2 3v2c0 2-1 3-3 3"/>',
   table: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16M15 4v16"/>',
@@ -1061,6 +1064,18 @@ async function changeLanguage(choice) {
   openSettings();
 }
 
+const SETTINGS_PANES = [
+  ['appearance', 'Оформление', 'palette'],
+  ['text', 'Текст', 'type'],
+  ['syntax', 'Подсветка синтаксиса', 'code'],
+  ['files', 'Файлы', 'doc'],
+  ['language', 'Язык', 'globe'],
+];
+let settingsPane = 'appearance';
+
+const PROGRAMMING_TYPES = ['python', 'swift', 'cpp', 'csharp', 'javascript', 'typescript', 'css', 'php'];
+const MARKUP_TYPES = ['json', 'yaml', 'config', 'xml', 'html', 'tex', 'log'];
+
 function openSettings() {
   const root = $('overlay-root');
   if (root.querySelector('.modal-settings')) return;
@@ -1071,19 +1086,21 @@ function openSettings() {
     settingsRefresh = null;
   };
 
-  const section = (title, ...kids) => h('div', { class: 'sec' }, h('div', { class: 'sec-title' }, t(title)), ...kids);
+  const card = (title, ...kids) => h('div', { class: 'card' }, h('div', { class: 'card-title' }, t(title)), ...kids);
   const row = (label, ...kids) => h('div', { class: 'srow' }, h('div', { class: 'slabel' }, t(label)), ...kids);
 
   const appearance = h('div', { class: 'seg wide' });
+  const language = h('div', { class: 'seg wide' });
   const tiles = h('div', { class: 'tiles' });
   const sizeLabel = h('span', { class: 'val' });
   const spacingLabel = h('span', { class: 'val' });
-  const preview = h('div', { class: 'preview' });
+  const previews = [h('div', { class: 'preview' }), h('div', { class: 'preview' })];
+  const nav = h('div', { class: 'snav' });
+  const body = h('div', { class: 'dialog-scroll' });
 
   const paintAppearance = () => appearance.replaceChildren(...[['system', 'Как в системе'], ['light', 'Светлая'], ['dark', 'Тёмная']].map(([id, label]) =>
     h('button', { class: Prefs.values.appearance === id ? 'on' : '', onclick: () => Prefs.set({ appearance: id }) }, t(label))));
 
-  const language = h('div', { class: 'seg wide' });
   const paintLanguage = () => language.replaceChildren(...[['auto', t('Как в системе')], ['ru', 'Русский'], ['en', 'English']].map(([id, label]) =>
     h('button', { class: languagePref === id ? 'on' : '', onclick: () => changeLanguage(id) }, label)));
 
@@ -1101,15 +1118,17 @@ function openSettings() {
     const th = Prefs.theme;
     const size = Prefs.values.fontSize;
     const hsp = Prefs.values.headingSpacing;
-    preview.style.background = th.background;
-    preview.style.color = th.text;
-    preview.style.fontFamily = Prefs.fontFamily;
-    preview.replaceChildren(
-      h('div', { style: { fontSize: size * 1.5 + 'px', fontWeight: 600, color: th.heading, paddingTop: size * 0.3 * hsp + 'px', paddingBottom: size * 0.2 * hsp + 'px' } }, t('Заголовок')),
-      h('div', { style: { fontSize: size + 'px' } }, t('Так будет выглядеть обычный текст документа.')),
-      h('div', { class: 'pv-code', style: { fontSize: size * 0.85 + 'px' } },
-        Prefs.values.showLineNumbers ? h('span', { style: { color: th.gutter } }, '1') : null,
-        h('span', { style: { color: th.key } }, '"key": '), h('span', { style: { color: th.string } }, '"value"')));
+    for (const preview of previews) {
+      preview.style.background = th.background;
+      preview.style.color = th.text;
+      preview.style.fontFamily = Prefs.fontFamily;
+      preview.replaceChildren(
+        h('div', { style: { fontSize: size * 1.5 + 'px', fontWeight: 600, color: th.heading, paddingTop: size * 0.3 * hsp + 'px', paddingBottom: size * 0.2 * hsp + 'px' } }, t('Заголовок')),
+        h('div', { style: { fontSize: size + 'px' } }, t('Так будет выглядеть обычный текст документа.')),
+        h('div', { class: 'pv-code', style: { fontSize: size * 0.85 + 'px' } },
+          Prefs.values.showLineNumbers ? h('span', { style: { color: th.gutter } }, '1') : null,
+          h('span', { style: { color: th.key } }, '"key": '), h('span', { style: { color: th.string } }, '"value"')));
+    }
     sizeLabel.textContent = `${Math.round(Prefs.values.fontSize)} pt`;
     spacingLabel.textContent = `×${Prefs.values.headingSpacing.toFixed(1)}`;
   };
@@ -1121,6 +1140,50 @@ function openSettings() {
   const check = (label, key) => h('label', { class: 'check' },
     h('input', { type: 'checkbox', checked: P[key], onchange: (e) => Prefs.set({ [key]: e.target.checked }) }), h('span', null, t(label)));
 
+  // Syntax highlighting: a master switch and one switch per language.
+  const langChecks = (types) => h('div', { class: 'lang-grid' }, types.map((type) => h('label', { class: 'check' },
+    h('input', {
+      type: 'checkbox', checked: Syntax.isOn(type), disabled: Prefs.values.syntaxOn === false,
+      onchange: (e) => {
+        const off = new Set(Prefs.values.syntaxOff || []);
+        if (e.target.checked) off.delete(type); else off.add(type);
+        Prefs.set({ syntaxOff: [...off] });
+      },
+    }), h('span', null, TYPE_TITLES[type]))));
+  const allBtn = (label, off) => h('button', {
+    class: 'btn', disabled: Prefs.values.syntaxOn === false,
+    onclick: () => Prefs.set({ syntaxOff: off ? [...PROGRAMMING_TYPES, ...MARKUP_TYPES] : [] }),
+  }, t(label));
+
+  const paneContent = {
+    appearance: () => [card('Режим', appearance), card('Тема', tiles, h('div', { class: 'small muted' }, t('Dracula и Monokai всегда тёмные.'))), previews[0]],
+    text: () => [
+      card('Шрифт и размер', row('Шрифт', fontSelect), row('Размер', sizeInput, sizeLabel), row('Отступы заголовков', spacingInput, spacingLabel)),
+      card('Исходник', check('Показывать номера строк', 'showLineNumbers')),
+      previews[1]],
+    syntax: () => [
+      card('Подсветка синтаксиса',
+        check('Включить подсветку синтаксиса', 'syntaxOn'),
+        h('div', { class: 'small muted' }, t('Цвета берутся из выбранной темы. Подсветка работает в режимах чтения, исходника и правки, а также в блоках кода Markdown.'))),
+      card('Программирование', langChecks(PROGRAMMING_TYPES)),
+      card('Разметка и данные', langChecks(MARKUP_TYPES)),
+      h('div', { class: 'btn-row' }, allBtn('Включить все', false), allBtn('Выключить все', true))],
+    files: () => [card('Обновление', check('Обновлять файл автоматически, когда он изменился на диске', 'autoReload'))],
+    language: () => [card('Язык интерфейса', language, h('div', { class: 'small muted' }, t('Язык меняется сразу.')))],
+  };
+
+  const paintNav = () => nav.replaceChildren(...SETTINGS_PANES.map(([id, label, ic]) => h('button', {
+    class: 'snav-item' + (settingsPane === id ? ' on' : ''),
+    onclick: () => { settingsPane = id; settingsRefresh(); },
+  }, icon(ic, 17), h('span', { class: 'ellipsis' }, t(label)))));
+
+  const paintBody = () => {
+    const scrollTop = body.scrollTop;
+    const current = SETTINGS_PANES.find(([id]) => id === settingsPane) || SETTINGS_PANES[0];
+    body.replaceChildren(h('div', { class: 'pane-title' }, t(current[1])), ...paneContent[current[0]]());
+    body.scrollTop = scrollTop;
+  };
+
   settingsRefresh = () => {
     paintAppearance();
     paintLanguage();
@@ -1128,23 +1191,16 @@ function openSettings() {
     paintPreview();
     sizeInput.value = Prefs.values.fontSize;
     spacingInput.value = Prefs.values.headingSpacing;
+    paintNav();
+    paintBody();
   };
   settingsRefresh();
 
   root.append(h('div', { class: 'modal-back modal-settings', onmousedown: (e) => { if (e.target === e.currentTarget) close(); } },
-    h('div', { class: 'dialog' },
+    h('div', { class: 'dialog settings' },
       h('div', { class: 'dialog-head' }, h('div', { class: 'dialog-title' }, t('Настройки')),
         h('button', { class: 'plain', onclick: close }, icon('x', 16))),
-      h('div', { class: 'dialog-scroll' },
-        section('Оформление', appearance, tiles, h('div', { class: 'small muted' }, t('Dracula и Monokai всегда тёмные.'))),
-        section('Текст',
-          row('Шрифт', fontSelect),
-          row('Размер', sizeInput, sizeLabel),
-          row('Отступы заголовков', spacingInput, spacingLabel),
-          check('Показывать номера строк', 'showLineNumbers')),
-        section('Файлы', check('Обновлять файл автоматически, когда он изменился на диске', 'autoReload')),
-        section('Язык', language),
-        preview))));
+      h('div', { class: 'settings-layout' }, nav, body))));
 }
 
 // ---- Commands shared by menu, toolbar and boot ------------------------------

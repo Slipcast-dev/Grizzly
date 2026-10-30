@@ -1,34 +1,104 @@
 import SwiftUI
 
-/// Preferences window (⌘,).
+enum SettingsPane: String, CaseIterable, Identifiable {
+    case appearance, text, syntax, files, language, types
+    var id: String { rawValue }
+
+    var title: LocalizedStringKey {
+        switch self {
+        case .appearance: return "Оформление"
+        case .text: return "Текст"
+        case .syntax: return "Подсветка синтаксиса"
+        case .files: return "Файлы"
+        case .language: return "Язык"
+        case .types: return "Типы файлов"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .appearance: return "paintpalette"
+        case .text: return "textformat"
+        case .syntax: return "chevron.left.forwardslash.chevron.right"
+        case .files: return "doc.text"
+        case .language: return "globe"
+        case .types: return "square.grid.2x2"
+        }
+    }
+}
+
+/// Preferences window (⌘,): a list of sections on the left, the selected section on the right.
+/// The window can be resized in both directions; long sections scroll.
 struct SettingsView: View {
     @EnvironmentObject private var settings: Preferences
+    @AppStorage("settingsPane") private var pane: SettingsPane = .appearance
 
     var body: some View {
         let theme = settings.theme
 
-        ScrollView {
-        VStack(alignment: .leading, spacing: 18) {
-            section("Оформление") {
+        HStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(SettingsPane.allCases) { p in
+                    Button { pane = p } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: p.symbol).frame(width: 18)
+                            Text(p.title).lineLimit(1)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 10)
+                    }
+                    .buttonStyle(HoverButtonStyle(size: .row, selected: pane == p))
+                }
+                Spacer()
+            }
+            .padding(12)
+            .frame(width: 232)
+            .background(Color.primary.opacity(0.04))
+
+            Divider()
+
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(pane.title).font(.title2.weight(.semibold))
+                    content(for: pane, theme: theme)
+                }
+                .padding(22)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .scrollIndicators(.visible)
+        }
+        .environment(\.theme, theme)
+        .frame(minWidth: 640, idealWidth: 780, maxWidth: .infinity, minHeight: 420, idealHeight: 580, maxHeight: .infinity)
+        .background(SettingsWindowConfigurator())
+    }
+
+    @ViewBuilder
+    private func content(for pane: SettingsPane, theme: Theme) -> some View {
+        switch pane {
+        case .appearance:
+            card("Режим") {
                 Picker("", selection: $settings.appearance) {
                     ForEach(Appearance.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-
+            }
+            card("Тема") {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4), spacing: 10) {
                     ForEach(ThemeSet.all) { set in tile(set) }
                 }
                 Text("Dracula и Monokai всегда тёмные.")
                     .font(.caption).foregroundColor(.secondary)
             }
+            preview(theme)
 
-            section("Текст") {
+        case .text:
+            card("Шрифт и размер") {
                 row("Шрифт") {
                     Picker("", selection: $settings.fontName) {
                         ForEach(Preferences.fonts, id: \.self) { Text(LocalizedStringKey($0)).tag($0) }
                     }
-                    .labelsHidden().frame(width: 180)
+                    .labelsHidden().frame(width: 200)
                 }
                 row("Размер") {
                     Slider(value: $settings.fontSize, in: 10...28, step: 1)
@@ -38,37 +108,71 @@ struct SettingsView: View {
                     Slider(value: $settings.headingSpacing, in: 0.5...2.5, step: 0.1)
                     Text(String(format: "×%.1f", settings.headingSpacing)).monospacedDigit().frame(width: 48, alignment: .trailing)
                 }
+            }
+            card("Исходник") {
                 Toggle("Показывать номера строк", isOn: $settings.showLineNumbers)
             }
+            preview(theme)
 
-            section("Файлы") {
+        case .syntax:
+            card("Подсветка синтаксиса") {
+                Toggle("Включить подсветку синтаксиса", isOn: $settings.syntaxEnabled)
+                Text("Цвета берутся из выбранной темы. Подсветка работает в режимах чтения, исходника и правки, а также в блоках кода Markdown.")
+                    .font(.caption).foregroundColor(.secondary)
+            }
+            card("Программирование") { languageToggles(Self.programming) }
+            card("Разметка и данные") { languageToggles(Self.markup) }
+            HStack(spacing: 8) {
+                Button("Включить все") { settings.syntaxOff = [] }.buttonStyle(.hoverFilled)
+                Button("Выключить все") { settings.syntaxOff = Set((Self.programming + Self.markup).map(\.rawValue)) }.buttonStyle(.hoverFilled)
+            }
+            .disabled(!settings.syntaxEnabled)
+
+        case .files:
+            card("Обновление") {
                 Toggle("Обновлять файл автоматически, когда он изменился на диске", isOn: $settings.autoReload)
             }
 
-            section("Язык") {
+        case .language:
+            card("Язык интерфейса") {
                 Picker("", selection: $settings.language) {
                     ForEach(AppLanguage.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .onChange(of: settings.language) { _ in AppRestart.offer() }
+                Text("После смены языка Grizzly предложит перезапуститься.")
+                    .font(.caption).foregroundColor(.secondary)
             }
 
-            section("Типы файлов") { FileAssociationsView() }
-
-            preview(theme)
+        case .types:
+            card("Приложение по умолчанию") { FileAssociationsView() }
         }
-        .padding(22)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .frame(minWidth: 520, idealWidth: 540, maxWidth: 760, minHeight: 360, idealHeight: 640, maxHeight: .infinity)
     }
 
-    private func section<C: View>(_ title: LocalizedStringKey, @ViewBuilder _ content: () -> C) -> some View {
+    static let programming: [FileType] = [.python, .swift, .cpp, .csharp, .javascript, .typescript, .css, .php]
+    static let markup: [FileType] = [.json, .yaml, .config, .xml, .html, .tex, .log]
+
+    private func languageToggles(_ types: [FileType]) -> some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 10, alignment: .leading)], alignment: .leading, spacing: 8) {
+            ForEach(types, id: \.self) { type in
+                Toggle(type.title, isOn: Binding(
+                    get: { settings.highlights(type) },
+                    set: { settings.setHighlight(type, $0) }))
+            }
+        }
+        .disabled(!settings.syntaxEnabled)
+    }
+
+    private func card<C: View>(_ title: LocalizedStringKey, @ViewBuilder _ content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title).font(.headline)
             content()
         }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.04)))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.primary.opacity(0.10)))
     }
 
     private func row<C: View>(_ label: LocalizedStringKey, @ViewBuilder _ content: () -> C) -> some View {
@@ -98,7 +202,7 @@ struct SettingsView: View {
             .overlay(RoundedRectangle(cornerRadius: 8)
                 .stroke(selected ? Color.accentColor : Color.gray.opacity(0.35), lineWidth: selected ? 2.5 : 1))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(TileButtonStyle())
     }
 
     private func preview(_ t: Theme) -> some View {
@@ -121,4 +225,39 @@ struct SettingsView: View {
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.gray.opacity(0.35)))
     }
+}
+
+/// Theme tiles keep their own colors; hover and press only brighten and shrink them slightly.
+private struct TileButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Hovering { hovering in
+            configuration.label
+                .brightness(hovering && !configuration.isPressed ? 0.04 : 0)
+                .scaleEffect(configuration.isPressed ? 0.97 : 1)
+                .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+        }
+    }
+
+    private struct Hovering<Content: View>: View {
+        @State private var hovering = false
+        let content: (Bool) -> Content
+        init(@ViewBuilder _ content: @escaping (Bool) -> Content) { self.content = content }
+        var body: some View { content(hovering).onHover { hovering = $0 } }
+    }
+}
+
+/// Makes sure the Settings window can be dragged larger and smaller in both directions.
+private struct SettingsWindowConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            guard let window = view.window else { return }
+            window.styleMask.insert(.resizable)
+            window.minSize = NSSize(width: 640, height: 420)
+            window.setFrameAutosaveName("GrizzlySettingsWindow")
+        }
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {}
 }

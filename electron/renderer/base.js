@@ -111,6 +111,8 @@ const Prefs = {
     headingSpacing: 1,
     showLineNumbers: true,
     autoReload: false,
+    syntaxOn: true,
+    syntaxOff: [], // file types with highlighting switched off
   },
   listeners: [],
 
