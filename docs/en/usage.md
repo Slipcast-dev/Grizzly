@@ -62,7 +62,7 @@ In Reading and Source, `⌘A` / `Ctrl+A` selects the whole document and `⌘C` /
 
 The sidebar field **Search files** matches the beginning of a file or folder name, or of any word in it ("gri" finds "My Grizzly notes.md"). Typing `#work` searches tags.
 
-**Tags** live at the bottom of the sidebar. Create one with **+**, assign it from a file's context menu (*Tags*), rename or delete it from the tag's context menu. Tags written in a document as `#word` count too. Click a tag to list every file that carries it; click it again to leave the filter.
+**Tags** live at the bottom of the sidebar. Create one with **+**, assign it from a file's context menu (*Tags*), rename or delete it from the tag's context menu. Tags are the `#words` you write in a Markdown / text file: they are colored in the text, a click on one lists the files that carry it, and typing `#` in Edit mode suggests the known tags. In the sidebar, click a tag to filter, click more tags to narrow the list (files must carry all of them), or *All Tags* to reset. *Rename* and *Delete* in a tag's context menu also change the text of every file that uses it (RTF files and files with unsaved edits are skipped).
 
 ## Spelling and grammar
 

@@ -281,6 +281,14 @@ final class LibraryStore: ObservableObject {
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
+    /// Files that carry every one of the tags (several selected tags narrow the list down, as in Apple Notes).
+    func files(withAllTags tags: [String]) -> [LibraryFile] {
+        guard !tags.isEmpty else { return [] }
+        return data.files
+            .filter { f in tags.allSatisfy { tag in (f.tags + f.inlineTags).contains { $0.caseInsensitiveCompare(tag) == .orderedSame } } }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
     func tagExists(_ tag: String) -> Bool { allTags.contains { $0.caseInsensitiveCompare(tag) == .orderedSame } }
 
     /// Creates a tag (and returns its stored spelling); an existing tag is returned as it is. Nil for an empty name.
@@ -308,6 +316,47 @@ final class LibraryStore: ObservableObject {
         for m in regex.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
             let tag = ns.substring(with: m.range(at: 1)).trimmingCharacters(in: CharacterSet(charactersIn: "-_"))
             if !tag.isEmpty, seen.insert(tag.lowercased()).inserted { result.append(tag) }
+        }
+        return result
+    }
+
+    /// Matches `#tag` the way `extractTags` reads tags, for one specific tag.
+    private static func tagRegex(_ tag: String) -> NSRegularExpression? {
+        try? NSRegularExpression(pattern: "(?<![\\p{L}\\p{N}_#&/=:])#" + NSRegularExpression.escapedPattern(for: tag) + "(?![\\p{L}\\p{N}_-])",
+                                 options: [.caseInsensitive])
+    }
+
+    /// Number of `#tag` occurrences in a text.
+    static func countTag(_ tag: String, in text: String) -> Int {
+        tagRegex(tag)?.numberOfMatches(in: text, range: NSRange(location: 0, length: (text as NSString).length)) ?? 0
+    }
+
+    /// `#old` becomes `#new`; with `new == nil` the tag is removed from the text (with the space after it).
+    static func replaceTag(_ old: String, with new: String?, in text: String) -> String {
+        guard let regex = tagRegex(old) else { return text }
+        let ns = text as NSString
+        var out = ""
+        var last = 0
+        for m in regex.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+            out += ns.substring(with: NSRange(location: last, length: m.range.location - last))
+            var end = m.range.location + m.range.length
+            if let new { out += "#" + new } else if end < ns.length, ns.character(at: end) == 32 { end += 1 }
+            last = end
+        }
+        return out + ns.substring(from: last)
+    }
+
+    /// Where the `#tags` are in a text (range includes the `#`), for coloring them.
+    static func tagMatches(in text: String) -> [(range: NSRange, tag: String)] {
+        guard text.contains("#"),
+              let regex = try? NSRegularExpression(pattern: "(?<![\\p{L}\\p{N}_#&/=:])#([\\p{L}\\p{N}_-]+)") else { return [] }
+        let ns = text as NSString
+        var result: [(NSRange, String)] = []
+        for m in regex.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+            var word = ns.substring(with: m.range(at: 1))
+            var range = m.range
+            while let last = word.last, last == "-" || last == "_" { word.removeLast(); range.length -= 1 }
+            if !word.isEmpty { result.append((range, word)) }
         }
         return result
     }

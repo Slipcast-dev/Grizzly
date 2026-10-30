@@ -128,6 +128,16 @@ private struct EditorTextView: NSViewRepresentable {
 
     /// Syntax colors for the whole text (skipped for very large files, where rescanning on every key would lag).
     private func colorize(_ view: NSTextView) {
+        if EditorView.isProse(type), let storage = view.textStorage {
+            // #tags are colored like tokens; the background is reset first so a deleted '#' leaves nothing behind.
+            storage.beginEditing()
+            storage.removeAttribute(.backgroundColor, range: NSRange(location: 0, length: storage.length))
+            for (range, _) in LibraryStore.tagMatches(in: storage.string) {
+                storage.addAttributes([.foregroundColor: NSColor(theme.accent),
+                                       .backgroundColor: NSColor(theme.accent).withAlphaComponent(0.16)], range: range)
+            }
+            storage.endEditing()
+        }
         guard highlightOn, SyntaxEngine.hasHighlighting(type), let storage = view.textStorage else { return }
         let text = view.string
         guard text.utf16.count <= 200_000 else { return }
@@ -155,9 +165,44 @@ private struct EditorTextView: NSViewRepresentable {
             self.handledScroll = handledScroll
         }
 
+        private var isCompleting = false
+
         func textDidChange(_ notification: Notification) {
             guard let view = notification.object as? NSTextView else { return }
             parent.text = view.string
+            suggestTagIfTyping(in: view)
+        }
+
+        /// Typing `#` or `#wo` opens the list of known tags under the caret, like Apple Notes.
+        private func suggestTagIfTyping(in view: NSTextView) {
+            guard EditorView.isProse(parent.type), !isCompleting, view.selectedRange().length == 0,
+                  let event = NSApp.currentEvent, event.type == .keyDown,
+                  ![51, 117].contains(event.keyCode), event.characters?.isEmpty == false else { return }
+            let ns = view.string as NSString
+            var i = view.selectedRange().location
+            while i > 0, Self.isTagChar(ns.character(at: i - 1)) { i -= 1 }
+            guard i > 0, ns.character(at: i - 1) == 35 else { return }
+            if i > 1, Self.isWordChar(ns.character(at: i - 2)) { return }
+            isCompleting = true
+            view.complete(nil)
+            isCompleting = false
+        }
+
+        private static func isWordChar(_ c: unichar) -> Bool {
+            guard let u = Unicode.Scalar(c) else { return false }
+            return CharacterSet.alphanumerics.contains(u) || c == 95
+        }
+        private static func isTagChar(_ c: unichar) -> Bool { isWordChar(c) || c == 45 }
+
+        func textView(_ textView: NSTextView, completions words: [String], forPartialWordRange charRange: NSRange,
+                      indexOfSelectedItem index: UnsafeMutablePointer<Int>?) -> [String] {
+            let ns = textView.string as NSString
+            guard EditorView.isProse(parent.type), charRange.location > 0, ns.character(at: charRange.location - 1) == 35 else { return [] }
+            let typed = ns.substring(with: charRange)
+            let known = Set(AppState.shared.library.allTags + LibraryStore.extractTags(from: textView.string))
+            return known
+                .filter { $0.range(of: typed, options: [.caseInsensitive, .anchored]) != nil && $0.caseInsensitiveCompare(typed) != .orderedSame }
+                .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
         }
 
         /// Paints every hit of the find query (temporary attributes: they never become part of the text),

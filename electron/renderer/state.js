@@ -156,6 +156,31 @@ const Library = {
     }
     return out.sort((a, b) => collator.compare(a, b));
   },
+/** Files that carry every one of the tags (several selected tags narrow the list down, as in Apple Notes). */
+  filesWithAllTags(tags) {
+    if (!tags.length) return [];
+    return this.data.files.filter((f) => tags.every((tag) => [...f.tags, ...f.inlineTags].some((x) => this.sameTag(x, tag)))).sort(byName);
+  },
+  /** One specific `#tag` as a regular expression (same boundaries as extractTags). */
+  tagRegex(tag, flags = 'giu') {
+    return new RegExp('(?<![\\p{L}\\p{N}_#&/=:])#' + tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![\\p{L}\\p{N}_-])', flags);
+  },
+  countTag(tag, text) { return (String(text).match(this.tagRegex(tag)) || []).length; },
+  /** `#old` becomes `#new`; with next == null the tag is removed from the text (with the space after it). */
+  replaceTag(old, next, text) {
+    const re = this.tagRegex(old);
+    if (next != null) return String(text).replace(re, '#' + next);
+    return String(text).replace(new RegExp(re.source + ' ?', 'giu'), '');
+  },
+  /** Where the `#tags` are in a text, for coloring them: [{index, length, tag}] (length includes the `#`). */
+  tagMatches(text) {
+    const out = [];
+    for (const m of String(text).matchAll(/(?<![\p{L}\p{N}_#&/=:])#([\p{L}\p{N}_-]+)/gu)) {
+      const tag = m[1].replace(/[-_]+$/g, '');
+      if (tag) out.push({ index: m.index, length: tag.length + 1, tag });
+    }
+    return out;
+  },
   filesWithTag(tag) { return this.data.files.filter((f) => [...f.tags, ...f.inlineTags].some((x) => this.sameTag(x, tag))).sort(byName); },
   /** True for tags set by hand and for #hashtags written in the file's text. */
   hasTag(fileID, tag) { const f = this.file(fileID); return !!f && [...f.tags, ...f.inlineTags].some((x) => this.sameTag(x, tag)); },

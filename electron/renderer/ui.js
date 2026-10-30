@@ -77,6 +77,29 @@ function relativeTime(iso) {
   return rtf.format(Math.round(diff), 'second');
 }
 
+/** Wraps every `#tag` inside `el` in a span (class `hashtag`: colored, clickable); text inside marks and syntax spans is covered. */
+function paintTags(el, cls = 'hashtag') {
+  if (!el.textContent.includes('#')) return;
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) if (n.nodeValue.includes('#') && !n.parentElement.closest('.' + cls)) nodes.push(n);
+  for (const node of nodes) {
+    const found = Library.tagMatches(node.nodeValue);
+    for (let k = found.length - 1; k >= 0; k--) {
+      const { index, length, tag } = found[k];
+      const mid = node.splitText(index);
+      mid.splitText(length);
+      const span = document.createElement('span');
+      span.className = cls;
+      span.dataset.tag = tag;
+      mid.parentNode.insertBefore(span, mid);
+      span.appendChild(mid);
+    }
+  }
+}
+
+const PROSE = ['markdown', 'text', 'rtf', 'tex'];
+
 // ---- Context menus and popovers -------------------------------------------
 
 const Menus = {
@@ -272,7 +295,7 @@ function syncBookmarks() {
 
 const SidebarUI = {
   query: '',
-  tag: null, // tag whose files are listed
+  tags: [], // selected tags: the list shows the files that carry all of them
   isNaming: false,
   newName: '',
   nameError: null,
@@ -334,7 +357,7 @@ function renderSidebar() {
   const seg = $('side-seg');
   seg.replaceChildren(...SECTIONS.map((s) => h('button', {
     class: App.ui.sidebarSection === s.id ? 'on' : '', title: s.title(),
-    onclick: () => { App.ui.sidebarSection = s.id; SidebarUI.tag = null; cancelNaming(); App.render(['sidebar']); },
+    onclick: () => { App.ui.sidebarSection = s.id; SidebarUI.tags = []; cancelNaming(); App.render(['sidebar']); },
   }, icon(s.icon, 17))));
   renderSidebarList();
   renderTagPanel();
@@ -367,43 +390,107 @@ function askText(title, initial, confirmLabel) {
   });
 }
 
+const isSelectedTag = (tag) => SidebarUI.tags.some((x) => Library.sameTag(x, tag));
+
+function toggleTagSelection(tag) {
+  SidebarUI.tags = isSelectedTag(tag) ? SidebarUI.tags.filter((x) => !Library.sameTag(x, tag)) : [...SidebarUI.tags, tag];
+  App.render(['sidebar']);
+}
+
+/** A click on a #tag inside a document: the sidebar lists the files with that tag. */
+function showTag(tag) {
+  SidebarUI.tags = [tag];
+  App.ui.sidebarSection = 'files';
+  App.ui.sidebarVisible = true;
+  applySidebarVisibility();
+  App.render(['sidebar']);
+}
+
+/** A yes / no question as an in-app dialog. Resolves to true when confirmed. */
+function askConfirm(title, body, confirmLabel) {
+  return new Promise((resolve) => {
+    const done = (v) => { back.remove(); resolve(v); };
+    const back = h('div', { class: 'modal-back modal-ask', onmousedown: (e) => { if (e.target === e.currentTarget) done(false); } },
+      h('div', { class: 'dialog small' },
+        h('div', { class: 'dialog-title' }, title),
+        h('div', { class: 'dialog-body' }, body),
+        h('div', { class: 'dialog-actions btn-row' },
+          h('button', { class: 'btn', onclick: () => done(false) }, t('Отмена')),
+          h('button', { class: 'btn primary', onclick: () => done(true) }, confirmLabel))));
+    $('overlay-root').append(back);
+  });
+}
+
 async function newTag(forFile) {
   const name = await askText(t('Новый тег'), '', t('Создать'));
   const tag = name && Library.createTag(name);
   if (!tag) return;
   if (forFile && !Library.hasTag(forFile, tag)) Library.toggleTag(forFile, tag);
-  else if (!forFile) { SidebarUI.tag = tag; App.render(['sidebar']); }
+  else if (!forFile) { SidebarUI.tags = [tag]; App.render(['sidebar']); }
 }
+
+/** Rewrites `#old` in the text of the files that use it (RTF is left out). Returns the names that could not be changed. */
+async function rewriteTag(old, next) {
+  const skipped = [];
+  for (const file of Library.data.files.filter((f) => f.inlineTags.some((x) => Library.sameTag(x, old)) && fileTypeOf(f.path) !== 'rtf')) {
+    const doc = App.documents.find((d) => d.libraryID === file.id);
+    if (doc && App.isDirty(doc)) { skipped.push(file.name); continue; }
+    const loaded = await window.api.readFile(file.path);
+    if (!loaded.ok) { skipped.push(file.name); continue; }
+    const updated = Library.replaceTag(old, next, loaded.text);
+    if (updated === loaded.text) continue;
+    const res = await window.api.writeFile(file.path, updated, loaded.encoding);
+    if (!res.ok) { skipped.push(file.name); continue; }
+    if (doc) await App.reload(doc.id); else Library.setInlineTags(file.id, Library.extractTags(updated));
+  }
+  if (skipped.length) App.fail(t('Не удалось изменить файлы: %@. Сохраните или отмените правки в них и повторите.', skipped.join(', ')));
+}
+
+const filesWithTagText = (tag) => Library.data.files.filter((f) => f.inlineTags.some((x) => Library.sameTag(x, tag)) && fileTypeOf(f.path) !== 'rtf').length;
 
 async function renameTag(tag) {
   const name = await askText(t('Переименовать тег'), tag, t('Переименовать'));
-  if (!name) return;
-  const wasSelected = SidebarUI.tag && Library.sameTag(SidebarUI.tag, tag);
-  Library.renameTag(tag, name);
-  if (wasSelected) SidebarUI.tag = Library.cleanTag(name);
+  const next = name && Library.cleanTag(name);
+  if (!next || next === tag) return;
+  const n = filesWithTagText(tag);
+  if (n && !(await askConfirm(t('Переименовать #%@ в #%@?', tag, next), t('Тег записан в тексте файлов (%lld). Он будет изменён и там.', n), t('Переименовать')))) return;
+  await rewriteTag(tag, next);
+  Library.renameTag(tag, next);
+  SidebarUI.tags = SidebarUI.tags.map((x) => (Library.sameTag(x, tag) ? next : x));
   App.render(['sidebar']);
 }
 
-/** Bottom of the sidebar: every tag as a chip. A click shows the files that carry the tag, a second click leaves the filter. */
+async function deleteTag(tag) {
+  const n = filesWithTagText(tag);
+  if (!(await askConfirm(t('Удалить тег #%@?', tag),
+    n ? t('Тег будет убран из списка и из текста файлов (%lld).', n) : t('Тег будет убран из списка и у всех файлов.'), t('Удалить тег')))) return;
+  await rewriteTag(tag, null);
+  Library.deleteTag(tag);
+  SidebarUI.tags = SidebarUI.tags.filter((x) => !Library.sameTag(x, tag));
+  App.render(['sidebar']);
+}
+
+/** Bottom of the sidebar, like the tag browser in Apple Notes: "All Tags" plus a chip per tag; several selected tags
+ *  show the files that carry all of them. Tags are the #words written in the files. */
 function renderTagPanel() {
   const panel = $('tag-panel');
   if (!panel) return;
   const tags = Library.allTags;
-  const chips = h('div', { class: 'chips' }, tags.map((tag) => {
-    const on = !!SidebarUI.tag && Library.sameTag(SidebarUI.tag, tag);
-    return h('button', {
-      class: 'chip' + (on ? ' on' : ''),
-      onclick: () => { SidebarUI.tag = on ? null : tag; App.render(['sidebar']); },
-      oncontextmenu: (e) => Menus.at(e, [
-        { label: t('Переименовать…'), action: () => renameTag(tag) },
-        { label: t('Удалить тег'), danger: true, action: () => { if (on) SidebarUI.tag = null; Library.deleteTag(tag); } },
-      ]),
-    }, h('span', { class: 'ellipsis' }, '#' + tag), h('span', { class: 'chip-count' }, Library.filesWithTag(tag).length));
-  }));
+  const chip = (label, on, count, onclick, tag) => h('button', {
+    class: 'chip' + (on ? ' on' : ''), onclick,
+    oncontextmenu: tag ? (e) => Menus.at(e, [
+      { label: t('Переименовать…'), action: () => renameTag(tag) },
+      { label: t('Удалить тег'), danger: true, action: () => deleteTag(tag) },
+    ]) : null,
+  }, h('span', { class: 'ellipsis' }, label), count == null ? null : h('span', { class: 'chip-count' }, count));
   panel.replaceChildren(
     h('div', { class: 'tag-head' }, icon('tag', 13), h('span', { class: 'grow' }, t('Теги')),
       h('button', { class: 'plain tag-add', title: t('Новый тег'), onclick: () => newTag(null) }, icon('plus', 14))),
-    tags.length ? chips : h('div', { class: 'small muted' }, t('Создайте тег кнопкой + или через контекстное меню файла.')));
+    tags.length
+      ? h('div', { class: 'chips' },
+        chip(t('Все теги'), !SidebarUI.tags.length, null, () => { SidebarUI.tags = []; App.render(['sidebar']); }, null),
+        tags.map((tag) => chip('#' + tag, isSelectedTag(tag), Library.filesWithTag(tag).length, () => toggleTagSelection(tag), tag)))
+      : h('div', { class: 'small muted' }, t('Напишите #тег в тексте файла, и он появится здесь. Или создайте тег кнопкой +.')));
 }
 
 /** By the beginning of the name or of any word in it; "#word" searches the tags the same way. */
@@ -424,12 +511,13 @@ function renderSidebarList() {
   const section = App.ui.sidebarSection;
   const frag = document.createDocumentFragment();
 
-  if (SidebarUI.tag) {
-    // All files that carry the tag, wherever they live in the library.
-    frag.append(h('div', { class: 'sec-head' }, h('span', null, t('Тег: #%@', SidebarUI.tag)),
-      h('button', { class: 'plain link', onclick: () => { SidebarUI.tag = null; App.render(['sidebar']); } }, t('Сбросить'))));
-    filtered(Library.filesWithTag(SidebarUI.tag)).forEach((f) => frag.append(fileRow(f)));
-    if (!Library.filesWithTag(SidebarUI.tag).length) frag.append(hint('tag', t('Нет файлов с этим тегом. Добавьте тег файлу через контекстное меню.')));
+  if (SidebarUI.tags.length) {
+    // All files that carry every selected tag, wherever they live in the library.
+    const files = Library.filesWithAllTags(SidebarUI.tags);
+    frag.append(h('div', { class: 'sec-head' }, h('span', { class: 'ellipsis' }, t('Теги: %@', SidebarUI.tags.map((x) => '#' + x).join(' '))),
+      h('button', { class: 'plain link', onclick: () => { SidebarUI.tags = []; App.render(['sidebar']); } }, t('Сбросить'))));
+    filtered(files).forEach((f) => frag.append(fileRow(f)));
+    if (!files.length) frag.append(hint('tag', t('Нет файлов со всеми выбранными тегами.')));
   } else if (section === 'files') {
     const head = h('div', { class: 'sec-head' }, h('span', null, t('Файлы')),
       h('span'));
@@ -720,6 +808,8 @@ function buildMainFrame() {
   if ($('main').dataset.linksBound) return;
   $('main').dataset.linksBound = '1';
   $('main').addEventListener('click', (e) => {
+    const tag = e.target.closest('.hashtag');
+    if (tag && !window.getSelection().toString()) { showTag(tag.dataset.tag); return; }
     const a = e.target.closest('a[data-url]');
     if (!a) return;
     e.preventDefault();
@@ -949,6 +1039,7 @@ function buildContent(doc, pane, target) {
       if (doc.lines[i]) Syntax.render(doc.lines[i], doc.type, row, doc.syntaxStates.length ? doc.syntaxStates[i] : 0);
       else row.append(' ');
       Searcher.paint(row, hl, i, 0);
+      if (PROSE.includes(doc.type)) paintTags(row);
       return row;
     }, unitHint);
   }
@@ -981,15 +1072,16 @@ function editorView(doc, pane, size) {
   back.style.fontSize = size + 'px';
   const paintBack = () => {
     const hl = highlightFor(pane);
+    const prose = PROSE.includes(doc.type);
     const text = area.value;
     back.replaceChildren();
     const inner = h('div', { class: 'editor-back-inner' });
     back.append(inner);
-    if (!hl) return;
-    const lines = text.split('\n');
-    lines.forEach((line, i) => {
+    if (!hl && !(prose && text.includes('#'))) { inner.append(text + '\n'); return; }
+    text.split('\n').forEach((line, i) => {
       const row = h('span', { class: 'eb-line' }, line);
-      Searcher.paint(row, hl, i, 0);
+      if (hl) Searcher.paint(row, hl, i, 0);
+      if (prose) paintTags(row, 'tag-back');
       inner.append(row, '\n');
     });
   };
@@ -1009,11 +1101,71 @@ function editorView(doc, pane, size) {
   };
   sync();
 
-  area.addEventListener('input', () => {
+  // Typing `#` or `#wo` lists the known tags under the caret; Up / Down choose, Enter or Tab inserts, Esc closes.
+  const suggest = h('div', { class: 'tag-suggest', hidden: true });
+  let items = [];
+  let chosen = 0;
+  let from = 0;
+  const closeSuggest = () => { suggest.hidden = true; items = []; };
+  const paintSuggest = () => suggest.replaceChildren(...items.map((tag, i) => h('div', {
+    class: 'ts-item' + (i === chosen ? ' on' : ''),
+    onmousedown: (e) => { e.preventDefault(); chosen = i; acceptSuggest(); },
+  }, '#' + tag)));
+  const acceptSuggest = () => {
+    if (!items.length) return;
+    const tag = items[chosen];
+    area.setSelectionRange(from, area.selectionStart);
+    document.execCommand('insertText', false, tag);
+    closeSuggest();
+  };
+  const updateSuggest = (ev) => {
+    if (!PROSE.includes(doc.type) || /^delete/.test((ev && ev.inputType) || 'x') || area.selectionStart !== area.selectionEnd) { closeSuggest(); return; }
+    const pos = area.selectionStart;
+    const m = /(?<![\p{L}\p{N}_#&/=:])#([\p{L}\p{N}_-]*)$/u.exec(area.value.slice(0, pos));
+    if (!m) { closeSuggest(); return; }
+    const typed = m[1].toLowerCase();
+    items = [...new Set([...Library.allTags, ...Library.extractTags(area.value)])]
+      .filter((x) => x.toLowerCase().startsWith(typed) && x.toLowerCase() !== typed)
+      .sort((a, b) => collator.compare(a, b)).slice(0, 8);
+    if (!items.length) { closeSuggest(); return; }
+    from = pos - typed.length;
+    chosen = 0;
+    paintSuggest();
+    suggest.hidden = false;
+    // The caret position is read from the copy of the text behind the textarea (one character before the caret).
+    const walker = document.createTreeWalker(back, NodeFilter.SHOW_TEXT);
+    let seen = 0;
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      if (seen + n.nodeValue.length >= pos) {
+        const range = document.createRange();
+        range.setStart(n, Math.max(0, pos - seen - 1));
+        range.setEnd(n, pos - seen);
+        const r = range.getBoundingClientRect();
+        suggest.style.left = Math.min(r.right, innerWidth - 220) + 'px';
+        suggest.style.top = Math.min(r.bottom + 2, innerHeight - 200) + 'px';
+        break;
+      }
+      seen += n.nodeValue.length;
+    }
+  };
+
+  area.addEventListener('input', (e) => {
     App.setDraft(doc, area.value);
     sync();
-    if (App.isFindVisible && App.findQuery) { paintBack(); renderFind(); }
+    paintBack();
+    if (App.isFindVisible && App.findQuery) renderFind();
+    updateSuggest(e);
   });
+  area.addEventListener('blur', closeSuggest);
+  area.addEventListener('keydown', (e) => {
+    if (suggest.hidden) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      chosen = (chosen + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+      paintSuggest();
+    } else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); e.stopImmediatePropagation(); acceptSuggest(); }
+    else if (e.key === 'Escape') { e.stopPropagation(); closeSuggest(); }
+  }, true);
   area.addEventListener('scroll', syncScroll);
   area.addEventListener('keydown', (e) => {
     if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
@@ -1037,7 +1189,7 @@ function editorView(doc, pane, size) {
     setTimeout(() => { if (area.isConnected) area.focus(); }, 0);
   }
   paintBack();
-  return h('div', { class: 'editor' }, bar, h('div', { class: 'editor-wrap' }, back, area));
+  return h('div', { class: 'editor' }, bar, h('div', { class: 'editor-wrap' }, back, area, suggest));
 }
 
 function sourceView(doc, scroller, size, hl, upTo) {
@@ -1051,6 +1203,7 @@ function sourceView(doc, scroller, size, hl, upTo) {
     else code.append('​');
     if (doc.type === 'markdown' && doc.lines[i].startsWith('#')) code.classList.add('md-head');
     Searcher.paint(code, hl, i, 0);
+    if (PROSE.includes(doc.type)) paintTags(code);
     const row = h('div', { class: 'row', dataset: { unit: i } });
     if (showNumbers) {
       const n = i + 1;
@@ -1100,6 +1253,7 @@ function markdownView(blocks, size, hl) {
   const inline = (parent, text, unit, offset) => {
     inlineToDom(parseInline(text), parent);
     Searcher.paint(parent, hl, unit, offset);
+    paintTags(parent);
     return parent;
   };
 
@@ -1129,6 +1283,7 @@ function markdownView(blocks, size, hl) {
         const pre = h('pre', null, lang ? null : (block.code || ' '));
         if (lang) Syntax.renderBlock(block.code || ' ', lang, pre);
         Searcher.paint(pre, hl, unit, offsets[0]);
+        paintTags(pre);
         wrap.append(pre);
         break;
       }

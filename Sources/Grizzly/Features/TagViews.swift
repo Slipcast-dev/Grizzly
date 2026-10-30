@@ -49,11 +49,12 @@ struct FlowLayout: Layout {
     }
 }
 
-/// Bottom of the sidebar: every tag as a chip. A click shows the files that carry the tag, a second click leaves the filter.
+/// Bottom of the sidebar, like the tag browser in Apple Notes: "All Tags" plus a chip per tag. Chips toggle, and
+/// several selected tags show the files that carry all of them. Tags are the #words written in the files.
 struct TagPanel: View {
+    @EnvironmentObject private var state: AppState
     @EnvironmentObject private var library: LibraryStore
     @Environment(\.theme) private var theme
-    @Binding var selected: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -65,16 +66,25 @@ struct TagPanel: View {
                     .help("Новый тег")
             }
             if library.allTags.isEmpty {
-                Text("Создайте тег кнопкой + или через контекстное меню файла.")
+                Text("Напишите #тег в тексте файла, и он появится здесь. Или создайте тег кнопкой +.")
                     .font(.caption).foregroundColor(.secondary)
             } else {
                 ScrollView {
                     FlowLayout(spacing: 6) {
-                        ForEach(library.allTags, id: \.self) { tag in chip(tag) }
+                        chip(title: L("Все теги"), on: state.selectedTags.isEmpty, count: nil) { state.selectedTags = [] }
+                        ForEach(library.allTags, id: \.self) { tag in
+                            chip(title: "#\(tag)", on: state.isTagSelected(tag), count: library.files(withTag: tag).count) {
+                                state.toggleTagSelection(tag)
+                            }
+                            .contextMenu {
+                                Button("Переименовать…") { rename(tag) }
+                                Button("Удалить тег", role: .destructive) { state.deleteTag(tag) }
+                            }
+                        }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxHeight: 96)
+                .frame(maxHeight: 110)
             }
         }
         .padding(.horizontal, 12)
@@ -82,13 +92,11 @@ struct TagPanel: View {
         .overlay(alignment: .top) { Divider() }
     }
 
-    private func chip(_ tag: String) -> some View {
-        let on = selected?.caseInsensitiveCompare(tag) == .orderedSame
-        let count = library.files(withTag: tag).count
-        return Button { selected = on ? nil : tag } label: {
+    private func chip(title: String, on: Bool, count: Int?, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
             HStack(spacing: 4) {
-                Text("#\(tag)").lineLimit(1)
-                Text("\(count)").font(.caption2).opacity(0.7)
+                Text(title).lineLimit(1)
+                if let count { Text("\(count)").font(.caption2).opacity(0.7) }
             }
             .font(.caption)
             .padding(.horizontal, 8)
@@ -97,25 +105,16 @@ struct TagPanel: View {
             .background(Capsule().fill(on ? theme.accent : Color.primary.opacity(0.09)))
         }
         .buttonStyle(.plain)
-        .contextMenu {
-            Button("Переименовать…") { rename(tag) }
-            Button("Удалить тег", role: .destructive) {
-                if on { selected = nil }
-                library.deleteTag(tag)
-            }
-        }
     }
 
     private func create() {
         guard let name = TextPrompt.ask(title: L("Новый тег"), confirm: L("Создать")),
               let tag = library.createTag(name) else { return }
-        selected = tag
+        state.selectedTags = [tag]
     }
 
     private func rename(_ tag: String) {
         guard let name = TextPrompt.ask(title: L("Переименовать тег"), initial: tag, confirm: L("Переименовать")) else { return }
-        let wasSelected = selected?.caseInsensitiveCompare(tag) == .orderedSame
-        library.renameTag(tag, to: name)
-        if wasSelected { selected = LibraryStore.cleanTag(name) }
+        state.renameTag(tag, to: name)
     }
 }
