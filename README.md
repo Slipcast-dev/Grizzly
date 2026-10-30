@@ -36,9 +36,9 @@ Get the files from the **[latest release](https://github.com/Slipcast-dev/Grizzl
 
 | Platform | File | Notes |
 |---|---|---|
-| macOS 13+, Apple Silicon | `Grizzly-1.2.0-arm64.dmg` | Drag *Grizzly* to *Applications* |
-| macOS 13+, Intel | `Grizzly-1.2.0-x64.dmg` | Drag *Grizzly* to *Applications* |
-| Windows 10/11, x64 | `Grizzly-1.2.0-portable.exe` | Portable, no installer |
+| macOS 13+, Apple Silicon | `Grizzly-1.2.1-arm64.dmg` | Drag *Grizzly* to *Applications* |
+| macOS 13+, Intel | `Grizzly-1.2.1-x64.dmg` | Drag *Grizzly* to *Applications* |
+| Windows 10/11, x64 | `Grizzly-1.2.1-portable.exe` | Portable, no installer |
 
 > [!IMPORTANT]
 > The builds are **not code-signed or notarized**. macOS Gatekeeper and Windows SmartScreen will warn on first
@@ -99,7 +99,7 @@ More in the [User guide](docs/en/usage.md).
 
 ## Privacy and security
 
-Grizzly has no telemetry and no accounts. Its only network access is the update check against the public GitHub Releases API (at launch and from *Settings → Updates*); a download is installed only from GitHub over HTTPS and is verified against the SHA-256 in the release notes. The Windows app runs its UI in a
+Grizzly has no telemetry and no accounts. Its only network access is the update check against the public GitHub Releases API (at launch and from *Settings → Updates*); a download is installed only from GitHub over HTTPS and is verified against the SHA-256 in the release notes (a release without one is refused). The Windows app runs its UI in a
 sandboxed renderer with context isolation and a strict Content-Security-Policy. Report vulnerabilities
 privately — see [SECURITY.md](SECURITY.md).
 

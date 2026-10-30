@@ -35,7 +35,7 @@ samples/      По файлу каждого поддерживаемого ти
 
 ## Модель безопасности
 
-- Единственный сетевой код — проверка обновлений: GET на `api.github.com/repos/Slipcast-dev/Grizzly/releases/latest` при запуске и из настроек. Загрузки принимаются только с `github.com` / `*.githubusercontent.com` по HTTPS, сверяются с SHA-256 из описания релиза (если он указан) и устанавливаются только после решения по несохранённым правкам. Телеметрии нет.
+- Единственный сетевой код — проверка обновлений: GET на `api.github.com/repos/Slipcast-dev/Grizzly/releases/latest` при запуске и из настроек. Загрузки принимаются только с `github.com` / `*.githubusercontent.com` по HTTPS, должны совпасть с SHA-256 из описания релиза (релиз без суммы отклоняется), ограничены по размеру, каждый редирект должен оставаться на GitHub, и устанавливаются только после решения по несохранённым правкам. Телеметрии нет.
 - HTML-файлы показываются как исходный текст, не отрисовываются и не выполняются.
 - Рендерер Electron: `sandbox: true`, `contextIsolation: true`, `nodeIntegration: false` и
   Content-Security-Policy `default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:`.

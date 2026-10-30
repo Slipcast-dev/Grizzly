@@ -35,7 +35,7 @@ samples/      One file of each supported type for manual testing
 
 ## Security model
 
-- The only network code is the update check: a GET to `api.github.com/repos/Slipcast-dev/Grizzly/releases/latest` at launch and from Settings. Downloads are accepted only from `github.com` / `*.githubusercontent.com` over HTTPS, are checked against the SHA-256 in the release notes when present, and are installed only after unsaved edits were dealt with. There is no telemetry.
+- The only network code is the update check: a GET to `api.github.com/repos/Slipcast-dev/Grizzly/releases/latest` at launch and from Settings. Downloads are accepted only from `github.com` / `*.githubusercontent.com` over HTTPS, must match the SHA-256 in the release notes (a release without one is refused), are limited in size, every redirect must stay on GitHub, and are installed only after unsaved edits were dealt with. There is no telemetry.
 - HTML files are displayed as source, never rendered or executed.
 - Electron renderer: `sandbox: true`, `contextIsolation: true`, `nodeIntegration: false`, and a
   Content-Security-Policy of `default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:`.

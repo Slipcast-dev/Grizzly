@@ -3,6 +3,13 @@
 All notable changes are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.2.1] - 2026-10-30
+
+### Security
+- **Updates**: a release without a published SHA-256 is no longer installed (macOS and Windows). Every redirect must stay on GitHub, download size is capped at 500 MB, and the Windows helper script is written to a private temporary folder.
+- **Windows**: saving is limited to files you opened, created or picked in a dialog; all IPC handlers verify the calling page; files over 100 MB are not read; the library file is size-checked; DevTools are disabled in the packaged app; the page can no longer request device permissions; the Content-Security-Policy also forbids `object`, `base` and form submission.
+- CodeQL workflow uses the same `checkout` version as CI.
+
 ## [1.2.0] - 2026-10-30
 
 ### Added

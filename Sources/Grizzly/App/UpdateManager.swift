@@ -87,10 +87,14 @@ final class UpdateManager: ObservableObject {
 
     private struct UpdateError: Error { let message: String }
 
+    private static let maxDownload = 500.0 * 1024 * 1024
+
     private func download(_ release: ReleaseInfo) async throws -> URL {
+        // A release without a published SHA-256 is never installed.
+        guard release.sha256 != nil else { throw UpdateError(message: L("Не удалось скачать обновление.")) }
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("grizzly-update-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let file = dir.appendingPathComponent(release.assetName)
+        let file = dir.appendingPathComponent((release.assetName as NSString).lastPathComponent)
         FileManager.default.createFile(atPath: file.path, contents: nil)
         let out = try FileHandle(forWritingTo: file)
         defer { try? out.close() }
@@ -99,7 +103,12 @@ final class UpdateManager: ObservableObject {
         request.setValue("Grizzly/\(currentVersion)", forHTTPHeaderField: "User-Agent")
         let (bytes, response) = try await URLSession.shared.bytes(for: request)
         guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw UpdateError(message: L("Не удалось скачать обновление.")) }
+        // Redirects must still end on a trusted GitHub host.
+        guard let finalURL = response.url, UpdateCheck.isTrustedDownload(finalURL) else {
+            throw UpdateError(message: L("Не удалось скачать обновление."))
+        }
         let total = Double(response.expectedContentLength)
+        if total > Self.maxDownload { throw UpdateError(message: L("Не удалось скачать обновление.")) }
 
         var hasher = SHA256()
         var chunk = Data()
@@ -111,6 +120,7 @@ final class UpdateManager: ObservableObject {
                 try out.write(contentsOf: chunk)
                 hasher.update(data: chunk)
                 received += Double(chunk.count)
+                if received > Self.maxDownload { throw UpdateError(message: L("Не удалось скачать обновление.")) }
                 chunk.removeAll(keepingCapacity: true)
                 try Task.checkCancellation()
                 if total > 0, received / total - lastShown > 0.01 {
