@@ -13,4 +13,4 @@
 - [ ] Tried it with the files in `samples/`
 - [ ] Updated docs and `CHANGELOG.md` if behavior changed
 - [ ] No secrets, personal paths or build output committed
-- [ ] No new network access or runtime dependency
+- [ ] No new network access (beyond the GitHub update check) or runtime dependency

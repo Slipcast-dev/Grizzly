@@ -55,4 +55,4 @@ npx electron scripts/smoke.js a.md b.csv # launch the real app and print the ren
 1. Set the version in the `VERSION` file and in `electron/package.json` (`tests/version.test.cjs` checks they match and that CHANGELOG has an entry).
 2. Update [CHANGELOG.md](../../CHANGELOG.md).
 3. Run `./scripts/test.sh`, build the artifacts and compute checksums with `shasum -a 256`.
-4. Tag `vX.Y.Z` and create a GitHub release with the artifacts and checksums.
+4. Tag `vX.Y.Z` and create a GitHub release with the artifacts and checksums. The in-app updater looks for `*-arm64.dmg`, `*-x64.dmg` and `*-portable.exe` and reads each file's SHA-256 from the release notes (a line with the file name and the 64-digit hash), so keep that format.

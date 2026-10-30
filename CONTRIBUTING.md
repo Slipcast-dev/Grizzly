@@ -23,7 +23,7 @@ cd electron && npm ci && npm start # Windows port, run from source
 - Keep the macOS and Windows apps behaviorally in sync; a feature change usually touches both `Sources/` and `electron/`.
 - UI strings: Russian text is the key in `resources/ru.lproj`, English goes in `resources/en.lproj`. Run
   `npm run strings` in `electron/` after editing.
-- No network access, telemetry or new runtime dependencies without prior discussion.
+- No new network access (the update check against GitHub Releases is the only one), telemetry or new runtime dependencies without prior discussion.
 - Match the surrounding code style; keep changes focused.
 - Test by opening the files in [`samples/`](samples). For the Electron app, `npx electron scripts/smoke.js <files>` is a quick check.
 - Never commit secrets, personal paths, build output (`build/`, `dist/`) or third-party assets you do not have the right to redistribute.
