@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, dialog, ipcMain, shell, nativeTheme } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, shell, nativeTheme, screen } = require('electron');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
@@ -58,8 +58,10 @@ function filesFromArgv(argv) {
     .filter((p) => { try { return fs.statSync(p).isFile(); } catch { return false; } });
 }
 
+
 function deliver(paths) {
   if (!paths.length) return;
+  approve(paths);
   if (win && rendererReady) win.webContents.send('open-files', paths);
   else pendingFiles.push(...paths);
 }
@@ -70,8 +72,18 @@ function loadBounds() {
   try { return JSON.parse(fs.readFileSync(statePath(), 'utf8')); } catch { return {}; }
 }
 
+/** Drops a saved position that is no longer on any screen (a disconnected monitor would leave the window unreachable). */
+function visibleOnScreen(b) {
+  if (typeof b.x !== 'number' || typeof b.y !== 'number') return false;
+  const w = b.width || 1100;
+  const h = b.height || 720;
+  return screen.getAllDisplays().some(({ workArea: a }) =>
+    b.x + w > a.x + 80 && b.x < a.x + a.width - 80 && b.y + 40 > a.y && b.y < a.y + a.height - 40);
+}
+
 function createWindow() {
   const saved = loadBounds();
+  if (!visibleOnScreen(saved)) { delete saved.x; delete saved.y; }
   win = new BrowserWindow({
     width: saved.width || 1100,
     height: saved.height || 720,
@@ -91,20 +103,27 @@ function createWindow() {
     },
   });
   setupSpellcheck();
+  // The page needs no camera, location, notifications and the like.
+  win.webContents.session.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
+  win.webContents.session.setPermissionCheckHandler(() => false);
+  if (app.isPackaged) win.webContents.on('devtools-opened', () => win.webContents.closeDevTools());
   if (saved.maximized) win.maximize();
   win.once('ready-to-show', () => win.show());
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
   win.webContents.setWindowOpenHandler(({ url }) => { openExternal(url); return { action: 'deny' }; });
+  // The window never leaves its own page: a stray file:// link or drop must not replace the UI (the trusted-sender check would then fail).
+  const ownPage = require('url').pathToFileURL(path.join(__dirname, 'renderer', 'index.html')).href;
   win.webContents.on('will-navigate', (e, url) => {
-    if (!url.startsWith('file://')) { e.preventDefault(); openExternal(url); }
+    if (url === ownPage) return;
+    e.preventDefault();
+    if (!url.startsWith('file://')) openExternal(url);
   });
 
   const saveBounds = () => {
     if (!win || win.isDestroyed()) return;
     const maximized = win.isMaximized();
-    const b = maximized ? (saved.rect || win.getNormalBounds()) : win.getBounds();
-    saved.rect = b;
+    const b = win.getNormalBounds();
     try { fs.writeFileSync(statePath(), JSON.stringify({ ...b, maximized })); } catch { /* ignore */ }
   };
   win.on('close', (e) => {
@@ -217,7 +236,7 @@ function buildMenu() {
         alias('fontUp', 'CmdOrCtrl+='),
         { type: 'separator' },
         { role: 'togglefullscreen' },
-        { label: 'DevTools', accelerator: 'CmdOrCtrl+Shift+I', visible: false, role: 'toggleDevTools' },
+        ...(app.isPackaged ? [] : [{ label: 'DevTools', accelerator: 'CmdOrCtrl+Shift+I', visible: false, role: 'toggleDevTools' }]),
       ],
     },
   ];
@@ -304,6 +323,7 @@ function rtfToText(src) {
 
 /** Reads a file and decodes it: UTF-8 (BOM), UTF-16 (BOM), UTF-8, then Windows-1251. */
 function readText(file) {
+  if (fs.statSync(file).size > MAX_READ) throw Object.assign(new Error('file too large'), { code: 'EFBIG' });
   const buf = fs.readFileSync(file);
   if (path.extname(file).toLowerCase() === '.rtf') {
     return { text: rtfToText(buf.toString('latin1')), encoding: 'RTF' };
@@ -329,6 +349,11 @@ function validPath(file) {
 }
 const refuse = { ok: false, code: 'EACCES' };
 
+// Files the user brought in (dialogs, command line, folder scan, a successful read). Writes are limited to these.
+const approved = new Set();
+const approve = (list) => { for (const p of list) if (typeof p === 'string') approved.add(path.resolve(p)); };
+const MAX_READ = 100 * 1024 * 1024;
+
 ipcMain.handle('app:info', () => ({
   platform: process.platform,
   locale: resolveLocale(),
@@ -345,12 +370,14 @@ ipcMain.handle('language:set', (e, language) => {
   return resolveLocale();
 });
 
-ipcMain.on('renderer:ready', () => {
+ipcMain.on('renderer:ready', (e) => {
+  if (!win || !trusted(e)) return;
   rendererReady = true;
   if (pendingFiles.length) { win.webContents.send('open-files', pendingFiles); pendingFiles = []; }
 });
 
-ipcMain.handle('dialog:open', async () => {
+ipcMain.handle('dialog:open', async (e) => {
+  if (!trusted(e)) return [];
   const result = await dialog.showOpenDialog(win, {
     properties: ['openFile', 'multiSelections'],
     filters: [
@@ -358,10 +385,12 @@ ipcMain.handle('dialog:open', async () => {
       { name: T('Все файлы'), extensions: ['*'] },
     ],
   });
+  if (!result.canceled) approve(result.filePaths);
   return result.canceled ? [] : result.filePaths;
 });
 
-ipcMain.handle('dialog:openFolder', async () => {
+ipcMain.handle('dialog:openFolder', async (e) => {
+  if (!trusted(e)) return [];
   const result = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'multiSelections'] });
   return result.canceled ? [] : result.filePaths;
 });
@@ -382,6 +411,7 @@ ipcMain.handle('fs:scanDir', (e, root) => {
     }
   };
   walk(root, 0);
+  approve(out.map((f) => f.path));
   return out;
 });
 
@@ -389,6 +419,7 @@ ipcMain.handle('file:read', (e, file) => {
   if (!trusted(e) || !validPath(file)) return refuse;
   try {
     const { text, encoding } = readText(file);
+    approve([file]);
     return { ok: true, text, encoding, mtimeMs: fs.statSync(file).mtimeMs };
   } catch (err) {
     return { ok: false, code: err.code || 'EREAD' };
@@ -446,7 +477,7 @@ function encodeText(text, encoding, file) {
 }
 
 ipcMain.handle('file:write', (e, file, text, encoding) => {
-  if (!trusted(e) || !validPath(file)) return refuse;
+  if (!trusted(e) || !validPath(file) || !approved.has(path.resolve(file))) return refuse;
   try {
     fs.writeFileSync(file, encodeText(String(text), encoding, file));
     return { ok: true, mtimeMs: fs.statSync(file).mtimeMs };
@@ -495,10 +526,15 @@ ipcMain.handle('dialog:newFile', async (e, dir) => {
   });
   if (result.canceled || !result.filePath) return { ok: false, code: 'ECANCEL' };
   let file = result.filePath;
-  if (!EXTENSIONS.includes(path.extname(file).slice(1).toLowerCase())) file += '.md';
+  if (!EXTENSIONS.includes(path.extname(file).slice(1).toLowerCase())) {
+    file += '.md';
+    // The dialog already confirmed the name without the extension; the real target may be an existing file.
+    if (fs.existsSync(file)) return { ok: false, code: 'EEXIST', name: path.basename(file) };
+  }
   const ext = path.extname(file).slice(1).toLowerCase();
   try {
     fs.writeFileSync(file, encodeText(templateFor(ext), ext === 'rtf' ? 'RTF' : 'UTF-8', file));
+    approve([file]);
     return { ok: true, path: file };
   } catch (err) {
     return { ok: false, code: err.code || 'EWRITE', name: path.basename(file) };
@@ -519,7 +555,10 @@ ipcMain.handle('dialog:saveAs', async (e, name, text, encoding, dir) => {
   });
   if (result.canceled || !result.filePath) return { ok: false, code: 'ECANCEL' };
   let file = result.filePath;
-  if (!EXTENSIONS.includes(path.extname(file).slice(1).toLowerCase())) file += '.' + formats[0][1][0];
+  if (!EXTENSIONS.includes(path.extname(file).slice(1).toLowerCase())) {
+    file += '.' + formats[0][1][0];
+    if (fs.existsSync(file)) return { ok: false, code: 'EEXIST' };
+  }
   const toRtf = path.extname(file).toLowerCase() === '.rtf';
   // Text formats keep the source encoding; RTF is its own container and RTF sources become UTF-8.
   let enc = toRtf ? 'RTF' : (encoding === 'RTF' ? 'UTF-8' : encoding);
@@ -531,13 +570,15 @@ ipcMain.handle('dialog:saveAs', async (e, name, text, encoding, dir) => {
       data = encodeText(String(text), enc, file);
     }
     fs.writeFileSync(file, data);
+    approve([file]);
     return { ok: true, path: file, encoding: enc };
   } catch (err) {
     return { ok: false, code: err.code || 'EWRITE' };
   }
 });
 
-ipcMain.handle('dialog:confirmSave', async (_e, name) => {
+ipcMain.handle('dialog:confirmSave', async (e, name) => {
+  if (!trusted(e)) return 'cancel';
   const { response } = await dialog.showMessageBox(win, {
     type: 'warning',
     message: T('Сохранить изменения в «%@»?').replace('%@', name),
@@ -551,7 +592,7 @@ ipcMain.handle('dialog:confirmSave', async (_e, name) => {
 });
 
 let hasUnsaved = false;
-ipcMain.on('app:dirty', (_e, dirty) => { hasUnsaved = !!dirty; });
+ipcMain.on('app:dirty', (e, dirty) => { if (trusted(e)) hasUnsaved = !!dirty; });
 
 ipcMain.handle('file:mtimes', (e, files) => {
   const out = {};
@@ -563,7 +604,7 @@ ipcMain.handle('file:mtimes', (e, files) => {
   return out;
 });
 
-ipcMain.handle('shell:reveal', (e, file) => { if (trusted(e) && typeof file === 'string' && path.isAbsolute(file)) shell.showItemInFolder(file); });
+ipcMain.handle('shell:reveal', (e, file) => { if (trusted(e) && typeof file === 'string' && path.isAbsolute(file) && !file.includes('\0')) shell.showItemInFolder(file); });
 ipcMain.handle('shell:external', (e, url) => { if (trusted(e)) openExternal(String(url)); });
 
 ipcMain.handle('dialog:confirmUtf8', async (e, name, encoding) => {
@@ -632,7 +673,7 @@ ipcMain.handle('update:apply', (e) => {
     return { ok: false, code: 'MANUAL' };
   }
   try {
-    const script = path.join(os.tmpdir(), `grizzly-update-${process.pid}.cmd`);
+    const script = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'grizzly-upd-')), 'replace.cmd');
     fs.writeFileSync(script, updater.REPLACE_SCRIPT);
     spawn('cmd.exe', ['/c', script, downloadedUpdate, target], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
   } catch {
@@ -646,11 +687,13 @@ ipcMain.handle('update:apply', (e) => {
 
 const libraryPath = () => path.join(app.getPath('userData'), 'library.json');
 
-ipcMain.handle('library:load', () => {
+ipcMain.handle('library:load', (e) => {
+  if (!trusted(e)) return null;
   try { return fs.readFileSync(libraryPath(), 'utf8'); } catch { return null; }
 });
 
-ipcMain.handle('library:save', (_e, json) => {
+ipcMain.handle('library:save', (e, json) => {
+  if (!trusted(e) || typeof json !== 'string' || json.length > 20 * 1024 * 1024) return false;
   const tmp = libraryPath() + '.tmp';
   try {
     fs.writeFileSync(tmp, json);
@@ -674,6 +717,7 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(() => {
     pendingFiles = filesFromArgv(process.argv);
+    approve(pendingFiles);
     languagePref = loadLanguage();
     buildMenu();
     createWindow();

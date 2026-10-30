@@ -36,9 +36,9 @@ C/C++, C#, JavaScript, TypeScript, CSS и PHP). Открывает докуме�
 
 | Платформа | Файл | Примечание |
 |---|---|---|
-| macOS 13+, Apple Silicon | `Grizzly-1.2.0-arm64.dmg` | Перетащите *Grizzly* в *Программы* |
-| macOS 13+, Intel | `Grizzly-1.2.0-x64.dmg` | Перетащите *Grizzly* в *Программы* |
-| Windows 10/11, x64 | `Grizzly-1.2.0-portable.exe` | Без установки |
+| macOS 13+, Apple Silicon | `Grizzly-1.2.1-arm64.dmg` | Перетащите *Grizzly* в *Программы* |
+| macOS 13+, Intel | `Grizzly-1.2.1-x64.dmg` | Перетащите *Grizzly* в *Программы* |
+| Windows 10/11, x64 | `Grizzly-1.2.1-portable.exe` | Без установки |
 
 > [!IMPORTANT]
 > Сборки **не подписаны и не нотаризованы**. macOS (Gatekeeper) и Windows (SmartScreen) покажут предупреждение
@@ -98,7 +98,7 @@ C/C++, C#, JavaScript, TypeScript, CSS и PHP). Открывает докуме�
 
 ## Приватность и безопасность
 
-В Grizzly нет телеметрии и аккаунтов. Единственное обращение к сети — проверка обновлений через публичный API GitHub Releases (при запуске и в *Настройки → Обновления*); обновление устанавливается только с GitHub по HTTPS и сверяется с SHA-256 из описания релиза. Интерфейс Windows-версии
+В Grizzly нет телеметрии и аккаунтов. Единственное обращение к сети — проверка обновлений через публичный API GitHub Releases (при запуске и в *Настройки → Обновления*); обновление устанавливается только с GitHub по HTTPS и сверяется с SHA-256 из описания релиза (релиз без суммы не устанавливается). Интерфейс Windows-версии
 выполняется в изолированном (sandbox) процессе с context isolation и строгим Content-Security-Policy. О
 уязвимостях сообщайте приватно — см. [SECURITY.md](SECURITY.md).
 
