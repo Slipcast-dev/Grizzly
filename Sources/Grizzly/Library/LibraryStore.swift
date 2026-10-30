@@ -260,6 +260,9 @@ final class LibraryStore: ObservableObject {
 
     // MARK: Tags
 
+    /// Characters a tag may contain: letters, digits, marks, `_`, `-` and emoji (so `#🍕` and `#идея💡` are tags).
+    static let tagBody = "\\p{L}\\p{N}\\p{M}_\\-\\p{Extended_Pictographic}\\u200D\\uFE0F"
+
     /// Tag text as stored: trimmed, without a leading "#".
     static func cleanTag(_ raw: String) -> String {
         var t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -309,7 +312,7 @@ final class LibraryStore: ObservableObject {
     /// `#word` tags in prose: a hash right before a letter or digit, not part of a word, link or entity.
     static func extractTags(from text: String) -> [String] {
         guard text.contains("#"),
-              let regex = try? NSRegularExpression(pattern: "(?<![\\p{L}\\p{N}_#&/=:])#([\\p{L}\\p{N}_-]+)") else { return [] }
+              let regex = try? NSRegularExpression(pattern: "(?<![\\p{L}\\p{N}_#&/=:])#([" + tagBody + "]+)") else { return [] }
         let ns = text as NSString
         var seen = Set<String>()
         var result: [String] = []
@@ -322,7 +325,7 @@ final class LibraryStore: ObservableObject {
 
     /// Matches `#tag` the way `extractTags` reads tags, for one specific tag.
     private static func tagRegex(_ tag: String) -> NSRegularExpression? {
-        try? NSRegularExpression(pattern: "(?<![\\p{L}\\p{N}_#&/=:])#" + NSRegularExpression.escapedPattern(for: tag) + "(?![\\p{L}\\p{N}_-])",
+        try? NSRegularExpression(pattern: "(?<![\\p{L}\\p{N}_#&/=:])#" + NSRegularExpression.escapedPattern(for: tag) + "(?![" + tagBody + "])",
                                  options: [.caseInsensitive])
     }
 
@@ -349,7 +352,7 @@ final class LibraryStore: ObservableObject {
     /// Where the `#tags` are in a text (range includes the `#`), for coloring them.
     static func tagMatches(in text: String) -> [(range: NSRange, tag: String)] {
         guard text.contains("#"),
-              let regex = try? NSRegularExpression(pattern: "(?<![\\p{L}\\p{N}_#&/=:])#([\\p{L}\\p{N}_-]+)") else { return [] }
+              let regex = try? NSRegularExpression(pattern: "(?<![\\p{L}\\p{N}_#&/=:])#([" + tagBody + "]+)") else { return [] }
         let ns = text as NSString
         var result: [(NSRange, String)] = []
         for m in regex.matches(in: text, range: NSRange(location: 0, length: ns.length)) {

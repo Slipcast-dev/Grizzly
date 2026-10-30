@@ -111,6 +111,7 @@ struct TagPanel: View {
         guard let name = TextPrompt.ask(title: L("Новый тег"), confirm: L("Создать")),
               let tag = library.createTag(name) else { return }
         state.selectedTags = [tag]
+        state.notify(L("Тег создан: #%@", tag), symbol: "tag.fill")
     }
 
     private func rename(_ tag: String) {

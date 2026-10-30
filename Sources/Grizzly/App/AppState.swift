@@ -5,6 +5,12 @@ import UniformTypeIdentifiers
 enum ReadMode: String { case source, reading, edit }
 enum Pane { case left, right }
 
+struct Toast: Equatable, Identifiable {
+    let id = UUID()
+    let text: String
+    let symbol: String
+}
+
 final class AppState: ObservableObject {
     static let shared = AppState()
 
@@ -21,6 +27,8 @@ final class AppState: ObservableObject {
     /// Library entry highlighted in the sidebar; follows the focused pane.
     @Published var selectedFileID: UUID?
     @Published var mode: ReadMode = .reading
+    /// A short message at the bottom of the window ("Saved", "Tag created", ...).
+    @Published private(set) var toast: Toast?
     /// Tags picked in the sidebar: the list shows the files that carry all of them.
     @Published var selectedTags: [String] = []
     /// Bumped when the sidebar should switch to the file list (a tag was clicked in a document).
@@ -52,6 +60,17 @@ final class AppState: ObservableObject {
     func docID(in pane: Pane) -> UUID? { pane == .left ? selection : rightSelection }
     func doc(in pane: Pane) -> Document? { documents.first { $0.id == docID(in: pane) } }
     var current: Document? { doc(in: isSplit ? focusedPane : .left) }
+
+    // MARK: Notifications
+
+    /// Shows a short notification; it fades after a couple of seconds (a newer one replaces it).
+    func notify(_ text: String, symbol: String = "checkmark.circle.fill") {
+        let t = Toast(text: text, symbol: symbol)
+        toast = t
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) { [weak self] in
+            if self?.toast?.id == t.id { self?.toast = nil }
+        }
+    }
 
     // MARK: Opening
 
@@ -236,6 +255,7 @@ final class AppState: ObservableObject {
         reportSkipped(rewriteTag(old, to: new))
         library.renameTag(old, to: new)
         selectedTags = selectedTags.map { $0.caseInsensitiveCompare(old) == .orderedSame ? new : $0 }
+        notify(L("Тег переименован: #%@", new), symbol: "tag.fill")
     }
 
     func deleteTag(_ tag: String) {
@@ -252,6 +272,7 @@ final class AppState: ObservableObject {
         reportSkipped(rewriteTag(tag, to: nil))
         library.deleteTag(tag)
         selectedTags.removeAll { $0.caseInsensitiveCompare(tag) == .orderedSame }
+        notify(L("Тег удалён: #%@", tag), symbol: "tag.slash.fill")
     }
 
     static let proseTypes: Set<FileType> = [.markdown, .text, .rtf, .tex]
@@ -260,6 +281,20 @@ final class AppState: ObservableObject {
     private func noteTags(in doc: Document) {
         guard let id = doc.libraryID, Self.proseTypes.contains(doc.type) else { return }
         library.setInlineTags(id, LibraryStore.extractTags(from: doc.normalized))
+    }
+
+    private var tagTimers: [UUID: Timer] = [:]
+
+    /// Tags typed into the text show up in the sidebar after a short pause, without saving the file.
+    /// (A pause rather than every key press: "#р", "#ра", "#раб" must not become three tags.)
+    private func scheduleTagRefresh(for doc: Document, text: String) {
+        guard doc.libraryID != nil, Self.proseTypes.contains(doc.type) else { return }
+        tagTimers[doc.id]?.invalidate()
+        tagTimers[doc.id] = Timer.scheduledTimer(withTimeInterval: 0.6, repeats: false) { [weak self] _ in
+            guard let self, let id = doc.libraryID else { return }
+            self.tagTimers[doc.id] = nil
+            self.library.setInlineTags(id, LibraryStore.extractTags(from: text))
+        }
     }
 
     /// Reads every prose file of the library once at launch, so tags written in the texts show up in the sidebar.
@@ -309,7 +344,10 @@ final class AppState: ObservableObject {
 
     /// User-initiated reload: asks first when it would throw away unsaved edits.
     func refresh(_ id: UUID) {
-        if confirmDiscard([id]) { reload(id) }
+        if confirmDiscard([id]) {
+            reload(id)
+            notify(L("Файл обновлён с диска."), symbol: "arrow.triangle.2.circlepath")
+        }
     }
 
     /// Hides the banner until the file changes again.
@@ -327,11 +365,15 @@ final class AppState: ObservableObject {
     func setDraft(_ text: String, for doc: Document) {
         let value: String? = text == doc.normalized ? nil : text
         if drafts[doc.id] != value { drafts[doc.id] = value }
+        scheduleTagRefresh(for: doc, text: text)
         // Hits move while the text is being typed; recount them without jumping the caret.
         if isFindVisible, mode == .edit, !findQuery.isEmpty { recomputeMatches(reset: false, reveal: false) }
     }
 
-    func discardDraft(_ id: UUID) { drafts[id] = nil }
+    func discardDraft(_ id: UUID) {
+        drafts[id] = nil
+        if let doc = documents.first(where: { $0.id == id }) { noteTags(in: doc) }
+    }
 
     /// Writes the edited text to the file in its original encoding, then re-reads it.
     @discardableResult
@@ -351,7 +393,12 @@ final class AppState: ObservableObject {
             return false
         }
         reload(id)
-        return drafts[id] == nil
+        let saved = drafts[id] == nil
+        if saved {
+            notify(L("Сохранено: %@", doc.name))
+            if doc.type == .rtf { notify(L("Файл RTF сохранён без форматирования."), symbol: "info.circle.fill") }
+        }
+        return saved
     }
 
     private func confirmUTF8(for doc: Document) -> Bool {
@@ -413,6 +460,7 @@ final class AppState: ObservableObject {
         guard let doc = current else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text(for: doc), forType: .string)
+        notify(L("Весь текст скопирован."), symbol: "doc.on.doc.fill")
     }
 
     /// Saves a copy of the current document (with unsaved edits) in a chosen format and place.
@@ -442,6 +490,7 @@ final class AppState: ObservableObject {
         UserDefaults.standard.set(url.deletingLastPathComponent().path, forKey: "newFileDirectory")
         open(urls: [url])
         mode = .edit
+        notify(L("Файл создан: %@", url.lastPathComponent), symbol: "doc.badge.plus")
     }
 
     private func export(_ doc: Document, to url: URL) {
@@ -458,7 +507,9 @@ final class AppState: ObservableObject {
             }
         } catch {
             errorMessage = L("Не удалось сохранить «%@».", url.lastPathComponent)
+            return
         }
+        notify(L("Копия сохранена: %@", url.lastPathComponent), symbol: "square.and.arrow.down.fill")
     }
 
     /// Asks about every unsaved document among `ids`; false means the user cancelled.
@@ -474,7 +525,7 @@ final class AppState: ObservableObject {
             alert.addButton(withTitle: L("Отмена"))
             switch alert.runModal() {
             case .alertFirstButtonReturn: if !save(id) { return false }
-            case .alertSecondButtonReturn: break
+            case .alertSecondButtonReturn: noteTags(in: doc)   // the edits are dropped: tags go back to the file's text
             default: return false
             }
         }
@@ -580,9 +631,13 @@ final class AppState: ObservableObject {
     func close(_ id: UUID) -> Bool {
         guard confirmDiscard([id]) else { return false }
         guard let i = documents.firstIndex(where: { $0.id == id }) else { return true }
+        let closed = documents[i]
         documents.remove(at: i)
         changedOnDisk.remove(id)
         drafts[id] = nil
+        tagTimers[id]?.invalidate()
+        tagTimers[id] = nil
+        noteTags(in: closed)
 
         let neighbour = documents.indices.contains(i) ? documents[i].id : documents.last?.id
         if selection == id { selection = neighbour }
@@ -601,12 +656,14 @@ final class AppState: ObservableObject {
         guard documents.contains(where: { isDirty($0.id) }) else { return true }
         guard confirmDiscard(documents.map(\.id)) else { return false }
         drafts = [:]
+        documents.forEach { noteTags(in: $0) }
         return true
     }
 
     func closeOthers(keeping id: UUID) {
         guard confirmDiscard(documents.map(\.id).filter { $0 != id }) else { return }
         drafts = drafts.filter { $0.key == id }
+        documents.filter { $0.id != id }.forEach { noteTags(in: $0) }
         documents.removeAll { $0.id != id }
         selection = id
         rightSelection = nil

@@ -27,7 +27,10 @@ struct SourceView: View {
             initialScrollID: state.scrollTarget?.id,
             grabFocus: isScrollTarget,
             numbers: prefs.showLineNumbers
-                ? .init(size: size, bookmarks: bookmarked, toggle: { library.toggleBookmark(document.libraryID, line: $0) })
+                ? .init(size: size, bookmarks: bookmarked, toggle: { line in
+                    library.toggleBookmark(document.libraryID, line: line)
+                    state.notify(bookmarked.contains(line) ? L("Закладка убрана.") : L("Закладка добавлена: строка %lld.", line), symbol: "bookmark.fill")
+                })
                 : nil)
             .id("\(document.id)-\(prefs.showLineNumbers)")
     }

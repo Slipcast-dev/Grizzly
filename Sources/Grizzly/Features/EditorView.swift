@@ -41,26 +41,26 @@ struct EditorView: View {
     /// Spelling and grammar are checked in prose; in source code and data files every identifier would be an "error".
     static func isProse(_ type: FileType) -> Bool { [.markdown, .text, .rtf, .tex].contains(type) }
 
+    /// Undo and Save, in the same style as the other buttons. The status line is gone: saving and similar
+    /// events are announced by notifications instead.
     private func bar(_ document: Document) -> some View {
         let dirty = state.isDirty(document.id)
-        return HStack(spacing: 10) {
-            Text(dirty ? (document.type == .rtf ? "Есть несохранённые изменения. Форматирование RTF при сохранении будет потеряно." : "Есть несохранённые изменения.") : "Изменений нет.")
-                .foregroundColor(dirty ? theme.text : theme.secondary)
+        return HStack(spacing: 8) {
             Spacer()
-            Group {
-                Button("Отменить изменения") { state.discardDraft(document.id) }
-                Button("Сохранить  ⌘S") { state.save(document.id) }
-                    .font(.callout.weight(.semibold))
+            Button { NSApp.sendAction(Selector(("undo:")), to: nil, from: nil) } label: {
+                Label("Отменить", systemImage: "arrow.uturn.backward")
             }
-            .disabled(!dirty)
-            .foregroundColor(dirty ? theme.text : theme.secondary)
+            .help("Отменить последнее изменение (⌘Z)")
+            Button { state.save(document.id) } label: {
+                Label("Сохранить", systemImage: "square.and.arrow.down")
+            }
+            .help("Сохранить (⌘S)")
         }
+        .buttonStyle(.hoverFilled)
+        .disabled(!dirty)
         .font(.callout)
-        .buttonStyle(.borderless)
         .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(dirty ? theme.warning.opacity(0.18) : Color.clear)
-        .overlay(alignment: .bottom) { Divider() }
+        .padding(.vertical, 4)
     }
 }
 
@@ -189,8 +189,9 @@ private struct EditorTextView: NSViewRepresentable {
         }
 
         private static func isWordChar(_ c: unichar) -> Bool {
-            guard let u = Unicode.Scalar(c) else { return false }
-            return CharacterSet.alphanumerics.contains(u) || c == 95
+            // A lone surrogate is half of an emoji (or another astral character).
+            guard let u = Unicode.Scalar(c) else { return true }
+            return CharacterSet.alphanumerics.contains(u) || c == 95 || u.properties.isEmojiPresentation || c == 0x200D || c == 0xFE0F
         }
         private static func isTagChar(_ c: unichar) -> Bool { isWordChar(c) || c == 45 }
 

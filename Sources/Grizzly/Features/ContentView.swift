@@ -76,6 +76,15 @@ struct ContentView: View {
             }
             return true
         }
+        .overlay(alignment: .bottom) {
+            if let toast = state.toast {
+                ToastView(toast: toast)
+                    .padding(.bottom, 46)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .allowsHitTesting(false)
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: state.toast?.id)
         .sheet(isPresented: $updater.sheetVisible) { UpdateSheet(updater: updater) }
         .alert("Ошибка", isPresented: Binding(
             get: { state.errorMessage != nil },
@@ -135,4 +144,23 @@ struct WindowFrameSaver: NSViewRepresentable {
     }
 
     func updateNSView(_ view: NSView, context: Context) {}
+}
+
+/// A small rounded notification near the bottom of the window.
+struct ToastView: View {
+    let toast: Toast
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: toast.symbol).foregroundColor(theme.accent)
+            Text(toast.text).font(.callout).lineLimit(2)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+        .background(.regularMaterial, in: Capsule())
+        .overlay(Capsule().stroke(Color.primary.opacity(0.12)))
+        .shadow(color: .black.opacity(0.18), radius: 10, y: 3)
+        .frame(maxWidth: 520)
+    }
 }
