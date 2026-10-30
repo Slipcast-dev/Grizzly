@@ -4,6 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/Slipcast-dev/Grizzly/releases/latest"><img alt="Последний релиз" src="https://img.shields.io/github/v/release/Slipcast-dev/Grizzly?style=for-the-badge&color=ff9f0a"></a>
+  <a href="https://github.com/Slipcast-dev/Grizzly/releases"><img alt="Скачиваний" src="https://img.shields.io/github/downloads/Slipcast-dev/Grizzly/total?style=for-the-badge&color=34c759&label=скачиваний"></a>
   <a href="LICENSE"><img alt="Лицензия: MIT" src="https://img.shields.io/github/license/Slipcast-dev/Grizzly?style=for-the-badge&color=7fd4c1"></a>
   <a href="https://github.com/Slipcast-dev/Grizzly/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/Slipcast-dev/Grizzly/ci.yml?branch=main&style=for-the-badge&label=CI"></a>
   <img alt="Платформы" src="https://img.shields.io/badge/платформы-macOS%20%7C%20Windows-4a9eff?style=for-the-badge">
