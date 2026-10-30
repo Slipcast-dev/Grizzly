@@ -147,7 +147,7 @@ struct PaneView: View {
 
     /// One row per line, so search hits can be scrolled to.
     private func plainText(_ doc: Document) -> some View {
-        LazyVStack(alignment: .leading, spacing: 0) {
+        RowStack(lazy: doc.lines.count > RowStackLimit.rows) {
             ForEach(Array(doc.lines.enumerated()), id: \.offset) { index, line in
                 Text(Syntax.highlight(line.isEmpty ? " " : line, type: doc.type, theme: theme, state: doc.syntaxStates.isEmpty ? 0 : doc.syntaxStates[index])
                         .highlighted(highlight, unit: index, offset: 0, theme: theme))

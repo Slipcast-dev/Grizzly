@@ -11,7 +11,7 @@
 
 ## New file
 
-`⌘N` / `Ctrl+N` (or *New File…* in the open menu of the toolbar) asks for a name, folder and format in the save dialog, creates the file with a
+`⌘N` / `Ctrl+N` (or the *New File* button in the sidebar next to *New Folder*, or *New File…* in the open menu of the toolbar) asks for a name, folder and format in the save dialog, creates the file with a
 small starter template (a heading for Markdown, `{}` for JSON, a header row for CSV, a skeleton for HTML, C/C++, C#, PHP and so on) and opens it in a new tab in
 Edit mode. Existing files are replaced only after the system dialog's confirmation.
 

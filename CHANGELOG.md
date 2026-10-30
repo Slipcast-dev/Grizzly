@@ -3,6 +3,18 @@
 All notable changes are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] - 2026-10-30
+
+### Fixed
+- **Select all**: text of an open file can now be selected in one go (drag across lines or Select All). The rows were lazily built, which limited selection to a single line; they are now built together (lazily only for files over 4000 lines). New command *View → Copy All Text* (`⌥⌘C`) copies the whole document. Windows: `Ctrl+A` selects the whole document text.
+- **Window size is remembered**: the window reopens with the size and position it had when closed (macOS; Windows already did).
+- **Save As… / New File dialog**: the *Format* row is centered under the panel's own fields instead of sticking to the left edge.
+- **Settings window**: content scrolls and the window can be resized vertically; it no longer runs off the screen.
+
+### Changed
+- **New File button in the sidebar**, next to *New Folder*, in both versions.
+- Sidebar and toolbar controls share one set of sizes (30–34 pt height, equal square buttons, same corner radii): the sidebar section switcher and the folder button were too small.
+
 ## [1.0.0] - 2026-10-30
 
 ### Added

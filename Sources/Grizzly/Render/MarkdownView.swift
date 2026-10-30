@@ -13,7 +13,7 @@ struct MarkdownView: View {
     @Environment(\.theme) private var theme
 
     var body: some View {
-        LazyVStack(alignment: .leading, spacing: size * 0.9) {
+        RowStack(lazy: blocks.count > RowStackLimit.rows, spacing: size * 0.9) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { index, block in
                 view(for: block, unit: index)
             }

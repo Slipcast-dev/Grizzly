@@ -90,6 +90,9 @@ struct GrizzlyApp: App {
                 Button("Исходник") { state.mode = .source }.keyboardShortcut("2", modifiers: [.command, .option])
                 Button("Правка") { state.mode = .edit }.keyboardShortcut("3", modifiers: [.command, .option])
                 Divider()
+                Button("Копировать весь текст") { state.copyAllText() }
+                    .keyboardShortcut("c", modifiers: [.command, .option])
+                    .disabled(state.current == nil)
                 Button("Обновить файл") { if let id = state.current?.id { state.refresh(id) } }
                     .keyboardShortcut("r")
                 Button("Крупнее") { settings.resizeFont(by: 1) }.keyboardShortcut("+")

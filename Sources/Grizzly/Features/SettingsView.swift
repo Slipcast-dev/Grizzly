@@ -7,6 +7,7 @@ struct SettingsView: View {
     var body: some View {
         let theme = settings.theme
 
+        ScrollView {
         VStack(alignment: .leading, spacing: 18) {
             section("Оформление") {
                 Picker("", selection: $settings.appearance) {
@@ -58,8 +59,9 @@ struct SettingsView: View {
             preview(theme)
         }
         .padding(22)
-        .frame(width: 520)
-        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(minWidth: 520, idealWidth: 540, maxWidth: 760, minHeight: 360, idealHeight: 640, maxHeight: .infinity)
     }
 
     private func section<C: View>(_ title: LocalizedStringKey, @ViewBuilder _ content: () -> C) -> some View {

@@ -18,7 +18,7 @@ struct SourceView: View {
 
         ScrollViewReader { proxy in
             ScrollView([.vertical]) {
-                LazyVStack(alignment: .leading, spacing: 0) {
+                RowStack(lazy: document.lines.count > RowStackLimit.rows) {
                     ForEach(Array(document.lines.enumerated()), id: \.offset) { index, line in
                         HStack(alignment: .top, spacing: 0) {
                             if prefs.showLineNumbers {
@@ -68,5 +68,23 @@ struct SourceView: View {
 
     private func color(for line: String) -> Color {
         document.type == .markdown && line.hasPrefix("#") ? theme.heading : theme.text
+    }
+}
+
+/// Vertical stack of text rows. A plain stack lets one drag (or Select All) select across every row; a lazy stack
+/// only builds the visible rows, so it is used just for very long documents, where building everything would be slow.
+enum RowStackLimit { static let rows = 4000 }
+
+struct RowStack<Content: View>: View {
+    let lazy: Bool
+    var spacing: CGFloat = 0
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        if lazy {
+            LazyVStack(alignment: .leading, spacing: spacing, content: content)
+        } else {
+            VStack(alignment: .leading, spacing: spacing, content: content)
+        }
     }
 }

@@ -22,6 +22,18 @@ enum SidebarSection: String, CaseIterable, Identifiable {
     }
 }
 
+/// Square sidebar button: one size for every icon button so the header controls line up.
+struct SidebarIconButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 15))
+            .foregroundColor(.primary)
+            .frame(width: 28, height: 28)
+            .background(RoundedRectangle(cornerRadius: 7).fill(Color.primary.opacity(configuration.isPressed ? 0.16 : 0.07)))
+            .contentShape(RoundedRectangle(cornerRadius: 7))
+    }
+}
+
 struct SidebarView: View {
     @EnvironmentObject private var state: AppState
     @EnvironmentObject private var library: LibraryStore
@@ -41,13 +53,24 @@ struct SidebarView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("Раздел", selection: $section) {
+            // Same 30 pt height and 7 pt corners as the filter field below, so the header controls line up.
+            HStack(spacing: 2) {
                 ForEach(SidebarSection.allCases) { s in
-                    Image(systemName: s.symbol).help(s.title).tag(s)
+                    Button { section = s } label: {
+                        Image(systemName: s.symbol)
+                            .font(.system(size: 14))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 26)
+                            .foregroundColor(section == s ? .white : .primary)
+                            .background(RoundedRectangle(cornerRadius: 6).fill(section == s ? Color.accentColor : Color.clear))
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(s.title)
                 }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+            .padding(2)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.07)))
             .padding(.horizontal, 12)
             .padding(.top, 8)
 
@@ -61,9 +84,9 @@ struct SidebarView: View {
                         .foregroundColor(.secondary)
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.07)))
+            .padding(.horizontal, 10)
+            .frame(height: 30)
+            .background(RoundedRectangle(cornerRadius: 7).fill(Color.primary.opacity(0.07)))
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
 
@@ -109,13 +132,17 @@ struct SidebarView: View {
             HStack {
                 Text("Файлы")
                 Spacer()
+                Button { state.presentNewFilePanel() } label: { Image(systemName: "doc.badge.plus") }
+                    .buttonStyle(SidebarIconButtonStyle())
+                    .help("Новый файл (⌘N)")
                 Button {
                     pendingMove = nil
                     beginNaming()
                 } label: { Image(systemName: "folder.badge.plus") }
-                .buttonStyle(.borderless)
+                .buttonStyle(SidebarIconButtonStyle())
                 .help("Новая папка")
             }
+            .padding(.trailing, 8)
         }
     }
 
