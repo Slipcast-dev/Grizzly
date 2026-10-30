@@ -3,7 +3,7 @@
 All notable changes are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.2.0] - 2026-10-30
 
 ### Added
 - **Check for updates** (*Settings → Updates*): asks GitHub for the latest release, says whether a newer version is out and, if so, downloads and installs it from inside the app (macOS: replaces the app from the `.dmg`; Windows: replaces the portable `.exe`). The SHA-256 from the release notes is verified when present, downloads are limited to GitHub over HTTPS. The check also runs silently on every launch and only speaks up when there is something new.

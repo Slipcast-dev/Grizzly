@@ -52,6 +52,34 @@ The line-number gutter can be turned off in Settings.
 `⌘F` / `Ctrl+F` opens the find bar; matches are highlighted as you type. `⌘G` / `Ctrl+G` goes to the next match,
 `⇧⌘G` / `Ctrl+Shift+G` to the previous one (Windows also accepts `F3` / `Shift+F3`). `Esc` closes the bar.
 
+Find also works in Edit mode: hits are highlighted in the text you are editing.
+
+## Select all and copy
+
+In Reading and Source, `⌘A` / `Ctrl+A` selects the whole document and `⌘C` / `Ctrl+C` copies all of it (macOS: also *View → Select All Text*).
+
+## Search files, tags
+
+The sidebar field **Search files** matches the beginning of a file or folder name, or of any word in it ("gri" finds "My Grizzly notes.md"). Typing `#work` searches tags.
+
+**Tags** live at the bottom of the sidebar. Create one with **+**, assign it from a file's context menu (*Tags*), rename or delete it from the tag's context menu. Click a tag to list every file that carries it; click it again to leave the filter.
+
+## Spelling and grammar
+
+In Edit mode, Markdown, TXT, RTF and TeX files are checked in Russian and English; mistakes are underlined and corrections are in the context menu (macOS also checks grammar). Switch it off in *Settings → Text*. Source code is never checked. On Windows the dictionaries are downloaded by the system on first use.
+
+## Emoji
+
+The 😀 button in Edit mode opens the system emoji picker (`⌃⌘Space` on macOS, `Win+.` on Windows). If a file is in an 8-bit encoding (Windows-1251, ISO-8859-1) that cannot hold emoji, Grizzly offers to save it as UTF-8.
+
+## Unsaved changes
+
+Closing a tab or the window with unsaved edits asks whether to save, discard or cancel.
+
+## Updates
+
+*Settings → Updates → Check for Updates* looks for a newer release on GitHub. If there is one, Grizzly downloads and installs it (verifying the SHA-256 from the release notes) and restarts. The check also runs silently at every launch. On macOS the app must be in a folder you can write to (normally *Applications*).
+
 ## Two files side by side
 
 `⌘\` / `Ctrl+\` splits the window into two panes so you can compare or cross-reference two documents. Press it again to go back.
