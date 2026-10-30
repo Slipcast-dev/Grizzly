@@ -130,6 +130,15 @@ test('tags: create, assign, rename, delete', () => {
   assert.deepStrictEqual(Array.from(lib.extractTags('# T\n#12 и #работа, #Work-1 a#b http://x/#frag')), ['12', 'работа', 'Work-1']);
   lib.setInlineTags(file.id, ['идея']);
   assert.strictEqual(lib.filesWithTag('Идея').length, 1);
+  assert.strictEqual(lib.replaceTag('work', 'дом', '#Work and #workshop, a#work, #work.\n#WORK'), '#дом and #workshop, a#work, #дом.\n#дом');
+  assert.strictEqual(lib.replaceTag('work', null, 'x #work y, #work'), 'x y, ');
+  assert.strictEqual(lib.countTag('work', '#work #Work #works'), 2);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(lib.tagMatches('a #one-, #два'))), [{ index: 2, length: 4, tag: 'one' }, { index: 9, length: 4, tag: 'два' }]);
+  const f2 = lib.add('/a/y.md'); lib.setInlineTags(f2.id, ['идея', 'план']); lib.setInlineTags(file.id, ['идея']);
+  assert.strictEqual(lib.filesWithAllTags(['идея']).length, 2);
+  assert.strictEqual(lib.filesWithAllTags(['идея', 'план']).length, 1);
+  assert.strictEqual(lib.filesWithAllTags([]).length, 0);
+  lib.setInlineTags(f2.id, []);
   lib.setInlineTags(file.id, []);
   lib.deleteTag('Дом');
   assert.strictEqual(lib.allTags.length, 0);

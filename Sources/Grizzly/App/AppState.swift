@@ -21,6 +21,10 @@ final class AppState: ObservableObject {
     /// Library entry highlighted in the sidebar; follows the focused pane.
     @Published var selectedFileID: UUID?
     @Published var mode: ReadMode = .reading
+    /// Tags picked in the sidebar: the list shows the files that carry all of them.
+    @Published var selectedTags: [String] = []
+    /// Bumped when the sidebar should switch to the file list (a tag was clicked in a document).
+    @Published var sidebarRevealToken = 0
     @Published var errorMessage: String?
     /// Open documents whose file changed on disk after they were read.
     @Published private(set) var changedOnDisk: Set<UUID> = []
@@ -178,7 +182,79 @@ final class AppState: ObservableObject {
 
     // MARK: Hashtags in text
 
-    private static let proseTypes: Set<FileType> = [.markdown, .text, .rtf, .tex]
+    func isTagSelected(_ tag: String) -> Bool { selectedTags.contains { $0.caseInsensitiveCompare(tag) == .orderedSame } }
+
+    func toggleTagSelection(_ tag: String) {
+        if let i = selectedTags.firstIndex(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) { selectedTags.remove(at: i) }
+        else { selectedTags.append(tag) }
+    }
+
+    /// A click on a #tag inside a document: the sidebar lists the files with that tag.
+    func showTag(_ tag: String) {
+        selectedTags = [tag]
+        sidebarRevealToken += 1
+    }
+
+    /// Files (and their locations) whose text contains the tag; RTF is left out because rewriting it would drop its formatting.
+    private func filesWithTagInText(_ tag: String) -> [(LibraryFile, URL)] {
+        library.allFiles
+            .filter { f in Self.proseTypes.contains(f.type) && f.type != .rtf && f.inlineTags.contains { $0.caseInsensitiveCompare(tag) == .orderedSame } }
+            .compactMap { f in library.resolve(f.id).map { (f, $0) } }
+    }
+
+    /// Rewrites `#old` in the text of the files that use it. Returns the names of the files that could not be changed.
+    private func rewriteTag(_ old: String, to new: String?) -> [String] {
+        var skipped: [String] = []
+        for (file, url) in filesWithTagInText(old) {
+            if let doc = documents.first(where: { $0.libraryID == file.id }), isDirty(doc.id) { skipped.append(file.name); continue }
+            guard let loaded = try? FileLoader.read(url) else { skipped.append(file.name); continue }
+            let updated = LibraryStore.replaceTag(old, with: new, in: loaded.text)
+            guard updated != loaded.text else { continue }
+            do { try FileLoader.write(updated, to: url, encoding: loaded.encoding) } catch { skipped.append(file.name); continue }
+            if let doc = documents.first(where: { $0.libraryID == file.id }) { reload(doc.id) }
+            else { library.setInlineTags(file.id, LibraryStore.extractTags(from: updated)) }
+        }
+        return skipped
+    }
+
+    private func reportSkipped(_ skipped: [String]) {
+        if !skipped.isEmpty { errorMessage = L("Не удалось изменить файлы: %@. Сохраните или отмените правки в них и повторите.", skipped.joined(separator: ", ")) }
+    }
+
+    func renameTag(_ old: String, to raw: String) {
+        let new = LibraryStore.cleanTag(raw)
+        guard !new.isEmpty, new != old else { return }
+        let affected = filesWithTagInText(old).count
+        if affected > 0 {
+            let alert = NSAlert()
+            alert.messageText = L("Переименовать #%@ в #%@?", old, new)
+            alert.informativeText = L("Тег записан в тексте файлов (%lld). Он будет изменён и там.", affected)
+            alert.addButton(withTitle: L("Переименовать"))
+            alert.addButton(withTitle: L("Отмена"))
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+        }
+        reportSkipped(rewriteTag(old, to: new))
+        library.renameTag(old, to: new)
+        selectedTags = selectedTags.map { $0.caseInsensitiveCompare(old) == .orderedSame ? new : $0 }
+    }
+
+    func deleteTag(_ tag: String) {
+        let affected = filesWithTagInText(tag).count
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = L("Удалить тег #%@?", tag)
+        alert.informativeText = affected > 0
+            ? L("Тег будет убран из списка и из текста файлов (%lld).", affected)
+            : L("Тег будет убран из списка и у всех файлов.")
+        alert.addButton(withTitle: L("Удалить тег"))
+        alert.addButton(withTitle: L("Отмена"))
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        reportSkipped(rewriteTag(tag, to: nil))
+        library.deleteTag(tag)
+        selectedTags.removeAll { $0.caseInsensitiveCompare(tag) == .orderedSame }
+    }
+
+    static let proseTypes: Set<FileType> = [.markdown, .text, .rtf, .tex]
 
     /// Hashtags written in a document become tags of its library file.
     private func noteTags(in doc: Document) {

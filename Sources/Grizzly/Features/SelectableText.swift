@@ -3,6 +3,11 @@ import AppKit
 
 // MARK: - Text builders
 
+extension NSAttributedString.Key {
+    /// Marks the characters of a `#tag`; the value is the tag without the `#`.
+    static let grizzlyTag = NSAttributedString.Key("grizzlyTag")
+}
+
 /// Builds the attributed text shown in Reading and Source mode. One text view holds the whole document,
 /// so the mouse (and ⌘A) can select across lines and paragraphs; each search unit (a line or a Markdown block)
 /// remembers its character range for find highlights and scrolling.
@@ -18,6 +23,17 @@ enum TextBuilder {
         }
         let base = NSFont(name: prefs.fontName, size: size) ?? .systemFont(ofSize: size)
         return bold ? NSFontManager.shared.convert(base, toHaveTrait: .boldFontMask) : base
+    }
+
+    /// Colors every `#tag` like a token (accent text on a soft accent background) and marks it for clicks.
+    static func decorateTags(_ out: NSMutableAttributedString, theme: Theme) {
+        for (range, tag) in LibraryStore.tagMatches(in: out.string) {
+            out.addAttributes([
+                .foregroundColor: NSColor(theme.accent),
+                .backgroundColor: NSColor(theme.accent).withAlphaComponent(0.16),
+                .grizzlyTag: tag,
+            ], range: range)
+        }
     }
 
     private static func mono(_ size: CGFloat) -> NSFont { .monospacedSystemFont(ofSize: size, weight: .regular) }
@@ -55,6 +71,7 @@ enum TextBuilder {
             }
             offset += length + 1
         }
+        if AppState.proseTypes.contains(doc.type) { decorateTags(out, theme: theme) }
         return Result(text: out, units: units)
     }
 
@@ -196,6 +213,7 @@ enum TextBuilder {
             units.append(NSRange(location: start, length: out.length - start))
             if index < blocks.count - 1 { out.append(NSAttributedString(string: "\n")) }
         }
+        decorateTags(out, theme: theme)
         return Result(text: out, units: units)
     }
 }
@@ -265,6 +283,39 @@ final class LineNumberRuler: NSRulerView {
 
 // MARK: - The text view
 
+/// Read-only text view where a click on a #tag reports the tag.
+final class TagTextView: NSTextView {
+    var onTag: ((String) -> Void)?
+
+    override func mouseDown(with event: NSEvent) {
+        super.mouseDown(with: event)
+        guard event.clickCount == 1, selectedRange().length == 0, let storage = textStorage else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        let origin = textContainerOrigin
+        guard let lm = layoutManager, let tc = textContainer else { return }
+        let glyph = lm.glyphIndex(for: NSPoint(x: point.x - origin.x, y: point.y - origin.y), in: tc)
+        let rect = lm.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: tc)
+        guard rect.insetBy(dx: -2, dy: -2).contains(NSPoint(x: point.x - origin.x, y: point.y - origin.y)) else { return }
+        let index = lm.characterIndexForGlyph(at: glyph)
+        guard index < storage.length, let tag = storage.attribute(.grizzlyTag, at: index, effectiveRange: nil) as? String else { return }
+        onTag?(tag)
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        guard let storage = textStorage, let lm = layoutManager, let tc = textContainer, storage.length > 0 else { return }
+        let visible = lm.glyphRange(forBoundingRect: visibleRect, in: tc)
+        let chars = lm.characterRange(forGlyphRange: visible, actualGlyphRange: nil)
+        storage.enumerateAttribute(.grizzlyTag, in: chars) { value, range, _ in
+            guard value != nil else { return }
+            let glyphs = lm.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            lm.enumerateEnclosingRects(forGlyphRange: glyphs, withinSelectedGlyphRange: NSRange(location: NSNotFound, length: 0), in: tc) { r, _ in
+                self.addCursorRect(r.offsetBy(dx: self.textContainerOrigin.x, dy: self.textContainerOrigin.y), cursor: .pointingHand)
+            }
+        }
+    }
+}
+
 /// Read-only, selectable text for a whole document.
 struct ReadOnlyTextView: NSViewRepresentable {
     /// Changes whenever `build` would give different text; the text is rebuilt only then.
@@ -288,8 +339,21 @@ struct ReadOnlyTextView: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(handledScroll: initialScrollID) }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scroll = NSTextView.scrollableTextView()
-        guard let view = scroll.documentView as? NSTextView else { return scroll }
+        let scroll = NSScrollView()
+        let storage = NSTextStorage()
+        let layout = NSLayoutManager()
+        storage.addLayoutManager(layout)
+        let container = NSTextContainer(size: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
+        container.widthTracksTextView = true
+        layout.addTextContainer(container)
+        let view = TagTextView(frame: .zero, textContainer: container)
+        view.minSize = .zero
+        view.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        view.isVerticallyResizable = true
+        view.isHorizontallyResizable = false
+        view.autoresizingMask = [.width]
+        scroll.documentView = view
+        view.onTag = { tag in AppState.shared.showTag(tag) }
         view.isEditable = false
         view.isSelectable = true
         view.isRichText = true

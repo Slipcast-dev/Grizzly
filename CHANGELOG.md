@@ -17,7 +17,7 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 - **Reading and Source are real text views**: drag across lines and paragraphs, `⌘A` / `Ctrl+A` selects everything, `⌘C` copies it (macOS; replaces the earlier overlay). Source keeps its line numbers and bookmarks.
-- **Tags in text**: `#hashtags` written in a Markdown / text file are tags of that file (listed in the sidebar, searchable); the library is scanned at launch.
+- **Tags work like in Apple Notes**: a `#hashtag` written in a Markdown / text file is a tag of that file. Tags are colored in the text (Reading, Source, Edit) and a click on one lists the files that carry it. Typing `#` in Edit mode suggests the known tags. The sidebar tag browser has *All Tags* and chips you can combine (several tags show files that have all of them). *Rename Tag* and *Delete Tag* change the tag in the text of every file that uses it (after a confirmation; RTF files and files with unsaved edits are skipped). The library is scanned at launch.
 - The emoji button moved to the rightmost spot of the toolbar.
 - **Find** works in Edit mode too (hits are highlighted in the text being edited).
 - macOS: after saving in Edit mode the text no longer disappears until the mode is switched.

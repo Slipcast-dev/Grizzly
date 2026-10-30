@@ -334,3 +334,11 @@ button.chip.on, button.chip.on:hover:not(:disabled) { background: var(--accent);
 .update-box .ok { color: var(--success); }
 .update-box .warn { color: var(--warning); }
 .dialog.update { width: 460px; padding: 18px; }
+
+/* ---- Hashtags ---- */
+.hashtag { color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); border-radius: 4px; padding: 0 2px; cursor: pointer; }
+.hashtag:hover { background: color-mix(in srgb, var(--accent) 28%, transparent); }
+.editor-back .tag-back { background: color-mix(in srgb, var(--accent) 16%, transparent); border-radius: 4px; }
+.tag-suggest { position: fixed; z-index: 30; min-width: 150px; max-height: 190px; overflow-y: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 28px rgba(0, 0, 0, .35); padding: 4px; }
+.ts-item { padding: 4px 10px; border-radius: 5px; cursor: default; font-size: 13px; }
+.ts-item.on { background: var(--accent); color: #fff; }

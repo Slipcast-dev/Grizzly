@@ -36,7 +36,6 @@ struct SidebarView: View {
     @AppStorage("sidebarSection") private var section: SidebarSection = .files
 
     @State private var query = ""
-    @State private var selectedTag: String?
     @State private var isNaming = false
     @State private var newName = ""
     @State private var nameError: String?
@@ -102,8 +101,8 @@ struct SidebarView: View {
             .padding(.vertical, 8)
 
             List(selection: $state.selectedFileID) {
-                if let tag = selectedTag {
-                    tagContent(tag)
+                if !state.selectedTags.isEmpty {
+                    tagContent(state.selectedTags)
                 } else {
                     switch section {
                     case .files: filesContent
@@ -119,13 +118,14 @@ struct SidebarView: View {
             }
             .overlay { emptyState }
 
-            TagPanel(selected: $selectedTag)
+            TagPanel()
         }
         .onChange(of: state.selectedFileID) { id in
             // Option-click opens the file in the right pane.
             state.openLibraryFile(id, inRight: NSEvent.modifierFlags.contains(.option))
         }
         .onChange(of: section) { _ in finishNaming() }
+        .onChange(of: state.sidebarRevealToken) { _ in section = .files }
         // A name typed but never confirmed with Return still creates the folder when focus leaves the field.
         .onChange(of: nameFocused) { focused in
             guard !focused else { return }
@@ -180,25 +180,26 @@ struct SidebarView: View {
         }
     }
 
-    /// All files that carry the tag, wherever they live in the library.
+    /// All files that carry every selected tag, wherever they live in the library.
     @ViewBuilder
-    private func tagContent(_ tag: String) -> some View {
+    private func tagContent(_ tags: [String]) -> some View {
         Section {
-            ForEach(filtered(library.files(withTag: tag))) { file in fileRow(file) }
+            ForEach(filtered(library.files(withAllTags: tags))) { file in fileRow(file) }
         } header: {
             HStack {
-                Text("Тег: #\(tag)")
+                Text("Теги: \(tags.map { "#" + $0 }.joined(separator: " "))")
+                    .lineLimit(1)
                 Spacer()
-                Button("Сбросить") { selectedTag = nil }.buttonStyle(.borderless)
+                Button("Сбросить") { state.selectedTags = [] }.buttonStyle(.borderless)
             }
         }
     }
 
     @ViewBuilder
     private var emptyState: some View {
-        if let tag = selectedTag {
-            if library.files(withTag: tag).isEmpty {
-                hint("tag", "Нет файлов с этим тегом. Добавьте тег файлу через контекстное меню.")
+        if !state.selectedTags.isEmpty {
+            if library.files(withAllTags: state.selectedTags).isEmpty {
+                hint("tag", "Нет файлов со всеми выбранными тегами.")
             }
         } else {
             sectionEmptyState
