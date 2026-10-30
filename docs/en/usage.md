@@ -72,9 +72,15 @@ In Edit mode, Markdown, TXT, RTF and TeX files are checked in Russian and Englis
 
 The 😀 button at the right end of the toolbar (Edit mode) opens the system emoji picker (`⌃⌘Space` on macOS, `Win+.` on Windows). If a file is in an 8-bit encoding (Windows-1251, ISO-8859-1) that cannot hold emoji, Grizzly offers to save it as UTF-8.
 
+Tag names may contain emoji (`#🍕`). A tag typed into the text appears in the sidebar after a short pause, without saving.
+
 ## Unsaved changes
 
 Closing a tab or the window with unsaved edits asks whether to save, discard or cancel.
+
+## Edit mode buttons and notifications
+
+In Edit mode the *Undo* button (top right) reverts the last change and *Save* writes the file. Short pop-up notifications confirm actions such as saving, copying all text, creating a file, reloading, and changing tags, bookmarks or favorites.
 
 ## Updates
 

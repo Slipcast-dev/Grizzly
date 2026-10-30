@@ -99,6 +99,9 @@ let f2 = lib.add(url: dir.appendingPathComponent("second.md"))
 lib.setInlineTags(f2.id, ["идея", "план"]); lib.setInlineTags(textTagFile.id, ["идея"])
 check(lib.files(withAllTags: ["идея"]).count == 2 && lib.files(withAllTags: ["идея", "план"]).map(\.id) == [f2.id] && lib.files(withAllTags: []).isEmpty, "several tags narrow the list down")
 
+check(LibraryStore.extractTags(from: "#🍕 и #идея💡 и #a_b, 😀#x") == ["🍕", "идея💡", "a_b", "x"], "emoji can be part of a tag name")
+check(LibraryStore.replaceTag("🍕", with: "пицца", in: "ем #🍕 и #🍕х") == "ем #пицца и #🍕х", "renaming an emoji tag")
+
 // Updates
 check(UpdateCheck.isNewer("1.2.0", than: "1.1.0") && UpdateCheck.isNewer("v1.10.0", than: "1.9.9") && UpdateCheck.isNewer("2.0", than: "1.99.9"), "newer versions are detected")
 check(!UpdateCheck.isNewer("1.1.0", than: "1.1.0") && !UpdateCheck.isNewer("1.1", than: "1.1.0") && !UpdateCheck.isNewer("1.0.9", than: "1.1.0"), "same or older versions are not updates")

@@ -52,6 +52,8 @@ const ICONS = {
   table: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16M15 4v16"/>',
   list: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h.01M7 12h.01M7 15h.01M11 9h6M11 12h6M11 15h6"/>',
   warning: '<path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/>',
+  undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
   tag: '<path d="M3 12V4h8l10 10-8 8z"/><path d="M7.5 8.5h.01"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   check: '<path d="m5 12 5 5 9-10"/>',
@@ -99,6 +101,20 @@ function paintTags(el, cls = 'hashtag') {
 }
 
 const PROSE = ['markdown', 'text', 'rtf', 'tex'];
+
+// ---- Notifications ---------------------------------------------------------------
+
+/** A short message at the bottom of the window; it fades after a couple of seconds (a newer one replaces it). */
+let toastTimer = null;
+function notify(text, iconName = 'check') {
+  const root = $('overlay-root');
+  root.querySelectorAll('.toast').forEach((n) => n.remove());
+  const el = h('div', { class: 'toast' }, icon(iconName, 16), h('span', null, text));
+  root.append(el);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 250); }, 2400);
+}
+App.notify = notify;
 
 // ---- Context menus and popovers -------------------------------------------
 
@@ -427,6 +443,7 @@ async function newTag(forFile) {
   if (!tag) return;
   if (forFile && !Library.hasTag(forFile, tag)) Library.toggleTag(forFile, tag);
   else if (!forFile) { SidebarUI.tags = [tag]; App.render(['sidebar']); }
+  notify(t('Тег создан: #%@', tag), 'tag');
 }
 
 /** Rewrites `#old` in the text of the files that use it (RTF is left out). Returns the names that could not be changed. */
@@ -458,6 +475,7 @@ async function renameTag(tag) {
   Library.renameTag(tag, next);
   SidebarUI.tags = SidebarUI.tags.map((x) => (Library.sameTag(x, tag) ? next : x));
   App.render(['sidebar']);
+  notify(t('Тег переименован: #%@', next), 'tag');
 }
 
 async function deleteTag(tag) {
@@ -468,6 +486,7 @@ async function deleteTag(tag) {
   Library.deleteTag(tag);
   SidebarUI.tags = SidebarUI.tags.filter((x) => !Library.sameTag(x, tag));
   App.render(['sidebar']);
+  notify(t('Тег удалён: #%@', tag), 'tag');
 }
 
 /** Bottom of the sidebar, like the tag browser in Apple Notes: "All Tags" plus a chip per tag; several selected tags
@@ -723,11 +742,11 @@ function fileMenu(file) {
     { label: t('Открыть'), action: () => App.openLibraryFile(file.id) },
     { label: t('Открыть справа'), action: () => App.openLibraryFile(file.id, true) },
     { label: t('Быстрый просмотр'), action: () => quickLook(file.id) },
-    { label: file.isFavorite ? t('Убрать из избранного') : t('Добавить в избранное'), action: () => Library.toggleFavorite(file.id) },
+    { label: file.isFavorite ? t('Убрать из избранного') : t('Добавить в избранное'), action: () => { Library.toggleFavorite(file.id); notify(file.isFavorite ? t('Убрано из избранного.') : t('Добавлено в избранное.'), 'star'); } },
     {
       label: t('Теги'),
       submenu: [
-        ...Library.allTags.map((tag) => ({ label: (Library.hasTag(file.id, tag) ? '✓ ' : '    ') + '#' + tag, action: () => Library.toggleTag(file.id, tag) })),
+        ...Library.allTags.map((tag) => ({ label: (Library.hasTag(file.id, tag) ? '✓ ' : '    ') + '#' + tag, action: () => { notify(Library.hasTag(file.id, tag) ? t('Тег #%@ убран.', tag) : t('Тег #%@ добавлен.', tag), 'tag'); Library.toggleTag(file.id, tag); } })),
         ...(Library.allTags.length ? [{ separator: true }] : []),
         { label: t('Новый тег…'), action: () => newTag(file.id) },
       ],
@@ -1057,8 +1076,7 @@ function rememberEditors() {
   });
 }
 
-/** Spelling is checked in prose; in source code and data files every identifier would be an "error". */
-const PROSE_TYPES = ['markdown', 'text', 'rtf', 'tex'];
+// Spelling is checked in prose (PROSE_TYPES); in source code and data files every identifier would be an "error".
 
 function editorView(doc, pane, size) {
   const area = h('textarea', {
@@ -1087,18 +1105,14 @@ function editorView(doc, pane, size) {
   };
   const syncScroll = () => { back.scrollTop = area.scrollTop; };
 
-  const status = h('span', { class: 'grow' });
-  const revert = h('button', { class: 'plain link', onclick: () => App.discardDraft(doc.id) }, t('Отменить изменения'));
-  const save = h('button', { class: 'plain link strong', onclick: () => App.save(doc.id) }, t('Сохранить  ⌘S'));
-  const bar = h('div', { class: 'edit-bar' }, status, revert, save);
-  const sync = () => {
-    const dirty = App.isDirty(doc);
-    bar.classList.toggle('dirty', dirty);
-    status.textContent = dirty
-      ? t(doc.type === 'rtf' ? 'Есть несохранённые изменения. Форматирование RTF при сохранении будет потеряно.' : 'Есть несохранённые изменения.')
-      : t('Изменений нет.');
-    revert.disabled = save.disabled = !dirty;
-  };
+  // Undo and Save, in the same style as the other buttons; saving and similar events are announced by notifications.
+  const revert = h('button', {
+    class: 'btn sm', title: t('Отменить последнее изменение (⌘Z)'),
+    onclick: () => { area.focus(); document.execCommand('undo'); },
+  }, icon('undo', 14), t('Отменить'));
+  const save = h('button', { class: 'btn sm', title: t('Сохранить (⌘S)'), onclick: () => App.save(doc.id) }, icon('download', 14), t('Сохранить'));
+  const bar = h('div', { class: 'edit-bar' }, h('span', { class: 'grow' }), revert, save);
+  const sync = () => { revert.disabled = save.disabled = !App.isDirty(doc); };
   sync();
 
   // Typing `#` or `#wo` lists the known tags under the caret; Up / Down choose, Enter or Tab inserts, Esc closes.
@@ -1121,7 +1135,7 @@ function editorView(doc, pane, size) {
   const updateSuggest = (ev) => {
     if (!PROSE.includes(doc.type) || /^delete/.test((ev && ev.inputType) || 'x') || area.selectionStart !== area.selectionEnd) { closeSuggest(); return; }
     const pos = area.selectionStart;
-    const m = /(?<![\p{L}\p{N}_#&/=:])#([\p{L}\p{N}_-]*)$/u.exec(area.value.slice(0, pos));
+    const m = new RegExp('(?<![\\p{L}\\p{N}_#&/=:])#([' + TAG_BODY + ']*)$', 'u').exec(area.value.slice(0, pos));
     if (!m) { closeSuggest(); return; }
     const typed = m[1].toLowerCase();
     items = [...new Set([...Library.allTags, ...Library.extractTags(area.value)])]
@@ -1211,7 +1225,7 @@ function sourceView(doc, scroller, size, hl, upTo) {
         class: 'gutter' + (marked.has(n) ? ' bookmarked' : ''),
         dataset: { line: n },
         title: marked.has(n) ? t('Убрать закладку') : t('Поставить закладку'),
-        onclick: () => { Library.toggleBookmark(doc.libraryID, n); syncBookmarks(); },
+        onclick: () => { Library.toggleBookmark(doc.libraryID, n); syncBookmarks(); notify(marked.has(n) ? t('Закладка убрана.') : t('Закладка добавлена: строка %lld.', n), 'bookmark'); },
       }, h('span', null, n)));
     }
     row.append(code);

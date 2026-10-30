@@ -1,6 +1,11 @@
 /* Library store and application state. Port of LibraryStore.swift and AppState.swift.
    The library keeps references to files (their paths); folders only group those references. */
 
+/** Characters a tag may contain: letters, digits, marks, `_`, `-` and emoji (so #🍕 and #идея💡 are tags). */
+const TAG_BODY = '\\p{L}\\p{N}\\p{M}_\\-\\p{Extended_Pictographic}\\u200D\\uFE0F';
+
+const PROSE_TYPES = ['markdown', 'text', 'rtf', 'tex'];
+
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 const byName = (a, b) => collator.compare(a.name, b.name);
 
@@ -163,7 +168,7 @@ const Library = {
   },
   /** One specific `#tag` as a regular expression (same boundaries as extractTags). */
   tagRegex(tag, flags = 'giu') {
-    return new RegExp('(?<![\\p{L}\\p{N}_#&/=:])#' + tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![\\p{L}\\p{N}_-])', flags);
+    return new RegExp('(?<![\\p{L}\\p{N}_#&/=:])#' + tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![' + TAG_BODY + '])', flags);
   },
   countTag(tag, text) { return (String(text).match(this.tagRegex(tag)) || []).length; },
   /** `#old` becomes `#new`; with next == null the tag is removed from the text (with the space after it). */
@@ -175,7 +180,7 @@ const Library = {
   /** Where the `#tags` are in a text, for coloring them: [{index, length, tag}] (length includes the `#`). */
   tagMatches(text) {
     const out = [];
-    for (const m of String(text).matchAll(/(?<![\p{L}\p{N}_#&/=:])#([\p{L}\p{N}_-]+)/gu)) {
+    for (const m of String(text).matchAll(new RegExp('(?<![\\p{L}\\p{N}_#&/=:])#([' + TAG_BODY + ']+)', 'gu'))) {
       const tag = m[1].replace(/[-_]+$/g, '');
       if (tag) out.push({ index: m.index, length: tag.length + 1, tag });
     }
@@ -188,7 +193,7 @@ const Library = {
   extractTags(text) {
     const seen = new Set();
     const out = [];
-    for (const m of String(text).matchAll(/(?<![\p{L}\p{N}_#&/=:])#([\p{L}\p{N}_-]+)/gu)) {
+    for (const m of String(text).matchAll(new RegExp('(?<![\\p{L}\\p{N}_#&/=:])#([' + TAG_BODY + ']+)', 'gu'))) {
       const tag = m[1].replace(/^[-_]+|[-_]+$/g, '');
       if (tag && !seen.has(tag.toLowerCase())) { seen.add(tag.toLowerCase()); out.push(tag); }
     }
@@ -301,6 +306,7 @@ const App = {
     sidebarSection: 'files',
     settingsOpen: false,
   },
+  notify: () => {}, // set by the UI: notify(text, iconName)
   render: () => {}, // set by the UI: render(['sidebar', 'main', ...])
 
   docID(pane) { return pane === 'left' ? this.selection : this.rightSelection; },
@@ -389,7 +395,8 @@ const App = {
 
 /** Hashtags written in a document become tags of its library file. */
   noteTags(doc) {
-    if (doc.libraryID && ['markdown', 'text', 'rtf', 'tex'].includes(doc.type)) Library.setInlineTags(doc.libraryID, Library.extractTags(doc.lines.join('\n')));
+    clearTimeout(this.tagTimers.get(doc.id));
+    if (doc.libraryID && PROSE_TYPES.includes(doc.type)) Library.setInlineTags(doc.libraryID, Library.extractTags(doc.lines.join('\n')));
   },
 
   fail(message) { this.errorMessage = message; this.render(['dialogs']); },
@@ -437,7 +444,7 @@ const App = {
 
   /** User-initiated reload: asks first when it would throw away unsaved edits. */
   async refresh(id) {
-    if (await this.confirmDiscard([id])) await this.reload(id);
+    if (await this.confirmDiscard([id])) { await this.reload(id); this.notify(t('Файл обновлён с диска.'), 'refresh'); }
   },
 
   /** Hides the banner until the file changes again. */
@@ -461,10 +468,26 @@ const App = {
     this.syncDirty();
     // Hits move while the text is typed; recount them without jumping to the current one.
     if (this.isFindVisible && this.mode === 'edit' && this.findQuery) this.recomputeMatches(false, false);
+    this.scheduleTagRefresh(doc, text);
+  },
+
+  tagTimers: new Map(),
+
+  /** Tags typed into the text show up in the sidebar after a short pause, without saving the file.
+   *  (A pause rather than every key press: "#р", "#ра", "#раб" must not become three tags.) */
+  scheduleTagRefresh(doc, text) {
+    if (!doc.libraryID || !PROSE_TYPES.includes(doc.type)) return;
+    clearTimeout(this.tagTimers.get(doc.id));
+    this.tagTimers.set(doc.id, setTimeout(() => {
+      this.tagTimers.delete(doc.id);
+      Library.setInlineTags(doc.libraryID, Library.extractTags(text));
+    }, 600));
   },
 
   discardDraft(id) {
     this.drafts.delete(id);
+    const doc = this.documents.find((d) => d.id === id);
+    if (doc) this.noteTags(doc);
     this.syncDirty();
     this.render(['main']);
   },
@@ -494,7 +517,12 @@ const App = {
         return false;
       }
       await this.reload(id);
-      return !this.isDirty(doc);
+      const saved = !this.isDirty(doc);
+      if (saved) {
+        this.notify(t('Сохранено: %@', doc.name), 'check');
+        if (doc.type === 'rtf') this.notify(t('Файл RTF сохранён без форматирования.'), 'info');
+      }
+      return saved;
     } finally {
       this.saving.delete(id);
     }
@@ -509,6 +537,7 @@ const App = {
     const dir = doc.path.replace(/[\\/][^\\/]*$/, '');
     const result = await window.api.saveAs(doc.name, text, doc.encoding, dir);
     if (!result.ok && result.code !== 'ECANCEL') this.fail(t('Не удалось сохранить «%@».', doc.name));
+    else if (result.ok) this.notify(t('Копия сохранена: %@', baseName(result.path)), 'download');
   },
 
   /** Asks about every unsaved document among `ids`; false means the user cancelled. */
@@ -519,6 +548,7 @@ const App = {
       const choice = await window.api.confirmSave(doc.name);
       if (choice === 'cancel') return false;
       if (choice === 'save' && !(await this.save(id))) return false;
+      if (choice === 'discard') this.noteTags(doc); // the edits are dropped: tags go back to the file's text
     }
     return true;
   },

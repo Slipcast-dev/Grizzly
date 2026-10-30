@@ -385,10 +385,14 @@ struct SidebarView: View {
         Button("Быстрый просмотр") { quickLook(file.id) }
         Button(LocalizedStringKey(file.isFavorite ? "Убрать из избранного" : "Добавить в избранное")) {
             library.toggleFavorite(file.id)
+            state.notify(file.isFavorite ? L("Убрано из избранного.") : L("Добавлено в избранное."), symbol: "star.fill")
         }
         Menu("Теги") {
             ForEach(library.allTags, id: \.self) { tag in
-                Button { library.toggleTag(file.id, tag) } label: {
+                Button {
+                    state.notify(library.hasTag(file.id, tag) ? L("Тег #%@ убран.", tag) : L("Тег #%@ добавлен.", tag), symbol: "tag.fill")
+                    library.toggleTag(file.id, tag)
+                } label: {
                     if library.hasTag(file.id, tag) { Label("#\(tag)", systemImage: "checkmark") } else { Text("#\(tag)") }
                 }
             }
@@ -397,6 +401,7 @@ struct SidebarView: View {
                 if let name = TextPrompt.ask(title: L("Новый тег"), confirm: L("Создать")),
                    let tag = library.createTag(name), !library.hasTag(file.id, tag) {
                     library.toggleTag(file.id, tag)
+                    state.notify(L("Тег #%@ добавлен.", tag), symbol: "tag.fill")
                 }
             }
         }
