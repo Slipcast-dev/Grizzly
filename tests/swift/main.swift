@@ -84,6 +84,12 @@ check(lib.files(withTag: "Дом").count == 1 && lib.files(withTag: "Работ�
 lib.deleteTag("Дом")
 check(lib.allTags.isEmpty && lib.files(withTag: "Дом").isEmpty, "deleting a tag removes it from files")
 
+check(LibraryStore.extractTags(from: "# Title\n#12 and #работа, #Work-1 and #work. See a#b, http://x.y/#frag, &#39; #")
+      == ["12", "работа", "Work-1", "work"], "hashtags are read from text, headings and fragments are not tags")
+let textTagFile = lib.add(url: histFile)
+lib.setInlineTags(textTagFile.id, ["идея"])
+check(lib.files(withTag: "Идея").count == 1 && lib.allTags.contains("идея") && lib.hasTag(textTagFile.id, "идея"), "tags written in the text are tags of the file")
+
 // Updates
 check(UpdateCheck.isNewer("1.2.0", than: "1.1.0") && UpdateCheck.isNewer("v1.10.0", than: "1.9.9") && UpdateCheck.isNewer("2.0", than: "1.99.9"), "newer versions are detected")
 check(!UpdateCheck.isNewer("1.1.0", than: "1.1.0") && !UpdateCheck.isNewer("1.1", than: "1.1.0") && !UpdateCheck.isNewer("1.0.9", than: "1.1.0"), "same or older versions are not updates")

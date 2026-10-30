@@ -24,6 +24,7 @@ const Library = {
             id: f.id, path: f.path, name: f.name || baseName(f.path), folderID: f.folderID || null,
             isFavorite: !!f.isFavorite, lastOpened: f.lastOpened || null, bookmarks: f.bookmarks || [],
             tags: Array.isArray(f.tags) ? f.tags.filter((x) => typeof x === 'string') : [],
+            inlineTags: Array.isArray(f.inlineTags) ? f.inlineTags.filter((x) => typeof x === 'string') : [],
           })),
           folders: (parsed.folders || []).map((f) => ({ id: f.id, name: f.name, isExpanded: f.isExpanded !== false, sourcePath: f.sourcePath || null })),
           // The history lives apart from the files, so removing a file from the sidebar keeps its record.
@@ -76,7 +77,7 @@ const Library = {
     if (existing) return existing;
     const entry = {
       id: crypto.randomUUID(), path, name: baseName(path), folderID: null,
-      isFavorite: false, lastOpened: null, bookmarks: [], tags: [],
+      isFavorite: false, lastOpened: null, bookmarks: [], tags: [], inlineTags: [],
     };
     this.mutate((d) => d.files.push(entry));
     return entry;
@@ -150,13 +151,37 @@ const Library = {
   get allTags() {
     const seen = new Set();
     const out = [];
-    for (const tag of [...this.data.tags, ...this.data.files.flatMap((f) => f.tags)]) {
+    for (const tag of [...this.data.tags, ...this.data.files.flatMap((f) => [...f.tags, ...f.inlineTags])]) {
       if (!seen.has(tag.toLowerCase())) { seen.add(tag.toLowerCase()); out.push(tag); }
     }
     return out.sort((a, b) => collator.compare(a, b));
   },
-  filesWithTag(tag) { return this.data.files.filter((f) => f.tags.some((x) => this.sameTag(x, tag))).sort(byName); },
-  hasTag(fileID, tag) { const f = this.file(fileID); return !!f && f.tags.some((x) => this.sameTag(x, tag)); },
+  filesWithTag(tag) { return this.data.files.filter((f) => [...f.tags, ...f.inlineTags].some((x) => this.sameTag(x, tag))).sort(byName); },
+  /** True for tags set by hand and for #hashtags written in the file's text. */
+  hasTag(fileID, tag) { const f = this.file(fileID); return !!f && [...f.tags, ...f.inlineTags].some((x) => this.sameTag(x, tag)); },
+  /** `#word` tags in prose: a hash right before a letter or digit, not part of a word, link or entity. */
+  extractTags(text) {
+    const seen = new Set();
+    const out = [];
+    for (const m of String(text).matchAll(/(?<![\p{L}\p{N}_#&/=:])#([\p{L}\p{N}_-]+)/gu)) {
+      const tag = m[1].replace(/^[-_]+|[-_]+$/g, '');
+      if (tag && !seen.has(tag.toLowerCase())) { seen.add(tag.toLowerCase()); out.push(tag); }
+    }
+    return out;
+  },
+  setInlineTags(id, tags) {
+    const f = this.file(id);
+    if (!f || JSON.stringify(f.inlineTags) === JSON.stringify(tags)) return;
+    this.mutate((d) => { d.files.find((x) => x.id === id).inlineTags = tags; });
+  },
+  /** Reads every prose file of the library once at launch, so tags written in the texts show up in the sidebar. */
+  async scanInlineTags() {
+    for (const f of [...this.data.files]) {
+      if (!['markdown', 'text', 'rtf', 'tex'].includes(fileTypeOf(f.path))) continue;
+      const res = await window.api.readFile(f.path);
+      if (res.ok && res.text.length < 2000000) this.setInlineTags(f.id, this.extractTags(res.text));
+    }
+  },
   /** Creates a tag and returns its stored spelling; an existing tag is returned as it is. Null for an empty name. */
   createTag(raw) {
     const tag = this.cleanTag(raw);
@@ -185,12 +210,12 @@ const Library = {
       }
       return out;
     };
-    this.mutate((d) => { d.tags = swap(d.tags); d.files.forEach((f) => { f.tags = swap(f.tags); }); });
+    this.mutate((d) => { d.tags = swap(d.tags); d.files.forEach((f) => { f.tags = swap(f.tags); f.inlineTags = swap(f.inlineTags); }); });
   },
   deleteTag(tag) {
     this.mutate((d) => {
       d.tags = d.tags.filter((x) => !this.sameTag(x, tag));
-      d.files.forEach((f) => { f.tags = f.tags.filter((x) => !this.sameTag(x, tag)); });
+      d.files.forEach((f) => { f.tags = f.tags.filter((x) => !this.sameTag(x, tag)); f.inlineTags = f.inlineTags.filter((x) => !this.sameTag(x, tag)); });
     });
   },
 
@@ -331,9 +356,15 @@ const App = {
     if (libraryID) Library.setMissing(libraryID, false);
     const doc = makeDocument(path, loaded);
     doc.libraryID = libraryID;
+    this.noteTags(doc);
     this.documents.push(doc);
     this.assign(doc.id, target);
     Library.recordOpened(path);
+  },
+
+/** Hashtags written in a document become tags of its library file. */
+  noteTags(doc) {
+    if (doc.libraryID && ['markdown', 'text', 'rtf', 'tex'].includes(doc.type)) Library.setInlineTags(doc.libraryID, Library.extractTags(doc.lines.join('\n')));
   },
 
   fail(message) { this.errorMessage = message; this.render(['dialogs']); },
@@ -373,6 +404,7 @@ const App = {
     const fresh = makeDocument(old.path, loaded);
     fresh.id = old.id;
     fresh.libraryID = old.libraryID;
+    this.noteTags(fresh);
     this.documents[i] = fresh;
     this.recomputeMatches(false);
     this.render(['main']);

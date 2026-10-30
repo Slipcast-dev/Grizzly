@@ -6,7 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         AppState.shared.startWatching()
-        installKeyMonitor()
+        AppState.shared.scanTagsInLibrary()
         // Every launch asks GitHub whether a newer version is out; the answer appears only if there is one.
         Task { await UpdateManager.shared.check(silent: true) }
 
@@ -15,30 +15,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AppState.shared.openExternal(urls)
         // Let a file-open event that is already on its way land first, then open everything that was queued.
         DispatchQueue.main.async { AppState.shared.markReady() }
-    }
-
-    private var keyMonitor: Any?
-
-    /// ⌘A / ⌘C in Reading and Source, where there is no text view to answer them: select the whole document and copy it.
-    private func installKeyMonitor() {
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            guard flags == .command, let key = event.charactersIgnoringModifiers?.lowercased(),
-                  key == "a" || key == "c" else { return event }
-            let responder = NSApp.keyWindow?.firstResponder
-            guard NSApp.keyWindow?.delegate is CloseGuardDelegate, !(responder is NSText), !(responder is NSTableView) else { return event }
-            let state = AppState.shared
-            guard state.mode != .edit, state.current != nil else { return event }
-            if key == "a" {
-                state.selectAllText()
-                return nil
-            }
-            if state.allSelected {
-                state.copyAllText()
-                return nil
-            }
-            return event
-        }
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -120,8 +96,6 @@ struct GrizzlyApp: App {
                 Button("Исходник") { state.mode = .source }.keyboardShortcut("2", modifiers: [.command, .option])
                 Button("Правка") { state.mode = .edit }.keyboardShortcut("3", modifiers: [.command, .option])
                 Divider()
-                Button("Выделить весь текст") { state.selectAllText() }
-                    .disabled(state.current == nil || state.mode == .edit)
                 Button("Копировать весь текст") { state.copyAllText() }
                     .keyboardShortcut("c", modifiers: [.command, .option])
                     .disabled(state.current == nil)

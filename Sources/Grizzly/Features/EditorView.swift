@@ -47,8 +47,6 @@ struct EditorView: View {
             Text(dirty ? (document.type == .rtf ? "Есть несохранённые изменения. Форматирование RTF при сохранении будет потеряно." : "Есть несохранённые изменения.") : "Изменений нет.")
                 .foregroundColor(dirty ? theme.text : theme.secondary)
             Spacer()
-            Button { NSApp.orderFrontCharacterPalette(nil) } label: { Text("😀") }
-                .help("Эмодзи и символы (⌃⌘Пробел)")
             Group {
                 Button("Отменить изменения") { state.discardDraft(document.id) }
                 Button("Сохранить  ⌘S") { state.save(document.id) }

@@ -16,6 +16,9 @@ versions follow [Semantic Versioning](https://semver.org/).
 - Closing the window with unsaved edits asks about every changed file: save, don't save or cancel (macOS and Windows).
 
 ### Fixed
+- **Reading and Source are real text views**: drag across lines and paragraphs, `⌘A` / `Ctrl+A` selects everything, `⌘C` copies it (macOS; replaces the earlier overlay). Source keeps its line numbers and bookmarks.
+- **Tags in text**: `#hashtags` written in a Markdown / text file are tags of that file (listed in the sidebar, searchable); the library is scanned at launch.
+- The emoji button moved to the rightmost spot of the toolbar.
 - **Find** works in Edit mode too (hits are highlighted in the text being edited).
 - macOS: after saving in Edit mode the text no longer disappears until the mode is switched.
 - macOS: ⌘A in Reading and Source selects the whole document, ⌘C copies all of it (also *View → Select All Text*).

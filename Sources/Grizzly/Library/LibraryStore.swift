@@ -11,11 +11,13 @@ struct LibraryFile: Identifiable, Codable, Hashable {
     /// 1-based line numbers the reader has bookmarked.
     var bookmarks: [Int] = []
     var tags: [String] = []
+    /// #hashtags found in the file's own text; refreshed whenever the file is read.
+    var inlineTags: [String] = []
 
     var type: FileType { FileType(url: URL(fileURLWithPath: path)) }
 
     enum CodingKeys: String, CodingKey {
-        case id, bookmark, path, name, folderID, isFavorite, lastOpened, bookmarks, tags
+        case id, bookmark, path, name, folderID, isFavorite, lastOpened, bookmarks, tags, inlineTags
     }
 }
 
@@ -32,6 +34,7 @@ extension LibraryFile {
         lastOpened = try c.decodeIfPresent(Date.self, forKey: .lastOpened)
         bookmarks = try c.decodeIfPresent([Int].self, forKey: .bookmarks) ?? []
         tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
+        inlineTags = try c.decodeIfPresent([String].self, forKey: .inlineTags) ?? []
     }
 }
 
@@ -115,6 +118,8 @@ final class LibraryStore: ObservableObject {
     var folders: [LibraryFolder] {
         data.folders.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
+
+    var allFiles: [LibraryFile] { data.files }
 
     func file(_ id: UUID) -> LibraryFile? { data.files.first { $0.id == id } }
 
@@ -266,13 +271,13 @@ final class LibraryStore: ObservableObject {
     var allTags: [String] {
         var seen = Set<String>()
         var result: [String] = []
-        for tag in data.tags + data.files.flatMap(\.tags) where seen.insert(tag.lowercased()).inserted { result.append(tag) }
+        for tag in data.tags + data.files.flatMap({ $0.tags + $0.inlineTags }) where seen.insert(tag.lowercased()).inserted { result.append(tag) }
         return result.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     }
 
     func files(withTag tag: String) -> [LibraryFile] {
         data.files
-            .filter { $0.tags.contains { $0.caseInsensitiveCompare(tag) == .orderedSame } }
+            .filter { f in (f.tags + f.inlineTags).contains { $0.caseInsensitiveCompare(tag) == .orderedSame } }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
@@ -288,8 +293,31 @@ final class LibraryStore: ObservableObject {
         return tag
     }
 
+    /// True for tags set by hand and for #hashtags written in the file's text.
     func hasTag(_ fileID: UUID, _ tag: String) -> Bool {
-        file(fileID)?.tags.contains { $0.caseInsensitiveCompare(tag) == .orderedSame } ?? false
+        file(fileID).map { ($0.tags + $0.inlineTags).contains { $0.caseInsensitiveCompare(tag) == .orderedSame } } ?? false
+    }
+
+    /// `#word` tags in prose: a hash right before a letter or digit, not part of a word, link or entity.
+    static func extractTags(from text: String) -> [String] {
+        guard text.contains("#"),
+              let regex = try? NSRegularExpression(pattern: "(?<![\\p{L}\\p{N}_#&/=:])#([\\p{L}\\p{N}_-]+)") else { return [] }
+        let ns = text as NSString
+        var seen = Set<String>()
+        var result: [String] = []
+        for m in regex.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+            let tag = ns.substring(with: m.range(at: 1)).trimmingCharacters(in: CharacterSet(charactersIn: "-_"))
+            if !tag.isEmpty, seen.insert(tag.lowercased()).inserted { result.append(tag) }
+        }
+        return result
+    }
+
+    /// Stores the hashtags found in a file's text (only prose is scanned by the callers).
+    func setInlineTags(_ id: UUID, _ tags: [String]) {
+        guard let current = file(id)?.inlineTags, current != tags else { return }
+        mutate { d in
+            if let i = d.files.firstIndex(where: { $0.id == id }) { d.files[i].inlineTags = tags }
+        }
     }
 
     func toggleTag(_ fileID: UUID, _ tag: String) {
@@ -316,13 +344,14 @@ final class LibraryStore: ObservableObject {
         }
         mutate { d in
             swap(&d.tags)
-            for i in d.files.indices { swap(&d.files[i].tags) }
+            for i in d.files.indices { swap(&d.files[i].tags); swap(&d.files[i].inlineTags) }
         }
     }
 
     func deleteTag(_ tag: String) {
         mutate { d in
             d.tags.removeAll { $0.caseInsensitiveCompare(tag) == .orderedSame }
+            for i in d.files.indices { d.files[i].inlineTags.removeAll { $0.caseInsensitiveCompare(tag) == .orderedSame } }
             for i in d.files.indices { d.files[i].tags.removeAll { $0.caseInsensitiveCompare(tag) == .orderedSame } }
         }
     }

@@ -56,13 +56,13 @@ Find also works in Edit mode: hits are highlighted in the text you are editing.
 
 ## Select all and copy
 
-In Reading and Source, `⌘A` / `Ctrl+A` selects the whole document and `⌘C` / `Ctrl+C` copies all of it (macOS: also *View → Select All Text*).
+In Reading and Source, `⌘A` / `Ctrl+A` selects the whole document and `⌘C` / `Ctrl+C` copies all of it.
 
 ## Search files, tags
 
 The sidebar field **Search files** matches the beginning of a file or folder name, or of any word in it ("gri" finds "My Grizzly notes.md"). Typing `#work` searches tags.
 
-**Tags** live at the bottom of the sidebar. Create one with **+**, assign it from a file's context menu (*Tags*), rename or delete it from the tag's context menu. Click a tag to list every file that carries it; click it again to leave the filter.
+**Tags** live at the bottom of the sidebar. Create one with **+**, assign it from a file's context menu (*Tags*), rename or delete it from the tag's context menu. Tags written in a document as `#word` count too. Click a tag to list every file that carries it; click it again to leave the filter.
 
 ## Spelling and grammar
 
@@ -70,7 +70,7 @@ In Edit mode, Markdown, TXT, RTF and TeX files are checked in Russian and Englis
 
 ## Emoji
 
-The 😀 button in Edit mode opens the system emoji picker (`⌃⌘Space` on macOS, `Win+.` on Windows). If a file is in an 8-bit encoding (Windows-1251, ISO-8859-1) that cannot hold emoji, Grizzly offers to save it as UTF-8.
+The 😀 button at the right end of the toolbar (Edit mode) opens the system emoji picker (`⌃⌘Space` on macOS, `Win+.` on Windows). If a file is in an 8-bit encoding (Windows-1251, ISO-8859-1) that cannot hold emoji, Grizzly offers to save it as UTF-8.
 
 ## Unsaved changes
 
