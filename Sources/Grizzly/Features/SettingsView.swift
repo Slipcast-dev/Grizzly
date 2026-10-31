@@ -62,7 +62,7 @@ struct SettingsView: View {
 
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text(pane.title).font(.title2.weight(.semibold))
+                    Text(pane.title).font(AppFont.title2.weight(.semibold))
                     content(for: pane, theme: theme)
                 }
                 .padding(22)
@@ -71,6 +71,7 @@ struct SettingsView: View {
             .scrollIndicators(.visible)
         }
         .environment(\.theme, theme)
+        .environment(\.font, AppFont.body)
         .frame(minWidth: 640, idealWidth: 780, maxWidth: .infinity, minHeight: 420, idealHeight: 580, maxHeight: .infinity)
         .background(SettingsWindowConfigurator())
     }
@@ -91,7 +92,51 @@ struct SettingsView: View {
                     ForEach(ThemeSet.all) { set in tile(set) }
                 }
                 Text("Dracula и Monokai всегда тёмные.")
-                    .font(.caption).foregroundColor(.secondary)
+                    .font(AppFont.caption).foregroundColor(.secondary)
+            }
+            card("Эффект стекла") {
+                Toggle("Прозрачное окно с размытием, как в macOS", isOn: $settings.glassEnabled)
+                row("Прозрачность") {
+                    Slider(value: $settings.glassAmount, in: 0...1)
+                    Text("\(Int(settings.glassAmount * 100))%").monospacedDigit().frame(width: 48, alignment: .trailing)
+                }
+                .disabled(!settings.glassEnabled)
+                row("Материал") {
+                    Picker("", selection: $settings.glassMaterial) {
+                        ForEach(GlassMaterial.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 300)
+                }
+                .disabled(!settings.glassEnabled)
+                Text("Сквозь фон окна и документа проступает рабочий стол. Чем выше прозрачность, тем слабее фон; если текст читается плохо, уменьшите её или выключите эффект.")
+                    .font(AppFont.caption).foregroundColor(.secondary)
+            }
+            card("Шрифт интерфейса") {
+                row("Шрифт") {
+                    Picker("", selection: $settings.uiFontName) {
+                        ForEach(Preferences.fonts, id: \.self) { Text(LocalizedStringKey($0)).tag($0) }
+                    }
+                    .labelsHidden().frame(width: 200)
+                }
+                row("Размер") {
+                    Slider(value: $settings.uiFontSize, in: 10...20, step: 1)
+                    Text("\(Int(settings.uiFontSize)) pt").monospacedDigit().frame(width: 48, alignment: .trailing)
+                }
+                HStack {
+                    Text("Так выглядят боковая панель, вкладки и настройки.")
+                        .font(settings.uiFontName == Preferences.systemFont ? .system(size: CGFloat(settings.uiFontSize)) : Font(FontLibrary.font(family: settings.uiFontName, size: CGFloat(settings.uiFontSize))))
+                    Spacer()
+                    Button("Сбросить") {
+                        settings.uiFontName = Preferences.systemFont
+                        settings.uiFontSize = AppFont.defaultSize
+                    }
+                    .buttonStyle(.hoverFilled)
+                    .disabled(settings.uiFontName == Preferences.systemFont && settings.uiFontSize == AppFont.defaultSize)
+                }
+                Text("Шрифт документов выбирается отдельно, в разделе «Текст». Меню macOS и заголовок окна всегда остаются системными.")
+                    .font(AppFont.caption).foregroundColor(.secondary)
             }
             preview(theme)
 
@@ -115,10 +160,15 @@ struct SettingsView: View {
             card("Исходник") {
                 Toggle("Показывать номера строк", isOn: $settings.showLineNumbers)
             }
+            card("Списки задач") {
+                Toggle("Переносить выполненные задачи в конец списка", isOn: $settings.moveDoneTasks)
+                Text("Когда вы ставите галочку в режиме чтения, пункт сдвигается вниз списка. Отметка сохраняется прямо в файле.")
+                    .font(AppFont.caption).foregroundColor(.secondary)
+            }
             card("Проверка текста") {
                 Toggle("Проверять орфографию и грамматику в режиме правки", isOn: $settings.spellCheck)
                 Text("Русский и английский: ошибки подчёркиваются, исправление — в контекстном меню. Работает в Markdown, TXT, RTF и TeX; в исходном коде проверка выключена.")
-                    .font(.caption).foregroundColor(.secondary)
+                    .font(AppFont.caption).foregroundColor(.secondary)
             }
             preview(theme)
 
@@ -126,7 +176,7 @@ struct SettingsView: View {
             card("Подсветка синтаксиса") {
                 Toggle("Включить подсветку синтаксиса", isOn: $settings.syntaxEnabled)
                 Text("Цвета берутся из выбранной темы. Подсветка работает в режимах чтения, исходника и правки, а также в блоках кода Markdown.")
-                    .font(.caption).foregroundColor(.secondary)
+                    .font(AppFont.caption).foregroundColor(.secondary)
             }
             card("Программирование") { languageToggles(Self.programming) }
             card("Разметка и данные") { languageToggles(Self.markup) }
@@ -150,7 +200,7 @@ struct SettingsView: View {
                 .labelsHidden()
                 .onChange(of: settings.language) { _ in AppRestart.offer() }
                 Text("После смены языка Grizzly предложит перезапуститься.")
-                    .font(.caption).foregroundColor(.secondary)
+                    .font(AppFont.caption).foregroundColor(.secondary)
             }
 
         case .updates:
@@ -163,7 +213,7 @@ struct SettingsView: View {
                 }
                 UpdateView(updater: updater)
                 Text("Grizzly проверяет GitHub при каждом запуске. Новая версия скачивается и устанавливается прямо из приложения.")
-                    .font(.caption).foregroundColor(.secondary)
+                    .font(AppFont.caption).foregroundColor(.secondary)
             }
 
         case .types:
@@ -187,7 +237,7 @@ struct SettingsView: View {
 
     private func card<C: View>(_ title: LocalizedStringKey, @ViewBuilder _ content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(.headline)
+            Text(title).font(AppFont.headline)
             content()
         }
         .padding(14)
@@ -214,7 +264,7 @@ struct SettingsView: View {
                         Circle().fill(c).frame(width: 8, height: 8)
                     }
                 }
-                Text(set.name).font(.callout.weight(.medium)).foregroundColor(t.text).lineLimit(1)
+                Text(set.name).font(AppFont.callout.weight(.medium)).foregroundColor(t.text).lineLimit(1)
             }
             .padding(9)
             .frame(maxWidth: .infinity, alignment: .leading)

@@ -55,50 +55,86 @@ struct TagPanel: View {
     @EnvironmentObject private var state: AppState
     @EnvironmentObject private var library: LibraryStore
     @Environment(\.theme) private var theme
+    /// Folded to its title line, and the height of the chips area; both are remembered.
+    @AppStorage("tagsCollapsed") private var collapsed = false
+    @AppStorage("tagsHeight") private var height = 110.0
+    @State private var dragStart: Double?
 
     var body: some View {
+        let tags = library.allTags
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Label("Теги", systemImage: "tag").font(.caption.weight(.semibold)).foregroundColor(.secondary)
+            HStack(spacing: 4) {
+                // The whole section folds into its title line.
+                Button { withAnimation(.easeOut(duration: 0.15)) { collapsed.toggle() } } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: collapsed ? "chevron.right" : "chevron.down").font(.system(size: 9, weight: .bold)).frame(width: 10)
+                        Label("Теги", systemImage: "tag").font(AppFont.caption.weight(.semibold))
+                    }
+                    .foregroundColor(.secondary)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(collapsed ? "Показать теги" : "Свернуть теги")
                 Spacer()
                 Button { create() } label: { Image(systemName: "plus") }
                     .buttonStyle(HoverButtonStyle(size: .compact))
                     .help("Новый тег")
             }
-            if library.allTags.isEmpty {
-                Text("Напишите #тег в тексте файла, и он появится здесь. Или создайте тег кнопкой +.")
-                    .font(.caption).foregroundColor(.secondary)
-            } else {
-                ScrollView {
-                    FlowLayout(spacing: 6) {
-                        chip(title: L("Все теги"), on: state.selectedTags.isEmpty, count: nil) { state.selectedTags = [] }
-                        ForEach(library.allTags, id: \.self) { tag in
-                            chip(title: "#\(tag)", on: state.isTagSelected(tag), count: library.files(withTag: tag).count) {
-                                state.toggleTagSelection(tag)
-                            }
-                            .contextMenu {
-                                Button("Переименовать…") { rename(tag) }
-                                Button("Удалить тег", role: .destructive) { state.deleteTag(tag) }
+            if !collapsed {
+                if tags.isEmpty {
+                    Text("Напишите #тег в тексте файла, и он появится здесь. Или создайте тег кнопкой +.")
+                        .font(AppFont.caption).foregroundColor(.secondary)
+                } else {
+                    ScrollView {
+                        FlowLayout(spacing: 6) {
+                            chip(title: L("Все теги"), on: state.selectedTags.isEmpty, count: nil) { state.selectedTags = [] }
+                            ForEach(tags, id: \.self) { tag in
+                                chip(title: "#\(tag)", on: state.isTagSelected(tag), count: library.tagCount(tag)) {
+                                    state.toggleTagSelection(tag)
+                                }
+                                .contextMenu {
+                                    Button("Переименовать…") { rename(tag) }
+                                    Button("Удалить тег", role: .destructive) { state.deleteTag(tag) }
+                                }
                             }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(height: height)
                 }
-                .frame(maxHeight: 110)
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .overlay(alignment: .top) { Divider() }
+        .overlay(alignment: .top) {
+            // Drag the edge between the list and the tags to change the height of the section.
+            ZStack(alignment: .top) {
+                Divider()
+                if !collapsed && !tags.isEmpty {
+                    Rectangle().fill(Color.clear).frame(height: 8).offset(y: -4).contentShape(Rectangle())
+                        .onHover { inside in
+                            if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
+                        }
+                        .gesture(
+                            DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                                .onChanged { drag in
+                                    let start = dragStart ?? height
+                                    dragStart = start
+                                    height = min(max(start - drag.translation.height, 50), 480)
+                                }
+                                .onEnded { _ in dragStart = nil })
+                }
+            }
+        }
     }
 
     private func chip(title: String, on: Bool, count: Int?, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 4) {
                 Text(title).lineLimit(1)
-                if let count { Text("\(count)").font(.caption2).opacity(0.7) }
+                if let count { Text("\(count)").font(AppFont.caption2).opacity(0.7) }
             }
-            .font(.caption)
+            .font(AppFont.caption)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
             .foregroundColor(on ? .white : .primary)

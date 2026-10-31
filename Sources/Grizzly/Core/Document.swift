@@ -10,7 +10,6 @@ struct Document: Identifiable, Hashable {
     /// `text` with \n line endings: what the editor shows.
     let normalized: String
     let lines: [String]
-    let blocks: [MDBlock]
     let csv: CSVTable?
     /// Syntax scanner state at the start of each line (open block comment or multi-line string); empty if unused.
     let syntaxStates: [Int]
@@ -28,7 +27,6 @@ struct Document: Identifiable, Hashable {
         self.text = loaded.text
         self.normalized = loaded.text.replacingOccurrences(of: "\r\n", with: "\n")
         self.lines = normalized.components(separatedBy: "\n")
-        self.blocks = type == .markdown ? MarkdownParser.parse(self.lines) : []
         self.modified = Document.modificationDate(url)
         let lines = self.lines
         self.syntaxStates = SyntaxEngine.states(lines, type: type)

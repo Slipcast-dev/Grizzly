@@ -8,6 +8,15 @@ struct ReleaseInfo: Equatable {
     let assetURL: URL
     /// SHA-256 of the asset when the release notes publish one next to the file name.
     let sha256: String?
+    /// A small patch from the installed version to this one, when the release carries one.
+    var patch: PatchAsset? = nil
+}
+
+/// The update patch of a release: only what changed between two versions (see `AppPatch`).
+struct PatchAsset: Equatable {
+    let name: String
+    let url: URL
+    let sha256: String?
 }
 
 /// Pure logic of the update check (no UI, no network), so it can be tested.
@@ -40,17 +49,30 @@ enum UpdateCheck {
 
     /// Reads the `releases/latest` answer and picks the file whose name ends with `assetSuffix`
     /// (e.g. "-arm64.dmg"). Nil when the release has no such file.
-    static func parse(_ data: Data, assetSuffix: String) throws -> ReleaseInfo? {
+    /// `patchFrom`: the installed version and the architecture tag ("arm64"); with them the release's patch for exactly that
+    /// version is picked up too (`Grizzly-patch-<from>-to-<to>-<arch>.zip`).
+    static func parse(_ data: Data, assetSuffix: String, patchFrom: (version: String, arch: String)? = nil) throws -> ReleaseInfo? {
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let tag = json["tag_name"] as? String else { throw CocoaError(.coderReadCorrupt) }
         let notes = json["body"] as? String ?? ""
         let assets = json["assets"] as? [[String: Any]] ?? []
+        var patch: PatchAsset?
+        if let patchFrom {
+            let prefix = "Grizzly-patch-\(normalized(patchFrom.version))-to-", suffix = "-\(patchFrom.arch).zip"
+            for asset in assets {
+                guard let name = asset["name"] as? String, name.hasPrefix(prefix), name.hasSuffix(suffix),
+                      let link = asset["browser_download_url"] as? String, let url = URL(string: link),
+                      isTrustedDownload(url) else { continue }
+                patch = PatchAsset(name: name, url: url, sha256: checksum(in: notes, for: name))
+                break
+            }
+        }
         for asset in assets {
             guard let name = asset["name"] as? String, name.hasSuffix(assetSuffix),
                   let link = asset["browser_download_url"] as? String, let url = URL(string: link),
                   isTrustedDownload(url) else { continue }
             return ReleaseInfo(version: normalized(tag), notes: notes, assetName: name, assetURL: url,
-                               sha256: checksum(in: notes, for: name))
+                               sha256: checksum(in: notes, for: name), patch: patch)
         }
         return nil
     }

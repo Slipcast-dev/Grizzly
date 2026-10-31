@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/banner.svg" alt="Grizzly — a fast, calm reader for Markdown and text" width="100%">
+  <img src="docs/assets/banner.svg" alt="Grizzly — a fast, calm reader and editor for Markdown and text" width="100%">
 </p>
 
 <p align="center">
@@ -17,13 +17,13 @@
 
 ---
 
-**Grizzly** is a small reader for Markdown, plain-text and source-code files (with syntax highlighting for Python, Swift,
-C/C++, C#, JavaScript, TypeScript, CSS and PHP). It opens a document, renders it the way you
-would like to read it, and gets out of the way. The macOS app is native (SwiftUI); the Windows app is a
-portable Electron port with the same features.
+**Grizzly** is a small reader and editor for Markdown, plain-text and source-code files (with syntax highlighting for Python, Swift,
+C/C++, C#, JavaScript, TypeScript, CSS and PHP). It opens a document, shows it the way you
+would like to read it, lets you format it without seeing a line of markup, and gets out of the way. The macOS app is native
+(SwiftUI); the Windows app is a portable Electron port (see the [changelog](CHANGELOG.md) for what is macOS-only).
 
 <p align="center">
-  <img src="docs/assets/features.svg" alt="Features: read Markdown, source and edit, tabs and split view, themes and languages" width="100%">
+  <img src="docs/assets/features.svg" alt="Features: format and read Markdown, User and Developer modes, tabs and split view, themes and languages" width="100%">
 </p>
 
 ## Download
@@ -36,9 +36,9 @@ Get the files from the **[latest release](https://github.com/Slipcast-dev/Grizzl
 
 | Platform | File | Notes |
 |---|---|---|
-| macOS 13+, Apple Silicon | `Grizzly-1.2.2-arm64.dmg` | Drag *Grizzly* to *Applications* |
-| macOS 13+, Intel | `Grizzly-1.2.2-x64.dmg` | Drag *Grizzly* to *Applications* |
-| Windows 10/11, x64 | `Grizzly-1.2.2-portable.exe` | Portable, no installer |
+| macOS 13+, Apple Silicon | `Grizzly-1.3.0-arm64.dmg` | Drag *Grizzly* to *Applications* |
+| macOS 13+, Intel | `Grizzly-1.3.0-x64.dmg` | Drag *Grizzly* to *Applications* |
+| Windows 10/11, x64 | `Grizzly-1.3.0-portable.exe` | Portable, no installer |
 
 > [!IMPORTANT]
 > The builds are **not code-signed or notarized**. macOS Gatekeeper and Windows SmartScreen will warn on first
@@ -47,25 +47,24 @@ Get the files from the **[latest release](https://github.com/Slipcast-dev/Grizzl
 
 ## Features
 
-- **Reading mode** — Markdown with headings, lists, task lists, quotes, code blocks, tables and links. Reading and Source are real text views: drag across lines, `⌘A` / `Ctrl+A` selects the whole document, `⌘C` copies it.
-- **Source mode** — line numbers, clickable line **bookmarks** (kept between sessions), syntax colors for
-  **Python, Swift, C/C++, C#, JavaScript, TypeScript, CSS and PHP** (also inside fenced code blocks in Markdown) as well as
-  JSON, YAML, INI/TOML, XML/HTML, TeX and log files. Colors follow the theme; comments and strings that span several lines are handled.
+- **User and Developer modes** (macOS) — *User* edits the text with the formatting code hidden: it looks the way it reads (headings, bold, lists with real markers, clickable check boxes, quotes, dividers, bordered tables, folding sections). *Developer* shows the file exactly as it is: all the markup, line numbers, clickable line **bookmarks** (kept between sessions) and syntax colors for **Python, Swift, C/C++, C#, JavaScript, TypeScript, CSS and PHP** (also inside fenced Markdown blocks) as well as JSON, YAML, INI/TOML, XML/HTML, TeX and logs. In split view each pane has its own mode, and the divider between the panes can be dragged. (Windows: Reading / Source / Edit.)
+- **Formatting** (macOS, Markdown) — a bar, a *Format* menu and the right-click menu: Title / Heading / Subheading / Body / Monospaced, bold, italic, underline, strikethrough, five soft highlight colors, alignment, bulleted / dashed / numbered lists, check lists, quotes, dividers and tables. The file stays plain Markdown.
+- **Attachments** (macOS) — photos, videos, PDF files, any files and links to web pages: from the paperclip, by drag and drop or by pasting a picture. Files are copied next to the document into `<name>.assets`.
 - **New file** — `⌘N` / `Ctrl+N`: pick a name, folder and format; the file is created with a small template and opens for editing.
-- **Edit mode** — edit and save in place; the original encoding (UTF-8 with/without BOM, UTF-16, Windows-1251,
+- **Saving keeps the file as it was** — the original encoding (UTF-8 with/without BOM, UTF-16, Windows-1251,
   ISO-8859-1) is preserved (a file that cannot hold emoji is offered UTF-8). *Undo* steps back one word at a time; spelling and grammar are checked in Russian and English (Markdown, TXT, RTF, TeX).
 - **CSV / TSV tables** with automatic delimiter detection.
 - **Save As…** — save a copy in any supported format and location, without touching the original.
-- **Find** with live highlighting, next / previous match; also in Edit mode.
+- **Find** with live highlighting, next / previous match.
 - **Search files** by the beginning of a name or of any word in it (files and folders).
 - **Tags like in Apple Notes** — `#hashtags` (emoji allowed) written in a file are its tags: colored in the text, suggested while typing, listed in the sidebar; click one or several to list the files that carry them; rename or delete a tag everywhere.
-- **Notifications** for saving, copying, tags and other actions; an emoji picker button in Edit mode.
+- **Notifications** for saving, copying, tags and other actions; an emoji picker button.
 - **Updates** — *Settings → Updates* checks GitHub (also at every launch) and installs a new version from inside the app.
 - **Tabs** and **two files side by side**.
-- **Virtual library** — folders and favorites that never touch your files (only renaming or deleting a tag edits the text of files that use it, after a confirmation), plus an open history that survives removing a file from the sidebar.
+- **Virtual library** — folders (also inside folders; open a whole folder or pick several rows at once) and favorites that never touch your files (only renaming or deleting a tag edits the text of files that use it, after a confirmation), plus an open history that survives removing a file from the sidebar.
 - **Live reload** — a banner appears when the file changes on disk (handy for files written by scripts or AI tools).
-- **7 themes** (Xcode, GitHub, Solarized, Dracula, Monokai, Nord, One Dark), light / dark / follow system,
-  font and size choices.
+- **7 themes** (Xcode, GitHub, Solarized, Dracula, Monokai, Nord, One Dark), light / dark / follow system, the glass effect of macOS with adjustable
+  transparency, 16 built-in fonts (Cyrillic included) and a font and size of its own for the interface.
 - **Quick Look in Finder** (macOS) — press Space on Markdown, YAML, CSV or log files to preview them without opening Grizzly.
 - **Default app picker** (macOS) — Settings → File types makes Grizzly the default app for chosen extensions.
 - **English and Russian** interface.
@@ -88,12 +87,13 @@ Supported extensions: `md markdown mdown txt text log json yaml yml csv tsv xml 
 | Find / next / previous | `⌘F` / `⌘G` / `⇧⌘G` | `Ctrl+F` / `Ctrl+G` / `Ctrl+Shift+G` |
 | Next / previous tab | `⇧⌘]` / `⇧⌘[` | `Ctrl+Shift+]` / `Ctrl+Shift+[` |
 | Two files side by side | `⌘\` | `Ctrl+\` |
-| Reading / Source / Edit | `⌥⌘1` / `⌥⌘2` / `⌥⌘3` | `Ctrl+Alt+1` / `2` / `3` |
+| User / Developer (Windows: Reading / Source / Edit) | `⌥⌘1` / `⌥⌘2` (Windows `⌥⌘3`: Edit) | `Ctrl+Alt+1` / `2` / `3` |
 | Save As… | `⇧⌘S` | `Ctrl+Shift+S` |
 | Reload file | `⌘R` | `Ctrl+R` |
-| Select all / copy (Reading, Source) | `⌘A` / `⌘C` | `Ctrl+A` / `Ctrl+C` |
-| Undo / redo (Edit) | `⌘Z` / `⇧⌘Z` | `Ctrl+Z` / `Ctrl+Shift+Z` |
+| Select all / copy | `⌘A` / `⌘C` | `Ctrl+A` / `Ctrl+C` |
+| Undo / redo | `⌘Z` / `⇧⌘Z` | `Ctrl+Z` / `Ctrl+Shift+Z` |
 | Larger / smaller text | `⌘+` / `⌘-` | `Ctrl++` / `Ctrl+-` |
+| Bold / italic / underline (macOS) | `⌘B` / `⌘I` / `⌘U` | — |
 
 More in the [User guide](docs/en/usage.md).
 

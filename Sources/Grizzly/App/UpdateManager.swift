@@ -24,13 +24,15 @@ final class UpdateManager: ObservableObject {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
     }
 
-    private var assetSuffix: String {
+    private var archTag: String {
         #if arch(arm64)
-        return "-arm64.dmg"
+        return "arm64"
         #else
-        return "-x64.dmg"
+        return "x64"
         #endif
     }
+
+    private var assetSuffix: String { "-\(archTag).dmg" }
 
     /// `silent`: the check at launch. It says nothing when there is nothing new or the network is down.
     func check(silent: Bool) async {
@@ -45,7 +47,7 @@ final class UpdateManager: ObservableObject {
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
-            if let release = try UpdateCheck.parse(data, assetSuffix: assetSuffix),
+            if let release = try UpdateCheck.parse(data, assetSuffix: assetSuffix, patchFrom: (currentVersion, archTag)),
                UpdateCheck.isNewer(release.version, than: currentVersion) {
                 phase = .available(release)
                 if silent { sheetVisible = true }
@@ -69,10 +71,20 @@ final class UpdateManager: ObservableObject {
         task = Task { [weak self] in
             guard let self else { return }
             do {
-                let dmg = try await self.download(release)
-                self.phase = .installing
-                let staged = try await Task.detached { try Self.stage(dmg: dmg, expected: release.version) }.value
-                try self.replaceAndRelaunch(with: staged)
+                var staged: URL?
+                // A patch carries only what changed since the installed version. Whatever goes wrong with it
+                // (not published, does not fit, damaged), the full disk image below is the way out.
+                if let patch = release.patch, let expected = patch.sha256 {
+                    do { staged = try await self.installFromPatch(patch, expected: expected, release: release) }
+                    catch is CancellationError { throw CancellationError() }
+                    catch { staged = nil; self.phase = .downloading(0) }
+                }
+                if staged == nil {
+                    let dmg = try await self.download(release.assetURL, name: release.assetName, sha256: release.sha256)
+                    self.phase = .installing
+                    staged = try await Task.detached { try Self.stage(dmg: dmg, expected: release.version) }.value
+                }
+                try self.replaceAndRelaunch(with: staged!)
             } catch is CancellationError {
                 self.phase = .idle
             } catch let error as UpdateError {
@@ -83,20 +95,39 @@ final class UpdateManager: ObservableObject {
         }
     }
 
+    /// Downloads the patch and builds the new application from the installed one.
+    private func installFromPatch(_ patch: PatchAsset, expected: String, release: ReleaseInfo) async throws -> URL {
+        let file = try await download(patch.url, name: patch.name, sha256: expected)
+        phase = .installing
+        let installed = Bundle.main.bundleURL
+        let from = currentVersion, to = release.version
+        let work = file.deletingLastPathComponent()
+        return try await Task.detached { () -> URL in
+            let staged = try AppPatch.apply(patch: file, to: installed, from: from, to: to, bundleID: "app.grizzly.Grizzly", work: work)
+            let info = NSDictionary(contentsOf: staged.appendingPathComponent("Contents/Info.plist"))
+            guard info?["CFBundleIdentifier"] as? String == "app.grizzly.Grizzly",
+                  UpdateCheck.normalized(info?["CFBundleShortVersionString"] as? String ?? "") == to else {
+                throw PatchError(message: "version")
+            }
+            _ = Self.run("/usr/bin/xattr", ["-dr", "com.apple.quarantine", staged.path], timeout: 30)
+            return staged
+        }.value
+    }
+
     // MARK: Download
 
     private struct UpdateError: Error { let message: String }
 
     private static let maxDownload: Int64 = 500 * 1024 * 1024
 
-    /// Downloads the disk image. A dropped connection is retried and continues where it stopped (HTTP Range);
-    /// the SHA-256 from the release notes is checked over the finished file.
-    private func download(_ release: ReleaseInfo) async throws -> URL {
+    /// Downloads a release file (disk image or patch). A dropped connection is retried and continues where it stopped
+    /// (HTTP Range); the SHA-256 from the release notes is checked over the finished file.
+    private func download(_ assetURL: URL, name: String, sha256 expectedHash: String?) async throws -> URL {
         // A release without a published SHA-256 is never installed.
-        guard let expected = release.sha256 else { throw UpdateError(message: L("Не удалось скачать обновление.")) }
+        guard let expected = expectedHash else { throw UpdateError(message: L("Не удалось скачать обновление.")) }
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("grizzly-update-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let file = dir.appendingPathComponent((release.assetName as NSString).lastPathComponent)
+        let file = dir.appendingPathComponent((name as NSString).lastPathComponent)
         FileManager.default.createFile(atPath: file.path, contents: nil)
 
         var received: Int64 = 0
@@ -108,7 +139,7 @@ final class UpdateManager: ObservableObject {
         for attempt in 0..<5 where !finished {
             if attempt > 0 { try await Task.sleep(nanoseconds: UInt64(attempt) * 1_500_000_000) }
             do {
-                var request = URLRequest(url: release.assetURL, timeoutInterval: 30)
+                var request = URLRequest(url: assetURL, timeoutInterval: 30)
                 request.setValue("Grizzly/\(currentVersion)", forHTTPHeaderField: "User-Agent")
                 if received > 0 { request.setValue("bytes=\(received)-", forHTTPHeaderField: "Range") }
                 let (bytes, response) = try await URLSession.shared.bytes(for: request)
@@ -184,7 +215,7 @@ final class UpdateManager: ObservableObject {
         let work = dmg.deletingLastPathComponent()
         let mount = work.appendingPathComponent("mount")
         try FileManager.default.createDirectory(at: mount, withIntermediateDirectories: true)
-        guard run("/usr/bin/hdiutil", ["attach", "-nobrowse", "-readonly", "-noautoopen", "-mountpoint", mount.path, dmg.path]) else {
+        guard run("/usr/bin/hdiutil", ["attach", "-nobrowse", "-readonly", "-noverify", "-noautoopen", "-mountpoint", mount.path, dmg.path]) else {
             throw UpdateError(message: L("Не удалось открыть образ диска с обновлением."))
         }
         defer { _ = run("/usr/bin/hdiutil", ["detach", "-force", mount.path]) }
@@ -204,14 +235,21 @@ final class UpdateManager: ObservableObject {
         return staged
     }
 
-    nonisolated private static func run(_ path: String, _ args: [String]) -> Bool {
+    /// Runs a tool and waits for it, but never forever: a stuck helper must not leave the update on "Installing…".
+    nonisolated fileprivate static func run(_ path: String, _ args: [String], timeout: TimeInterval = 120) -> Bool {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: path)
         p.arguments = args
+        p.standardInput = FileHandle.nullDevice
         p.standardOutput = FileHandle.nullDevice
         p.standardError = FileHandle.nullDevice
+        let finished = DispatchSemaphore(value: 0)
+        p.terminationHandler = { _ in finished.signal() }
         do { try p.run() } catch { return false }
-        p.waitUntilExit()
+        if finished.wait(timeout: .now() + timeout) == .timedOut {
+            p.terminate()
+            return false
+        }
         return p.terminationStatus == 0
     }
 
@@ -246,7 +284,12 @@ final class UpdateManager: ObservableObject {
         try helper.run()
         // The edits were just confirmed; quitting must not ask again.
         state.drafts.keys.forEach { state.discardDraft($0) }
+        sheetVisible = false
+        state.library.flush()
         NSApp.terminate(nil)
+        // AppKit can decline to quit while a sheet or a panel is up (this is what left the update on "Installing…").
+        // Everything is saved and confirmed by now, so leave anyway: the helper above is waiting for this process to end.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { exit(0) }
     }
 }
 
@@ -267,12 +310,12 @@ struct UpdateView: View {
                     .foregroundColor(.green)
             case .available(let release):
                 Label("Вышла новая версия \(release.version)", systemImage: "arrow.down.circle.fill")
-                    .font(.headline)
+                    .font(AppFont.headline)
                     .foregroundColor(theme.accent)
-                Text("Установлена версия \(updater.currentVersion).").font(.callout).foregroundColor(.secondary)
+                Text("Установлена версия \(updater.currentVersion).").font(AppFont.callout).foregroundColor(.secondary)
                 if !release.notes.isEmpty {
                     ScrollView {
-                        Text(release.notes).font(.callout).frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
+                        Text(release.notes).font(AppFont.callout).frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
                     }
                     .frame(maxHeight: 160)
                     .padding(8)

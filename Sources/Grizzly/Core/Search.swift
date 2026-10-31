@@ -31,11 +31,6 @@ enum Searcher {
         return result
     }
 
-    /// Markdown reading mode is searched per rendered block; every other view is searched per line.
-    static func usesBlocks(_ doc: Document, _ mode: ReadMode) -> Bool {
-        mode == .reading && doc.type == .markdown
-    }
-
     /// Hits in plain lines (the text being edited), one unit per line.
     static func matches(query: String, inLines lines: [String]) -> [SearchMatch] {
         guard !query.isEmpty else { return [] }
@@ -58,50 +53,6 @@ enum Searcher {
                 || words.contains { $0.range(of: t, options: opts.union(.anchored)) != nil }
         }
     }
-
-    static func matches(query: String, in doc: Document, mode: ReadMode) -> [SearchMatch] {
-        guard !query.isEmpty else { return [] }
-        var result: [SearchMatch] = []
-
-        func collect(unit: Int, texts: [String]) {
-            var occurrence = 0
-            for text in texts {
-                for _ in ranges(of: query, in: text) {
-                    result.append(SearchMatch(unit: unit, occurrence: occurrence))
-                    occurrence += 1
-                }
-            }
-        }
-
-        if usesBlocks(doc, mode) {
-            for (i, block) in doc.blocks.enumerated() { collect(unit: i, texts: segments(of: block)) }
-        } else {
-            for (i, line) in doc.lines.enumerated() { collect(unit: i, texts: [line]) }
-        }
-        return result
-    }
-
-    /// Visible text pieces of a block in the order MarkdownView draws them.
-    static func segments(of block: MDBlock) -> [String] {
-        switch block {
-        case .heading(_, let t), .paragraph(let t), .quote(let t): return [plain(t)]
-        case .bullets(let items), .numbered(let items): return items.map(plain)
-        case .code(_, let code): return [code]
-        case .rule: return []
-        case .table(let header, let rows): return (header + rows.flatMap { $0 }).map(plain)
-        }
-    }
-
-    /// Number of hits before each segment, so a segment knows its first occurrence index.
-    static func offsets(for block: MDBlock, query: String) -> [Int] {
-        var running = 0
-        return segments(of: block).map { text in
-            defer { running += ranges(of: query, in: text).count }
-            return running
-        }
-    }
-
-    private static func plain(_ s: String) -> String { String(inlineMarkdown(s).characters) }
 }
 
 extension AttributedString {

@@ -7,6 +7,7 @@ struct PaneView: View {
     @EnvironmentObject private var state: AppState
     @EnvironmentObject private var prefs: Preferences
     @Environment(\.theme) private var theme
+    @Environment(\.surfaceOpacity) private var surface
 
     var body: some View {
         let doc = state.doc(in: pane)
@@ -22,7 +23,7 @@ struct PaneView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(theme.background)
+        .background(theme.background.opacity(surface))
         .simultaneousGesture(TapGesture().onEnded { state.focus(pane) })
     }
 
@@ -50,6 +51,18 @@ struct PaneView: View {
 
             Spacer()
 
+            // Each pane has its own mode: code on one side, the result on the other.
+            Picker("Режим", selection: Binding(
+                get: { state.mode(of: pane) },
+                set: { state.paneModes[pane] = $0 })) {
+                Text("Пользователь").tag(ReadMode.user)
+                Text("Разработчик").tag(ReadMode.developer)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .controlSize(.small)
+            .frame(width: 210)
+
             if pane == .right {
                 Button { state.toggleSplit() } label: { Image(systemName: "xmark") }
                     .buttonStyle(.plain)
@@ -57,7 +70,7 @@ struct PaneView: View {
                     .help("Закрыть правую панель")
             }
         }
-        .font(.callout)
+        .font(AppFont.callout)
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
         .background(theme.codeBackground.opacity(0.5))
@@ -78,7 +91,7 @@ struct PaneView: View {
             Button("Не сейчас") { state.ignoreChange(doc.id) }
                 .buttonStyle(.hoverText)
         }
-        .font(.callout)
+        .font(AppFont.callout)
         .buttonStyle(.hoverText)
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -94,7 +107,7 @@ struct PaneView: View {
             Text("Выберите файл для этой панели")
                 .foregroundColor(theme.secondary)
             Text("Откройте его из списка слева с зажатым ⌥ или выберите во вкладках.")
-                .font(.caption)
+                .font(AppFont.caption)
                 .foregroundColor(theme.secondary)
                 .multilineTextAlignment(.center)
             Button("Открыть файл…") {
@@ -118,30 +131,12 @@ struct PaneView: View {
 
     @ViewBuilder
     private func content(for doc: Document) -> some View {
-        if state.mode == .edit {
-            EditorView(document: doc, size: fontSize - 2, highlight: highlight, isScrollTarget: isTargetPane)
-        } else if state.mode == .source {
-            SourceView(document: doc, size: fontSize - 2, highlight: highlight, isScrollTarget: isTargetPane)
-        } else if let table = doc.csv {
+        let mode = state.mode(of: pane)
+        if mode == .user, let table = doc.csv {
             CSVTableView(table: table, size: fontSize - 1, highlight: highlight, isScrollTarget: isTargetPane)
         } else {
-            let key = ["read", doc.id.uuidString, "\(doc.modified?.timeIntervalSince1970 ?? 0)", "\(fontSize)", prefs.fontName,
-                       "\(prefs.headingSpacing)", prefs.themeID, "\(prefs.wantsDark)", "\(prefs.syntaxEnabled)",
-                       prefs.syntaxOff.sorted().joined(separator: ",")].joined(separator: "|")
-            ReadOnlyTextView(
-                contentKey: key,
-                build: {
-                    doc.type == .markdown
-                        ? TextBuilder.markdown(doc.blocks, size: fontSize, theme: theme, prefs: prefs)
-                        : TextBuilder.lines(doc, size: fontSize, theme: theme, prefs: prefs, monospaced: false)
-                },
-                theme: theme,
-                find: highlight,
-                scrollTarget: isTargetPane ? state.scrollTarget : nil,
-                initialScrollID: state.scrollTarget?.id,
-                grabFocus: isTargetPane,
-                maxColumn: 760)
-                .id(doc.id)
+            EditorView(document: doc, size: fontSize, mode: mode, highlight: highlight, isScrollTarget: isTargetPane,
+                       onFocus: { state.focus(pane) })
         }
     }
 }
@@ -156,7 +151,7 @@ struct StatusBar: View {
             Spacer()
             Text("\(document.lines.count) строк · \(document.wordCount) слов")
         }
-        .font(.caption)
+        .font(AppFont.caption)
         .foregroundColor(theme.secondary)
         .padding(.horizontal, 12)
         .padding(.vertical, 4)

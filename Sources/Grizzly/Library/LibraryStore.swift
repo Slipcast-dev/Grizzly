@@ -44,6 +44,8 @@ struct LibraryFolder: Identifiable, Codable, Hashable {
     var isExpanded = true
     /// Directory on disk this folder mirrors; nil for a purely virtual folder.
     var sourcePath: String?
+    /// The folder this one lives in; nil for a folder at the top level of the library.
+    var parentID: UUID?
 }
 
 /// A file the reader opened. Lives apart from the library, so removing a file from the sidebar keeps its history.
@@ -95,6 +97,90 @@ final class LibraryStore: ObservableObject {
 
     private let storeURL: URL
 
+    /// What changed in a `mutate`, so that only the lookups that can be stale are rebuilt. A library of thousands of
+    /// files is asked the same questions on every redraw of the sidebar.
+    enum Change { case structure, tags, other }
+
+    private final class Cache {
+        var built = false
+        var positions: [UUID: Int] = [:]
+        var folderPositions: [UUID: Int] = [:]
+        var pathIndex: [String: UUID] = [:]
+        var filesIn: [UUID?: [UUID]] = [:]
+        var foldersIn: [UUID?: [UUID]] = [:]
+        var counts: [UUID: Int] = [:]
+        var tagsBuilt = false
+        var allTags: [String] = []
+        var tagCounts: [String: Int] = [:]
+    }
+    private let cache = Cache()
+
+    private static func before(_ a: String, _ b: String) -> Bool {
+        a.compare(b, options: [.caseInsensitive, .numeric, .diacriticInsensitive]) == .orderedAscending
+    }
+
+    private func structure() -> Cache {
+        let c = cache
+        if c.built { return c }
+        c.positions = [:]; c.folderPositions = [:]; c.pathIndex = [:]; c.filesIn = [:]; c.foldersIn = [:]; c.counts = [:]
+        c.positions.reserveCapacity(data.files.count)
+        for (i, f) in data.files.enumerated() {
+            c.positions[f.id] = i
+            c.pathIndex[f.path] = f.id
+            c.filesIn[f.folderID, default: []].append(f.id)
+        }
+        for (i, f) in data.folders.enumerated() {
+            c.folderPositions[f.id] = i
+            c.foldersIn[f.parentID, default: []].append(f.id)
+        }
+        let files = data.files, folders = data.folders
+        for key in Array(c.filesIn.keys) {
+            c.filesIn[key]?.sort { Self.before(files[c.positions[$0]!].name, files[c.positions[$1]!].name) }
+        }
+        for key in Array(c.foldersIn.keys) {
+            c.foldersIn[key]?.sort { Self.before(folders[c.folderPositions[$0]!].name, folders[c.folderPositions[$1]!].name) }
+        }
+        for f in files {
+            var current = f.folderID
+            var depth = 0
+            while let id = current, depth < 64 {
+                c.counts[id, default: 0] += 1
+                current = c.folderPositions[id].map { folders[$0].parentID } ?? nil
+                depth += 1
+            }
+        }
+        c.built = true
+        return c
+    }
+
+    private func tagCache() -> Cache {
+        let c = cache
+        if c.tagsBuilt { return c }
+        var seen = Set<String>()
+        var result: [String] = []
+        c.tagCounts = [:]
+        for tag in data.tags where seen.insert(tag.lowercased()).inserted { result.append(tag) }
+        for f in data.files {
+            var own = Set<String>()
+            for tag in f.tags + f.inlineTags {
+                let key = tag.lowercased()
+                if seen.insert(key).inserted { result.append(tag) }
+                if own.insert(key).inserted { c.tagCounts[key, default: 0] += 1 }
+            }
+        }
+        c.allTags = result.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+        c.tagsBuilt = true
+        return c
+    }
+
+    private func invalidate(_ change: Change) {
+        switch change {
+        case .structure: cache.built = false; cache.tagsBuilt = false
+        case .tags: cache.tagsBuilt = false
+        case .other: break
+        }
+    }
+
     init(storeURL: URL? = nil) {
         if let storeURL {
             self.storeURL = storeURL
@@ -113,20 +199,25 @@ final class LibraryStore: ObservableObject {
         refreshMissing()
     }
 
+    /// Writes any change that is still waiting (the library is saved a moment after the last change).
+    func flush() {
+        saveWork?.cancel()
+        saveWork = nil
+        writeNow(data)
+    }
+
     // MARK: Queries
 
     var folders: [LibraryFolder] {
-        data.folders.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        data.folders.sorted { Self.before($0.name, $1.name) }
     }
 
     var allFiles: [LibraryFile] { data.files }
 
-    func file(_ id: UUID) -> LibraryFile? { data.files.first { $0.id == id } }
+    func file(_ id: UUID) -> LibraryFile? { structure().positions[id].map { data.files[$0] } }
 
     func files(in folderID: UUID?) -> [LibraryFile] {
-        data.files
-            .filter { $0.folderID == folderID }
-            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        (structure().filesIn[folderID] ?? []).compactMap { structure().positions[$0].map { data.files[$0] } }
     }
 
     /// Opened files, newest first, whether or not they are still in the library.
@@ -134,16 +225,55 @@ final class LibraryStore: ObservableObject {
         Array(data.history.sorted { $0.date > $1.date }.prefix(Self.recentLimit))
     }
 
-    func file(atPath path: String) -> LibraryFile? { data.files.first { $0.path == path } }
+    func file(atPath path: String) -> LibraryFile? { structure().pathIndex[path].flatMap(file) }
 
     var favorites: [LibraryFile] {
         data.files
             .filter(\.isFavorite)
-            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+            .sorted { Self.before($0.name, $1.name) }
     }
 
-    func folderExists(_ name: String) -> Bool {
-        data.folders.contains { $0.name.caseInsensitiveCompare(name) == .orderedSame }
+    /// Whether a folder with this name already exists next to the others in `parent` (nil: the top level).
+    func folderExists(_ name: String, in parent: UUID? = nil, ignoring ignored: UUID? = nil) -> Bool {
+        data.folders.contains { $0.parentID == parent && $0.id != ignored && $0.name.caseInsensitiveCompare(name) == .orderedSame }
+    }
+
+    func folder(_ id: UUID) -> LibraryFolder? { structure().folderPositions[id].map { data.folders[$0] } }
+
+    /// The folders directly inside `parent` (nil: the top level), by name.
+    func folders(in parent: UUID?) -> [LibraryFolder] {
+        (structure().foldersIn[parent] ?? []).compactMap { structure().folderPositions[$0].map { data.folders[$0] } }
+    }
+
+    /// The folder and everything below it, as folder ids.
+    func subtreeIDs(of id: UUID) -> Set<UUID> {
+        var result: Set<UUID> = [id]
+        var queue = [id]
+        while let next = queue.popLast() {
+            for child in data.folders where child.parentID == next && result.insert(child.id).inserted { queue.append(child.id) }
+        }
+        return result
+    }
+
+    /// Number of files in a folder and all the folders inside it.
+    func fileCount(in id: UUID) -> Int { structure().counts[id] ?? 0 }
+
+    /// "Work / 2026 / Reports": where a folder lives, for menus that list every folder.
+    func folderPath(_ id: UUID) -> String {
+        var names: [String] = []
+        var current: UUID? = id
+        var guardCount = 0
+        while let c = current, let f = folder(c), guardCount < 64 {
+            names.insert(f.name, at: 0)
+            current = f.parentID
+            guardCount += 1
+        }
+        return names.joined(separator: " / ")
+    }
+
+    /// Every folder with its path, sorted by path: the targets of "Move to…".
+    var folderChoices: [(folder: LibraryFolder, path: String)] {
+        data.folders.map { ($0, folderPath($0.id)) }.sorted { Self.before($0.1, $1.1) }
     }
 
     func isMissing(_ id: UUID) -> Bool { missing.contains(id) }
@@ -153,7 +283,7 @@ final class LibraryStore: ObservableObject {
     @discardableResult
     func add(url: URL) -> LibraryFile {
         let path = url.standardizedFileURL.path
-        if let existing = data.files.first(where: { $0.path == path }) { return existing }
+        if let existing = file(atPath: path) { return existing }
         let bookmark = (try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)) ?? Data()
         let entry = LibraryFile(bookmark: bookmark, path: path, name: url.lastPathComponent)
         mutate { $0.files.append(entry) }
@@ -175,7 +305,14 @@ final class LibraryStore: ObservableObject {
         }
         if fm.fileExists(atPath: entry.path) {
             setMissing(id, false)
-            return URL(fileURLWithPath: entry.path)
+            let url = URL(fileURLWithPath: entry.path)
+            // Files added with a whole folder get their bookmark the first time they are opened.
+            if entry.bookmark.isEmpty, let made = try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil) {
+                mutate(.other) { d in
+                    if let i = d.files.firstIndex(where: { $0.id == id }) { d.files[i].bookmark = made }
+                }
+            }
+            return url
         }
         setMissing(id, true)
         return nil
@@ -185,7 +322,7 @@ final class LibraryStore: ObservableObject {
     func recordOpened(_ url: URL) {
         let path = url.standardizedFileURL.path
         let bookmark = (try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)) ?? Data()
-        mutate { d in
+        mutate(.other) { d in
             d.history.removeAll { $0.path == path }
             d.history.append(HistoryEntry(path: path, name: url.lastPathComponent, bookmark: bookmark, date: Date()))
             if d.history.count > Self.historyStored {
@@ -208,18 +345,18 @@ final class LibraryStore: ObservableObject {
     func isMissing(_ entry: HistoryEntry) -> Bool { resolve(entry) == nil }
 
     func removeFromHistory(_ path: String) {
-        mutate { $0.history.removeAll { $0.path == path } }
+        mutate(.other) { $0.history.removeAll { $0.path == path } }
     }
 
     func clearRecents() {
-        mutate { d in
+        mutate(.other) { d in
             d.history = []
             for i in d.files.indices { d.files[i].lastOpened = nil }
         }
     }
 
     func toggleFavorite(_ id: UUID) {
-        mutate { d in
+        mutate(.other) { d in
             if let i = d.files.firstIndex(where: { $0.id == id }) { d.files[i].isFavorite.toggle() }
         }
     }
@@ -231,7 +368,7 @@ final class LibraryStore: ObservableObject {
 
     func toggleBookmark(_ id: UUID?, line: Int) {
         guard let id else { return }
-        mutate { d in
+        mutate(.other) { d in
             guard let i = d.files.firstIndex(where: { $0.id == id }) else { return }
             if let at = d.files[i].bookmarks.firstIndex(of: line) {
                 d.files[i].bookmarks.remove(at: at)
@@ -248,6 +385,13 @@ final class LibraryStore: ObservableObject {
         missing.remove(id)
     }
 
+    /// Removes several references at once.
+    func remove(_ ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        mutate { $0.files.removeAll { ids.contains($0.id) } }
+        missing.subtract(ids)
+    }
+
     func move(_ fileID: UUID, to folderID: UUID?) {
         mutate { d in
             guard let i = d.files.firstIndex(where: { $0.id == fileID }), d.files[i].folderID != folderID else { return }
@@ -258,10 +402,75 @@ final class LibraryStore: ObservableObject {
         }
     }
 
+    /// Adds a scanned directory tree in one step: a library folder for the directory and for every directory below it
+    /// (folders inside folders), a reference for every file. Only the top folder starts open. Files already in the library
+    /// are left where they are.
+    @discardableResult
+    func importTree(root: URL, files: [URL]) -> (folderID: UUID, added: Int) {
+        let rootPath = root.standardizedFileURL.path
+        var rootID = UUID()
+        var added = 0
+        mutate { d in
+            var byPath: [String: UUID] = [:]
+            for f in d.folders { if let p = f.sourcePath { byPath[p] = f.id } }
+            var position: [String: Int] = [:]
+            for (i, f) in d.files.enumerated() { position[f.path] = i }
+            func folderID(for dirPath: String) -> UUID {
+                if let id = byPath[dirPath] { return id }
+                let isRoot = dirPath == rootPath || !dirPath.hasPrefix(rootPath)
+                let parent: UUID? = isRoot ? nil : folderID(for: (dirPath as NSString).deletingLastPathComponent)
+                let name = (dirPath as NSString).lastPathComponent
+                var unique = name
+                var n = 2
+                while d.folders.contains(where: { $0.parentID == parent && $0.name.caseInsensitiveCompare(unique) == .orderedSame }) {
+                    unique = "\(name) (\(n))"
+                    n += 1
+                }
+                var folder = LibraryFolder(name: unique)
+                folder.sourcePath = dirPath
+                folder.parentID = parent
+                folder.isExpanded = isRoot
+                d.folders.append(folder)
+                byPath[dirPath] = folder.id
+                return folder.id
+            }
+            rootID = folderID(for: rootPath)
+            for url in files {
+                let path = url.standardizedFileURL.path
+                let target = folderID(for: (path as NSString).deletingLastPathComponent)
+                if let i = position[path] {
+                    if d.files[i].folderID == nil { d.files[i].folderID = target }
+                } else {
+                    d.files.append(LibraryFile(bookmark: Data(), path: path, name: url.lastPathComponent, folderID: target))
+                    position[path] = d.files.count - 1
+                    added += 1
+                }
+            }
+        }
+        return (rootID, added)
+    }
+
+    /// Stores the hashtags found in the texts of many files at once.
+    func setInlineTags(_ updates: [(UUID, [String])]) {
+        mutate(.tags) { d in
+            var position: [UUID: Int] = [:]
+            for (i, f) in d.files.enumerated() { position[f.id] = i }
+            for (id, tags) in updates {
+                if let i = position[id], d.files[i].inlineTags != tags { d.files[i].inlineTags = tags }
+            }
+        }
+    }
+
     // MARK: Tags
 
     /// Characters a tag may contain: letters, digits, marks, `_`, `-` and emoji (so `#🍕` and `#идея💡` are tags).
     static let tagBody = "\\p{L}\\p{N}\\p{M}_\\-\\p{Extended_Pictographic}\\u200D\\uFE0F"
+
+    /// `#14b1f2` in a README is a color, not a tag.
+    static func isNoise(_ tag: String) -> Bool {
+        guard [3, 4, 6, 8].contains(tag.count), tag.allSatisfy({ $0.isHexDigit }) else { return false }
+        return tag.contains { $0.isLetter } && tag.contains { $0.isNumber }
+    }
 
     /// Tag text as stored: trimmed, without a leading "#".
     static func cleanTag(_ raw: String) -> String {
@@ -271,12 +480,10 @@ final class LibraryStore: ObservableObject {
     }
 
     /// Every known tag, alphabetically: the ones created by the user plus any a file still carries.
-    var allTags: [String] {
-        var seen = Set<String>()
-        var result: [String] = []
-        for tag in data.tags + data.files.flatMap({ $0.tags + $0.inlineTags }) where seen.insert(tag.lowercased()).inserted { result.append(tag) }
-        return result.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
-    }
+    var allTags: [String] { tagCache().allTags }
+
+    /// How many files carry the tag (a count kept ready: the sidebar asks for every tag on each redraw).
+    func tagCount(_ tag: String) -> Int { tagCache().tagCounts[tag.lowercased()] ?? 0 }
 
     func files(withTag tag: String) -> [LibraryFile] {
         data.files
@@ -292,7 +499,7 @@ final class LibraryStore: ObservableObject {
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
-    func tagExists(_ tag: String) -> Bool { allTags.contains { $0.caseInsensitiveCompare(tag) == .orderedSame } }
+    func tagExists(_ tag: String) -> Bool { tagCache().tagCounts[tag.lowercased()] != nil || allTags.contains { $0.caseInsensitiveCompare(tag) == .orderedSame } }
 
     /// Creates a tag (and returns its stored spelling); an existing tag is returned as it is. Nil for an empty name.
     @discardableResult
@@ -300,7 +507,7 @@ final class LibraryStore: ObservableObject {
         let tag = Self.cleanTag(raw)
         guard !tag.isEmpty else { return nil }
         if let existing = allTags.first(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) { return existing }
-        mutate { $0.tags.append(tag) }
+        mutate(.tags) { $0.tags.append(tag) }
         return tag
     }
 
@@ -318,7 +525,7 @@ final class LibraryStore: ObservableObject {
         var result: [String] = []
         for m in regex.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
             let tag = ns.substring(with: m.range(at: 1)).trimmingCharacters(in: CharacterSet(charactersIn: "-_"))
-            if !tag.isEmpty, seen.insert(tag.lowercased()).inserted { result.append(tag) }
+            if !tag.isEmpty, !isNoise(tag), seen.insert(tag.lowercased()).inserted { result.append(tag) }
         }
         return result
     }
@@ -359,7 +566,7 @@ final class LibraryStore: ObservableObject {
             var word = ns.substring(with: m.range(at: 1))
             var range = m.range
             while let last = word.last, last == "-" || last == "_" { word.removeLast(); range.length -= 1 }
-            if !word.isEmpty { result.append((range, word)) }
+            if !word.isEmpty, !isNoise(word) { result.append((range, word)) }
         }
         return result
     }
@@ -367,13 +574,13 @@ final class LibraryStore: ObservableObject {
     /// Stores the hashtags found in a file's text (only prose is scanned by the callers).
     func setInlineTags(_ id: UUID, _ tags: [String]) {
         guard let current = file(id)?.inlineTags, current != tags else { return }
-        mutate { d in
+        mutate(.tags) { d in
             if let i = d.files.firstIndex(where: { $0.id == id }) { d.files[i].inlineTags = tags }
         }
     }
 
     func toggleTag(_ fileID: UUID, _ tag: String) {
-        mutate { d in
+        mutate(.tags) { d in
             guard let i = d.files.firstIndex(where: { $0.id == fileID }) else { return }
             if let at = d.files[i].tags.firstIndex(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) {
                 d.files[i].tags.remove(at: at)
@@ -394,14 +601,14 @@ final class LibraryStore: ObservableObject {
             }
             list = out
         }
-        mutate { d in
+        mutate(.tags) { d in
             swap(&d.tags)
             for i in d.files.indices { swap(&d.files[i].tags); swap(&d.files[i].inlineTags) }
         }
     }
 
     func deleteTag(_ tag: String) {
-        mutate { d in
+        mutate(.tags) { d in
             d.tags.removeAll { $0.caseInsensitiveCompare(tag) == .orderedSame }
             for i in d.files.indices { d.files[i].inlineTags.removeAll { $0.caseInsensitiveCompare(tag) == .orderedSame } }
             for i in d.files.indices { d.files[i].tags.removeAll { $0.caseInsensitiveCompare(tag) == .orderedSame } }
@@ -416,23 +623,28 @@ final class LibraryStore: ObservableObject {
         return URL(fileURLWithPath: path)
     }
 
-    /// Finds or creates the library folder that mirrors a directory on disk.
-    func folder(forDirectory url: URL, name: String) -> LibraryFolder {
+    /// Finds or creates the library folder that mirrors a directory on disk (inside `parent`; nil: the top level).
+    func folder(forDirectory url: URL, name: String, parent: UUID? = nil) -> LibraryFolder {
         let path = url.standardizedFileURL.path
         if let existing = data.folders.first(where: { $0.sourcePath == path }) { return existing }
         var unique = name
         var n = 2
-        while folderExists(unique) { unique = "\(name) (\(n))"; n += 1 }
+        while folderExists(unique, in: parent) { unique = "\(name) (\(n))"; n += 1 }
         var folder = LibraryFolder(name: unique)
         folder.sourcePath = path
+        folder.parentID = parent
         mutate { $0.folders.append(folder) }
         return folder
     }
 
     @discardableResult
-    func createFolder(_ name: String) -> LibraryFolder {
-        let folder = LibraryFolder(name: name)
-        mutate { $0.folders.append(folder) }
+    func createFolder(_ name: String, parent: UUID? = nil) -> LibraryFolder {
+        var folder = LibraryFolder(name: name)
+        folder.parentID = parent
+        mutate { d in
+            d.folders.append(folder)
+            if let parent, let p = d.folders.firstIndex(where: { $0.id == parent }) { d.folders[p].isExpanded = true }
+        }
         return folder
     }
 
@@ -442,28 +654,72 @@ final class LibraryStore: ObservableObject {
         }
     }
 
-    func setExpanded(_ id: UUID, _ expanded: Bool) {
+    /// Puts a folder (with everything in it) inside another one, or back at the top level. A folder cannot go into itself
+    /// or into one of its own subfolders, and the name must be free at the destination.
+    @discardableResult
+    func moveFolder(_ id: UUID, to parent: UUID?) -> Bool {
+        guard let folder = folder(id), folder.parentID != parent else { return false }
+        if let parent, subtreeIDs(of: id).contains(parent) { return false }
+        if folderExists(folder.name, in: parent, ignoring: id) { return false }
         mutate { d in
+            guard let i = d.folders.firstIndex(where: { $0.id == id }) else { return }
+            d.folders[i].parentID = parent
+            if let parent, let p = d.folders.firstIndex(where: { $0.id == parent }) { d.folders[p].isExpanded = true }
+        }
+        return true
+    }
+
+    func setExpanded(_ id: UUID, _ expanded: Bool) {
+        mutate(.other) { d in
             if let i = d.folders.firstIndex(where: { $0.id == id }) { d.folders[i].isExpanded = expanded }
         }
     }
 
-    /// Files from the deleted folder go back to the root of the library.
-    func deleteFolder(_ id: UUID) {
+    /// Removes the folder with everything in it: its subfolders and the references to the files inside them.
+    /// Nothing is deleted from the disk. Returns the ids of the files that left the library.
+    @discardableResult
+    func deleteFolder(_ id: UUID) -> [UUID] {
+        let doomed = subtreeIDs(of: id)
+        let files = data.files.filter { $0.folderID.map(doomed.contains) ?? false }.map(\.id)
         mutate { d in
-            for i in d.files.indices where d.files[i].folderID == id { d.files[i].folderID = nil }
-            d.folders.removeAll { $0.id == id }
+            d.files.removeAll { $0.folderID.map(doomed.contains) ?? false }
+            d.folders.removeAll { doomed.contains($0.id) }
         }
+        missing.subtract(files)
+        return files
     }
 
     // MARK: Internals
 
+    /// Checks in the background which files are gone (a library of thousands of files must not block the launch).
+    /// A file that moved is found again through its bookmark.
     func refreshMissing() {
-        for entry in data.files { _ = resolve(entry.id) }
+        let entries = data.files.map { ($0.id, $0.path, $0.bookmark) }
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let fm = FileManager.default
+            var gone = Set<UUID>()
+            var moved: [(UUID, URL)] = []
+            for (id, path, bookmark) in entries where !fm.fileExists(atPath: path) {
+                var stale = false
+                if !bookmark.isEmpty,
+                   let url = try? URL(resolvingBookmarkData: bookmark, options: [], relativeTo: nil, bookmarkDataIsStale: &stale),
+                   fm.fileExists(atPath: url.path) {
+                    moved.append((id, url))
+                } else {
+                    gone.insert(id)
+                }
+            }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if self.missing != gone { self.missing = gone }
+                for (id, url) in moved { self.refresh(id, url: url) }
+            }
+        }
     }
 
     private func setMissing(_ id: UUID, _ value: Bool) {
-        if value { missing.insert(id) } else { missing.remove(id) }
+        // Assigning to the published set announces a change even when nothing changed.
+        if value, !missing.contains(id) { missing.insert(id) } else if !value, missing.contains(id) { missing.remove(id) }
     }
 
     private func refresh(_ id: UUID, url: URL) {
@@ -477,11 +733,12 @@ final class LibraryStore: ObservableObject {
         }
     }
 
-    private func mutate(_ change: (inout LibraryData) -> Void) {
+    private func mutate(_ kind: Change = .structure, _ change: (inout LibraryData) -> Void) {
         var copy = data
         change(&copy)
         data = copy
-        save()
+        invalidate(kind)
+        scheduleSave()
     }
 
     private func load() {
@@ -490,13 +747,27 @@ final class LibraryStore: ObservableObject {
         guard let raw = try? Data(contentsOf: storeURL),
               let decoded = try? decoder.decode(LibraryData.self, from: raw) else { return }
         data = decoded
+        invalidate(.structure)
     }
 
-    private func save() {
+    private var saveWork: DispatchWorkItem?
+    private static let writer = DispatchQueue(label: "grizzly.library.writer", qos: .utility)
+
+    /// The library is written a moment after the last change, off the main thread: a burst of changes (opening a folder,
+    /// reading the tags of every file) makes one write, not one per change.
+    private func scheduleSave() {
+        saveWork?.cancel()
+        let snapshot = data
+        let work = DispatchWorkItem { [weak self] in self?.writeNow(snapshot) }
+        saveWork = work
+        Self.writer.asyncAfter(deadline: .now() + 0.5, execute: work)
+    }
+
+    private func writeNow(_ snapshot: LibraryData) {
         let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.outputFormatting = [.sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
-        guard let raw = try? encoder.encode(data) else { return }
+        guard let raw = try? encoder.encode(snapshot) else { return }
         try? raw.write(to: storeURL, options: .atomic)
     }
 }

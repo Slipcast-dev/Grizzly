@@ -1,16 +1,30 @@
 import SwiftUI
 import AppKit
 
-/// Plain-text editor for the open file. The draft lives in `AppState.drafts`, so switching tabs or modes keeps it.
+/// Line numbers with bookmarks for the editor's gutter (Developer mode).
+struct LineNumbers {
+    let size: CGFloat
+    let bookmarks: Set<Int>
+    let toggle: (Int) -> Void
+}
+
+/// The editor of the open file. The draft lives in `AppState.drafts`, so switching tabs or modes keeps it.
+/// User mode hides the formatting code of Markdown and draws the document as it reads; Developer mode shows the text
+/// exactly as it is in the file, with syntax colors and line numbers.
 struct EditorView: View {
     let document: Document
     let size: CGFloat
+    /// The mode of the pane this editor sits in.
+    let mode: ReadMode
     let highlight: SearchHighlight?
     let isScrollTarget: Bool
+    var onFocus: () -> Void = {}
 
     @EnvironmentObject private var state: AppState
     @EnvironmentObject private var prefs: Preferences
+    @EnvironmentObject private var library: LibraryStore
     @Environment(\.theme) private var theme
+    @Environment(\.surfaceOpacity) private var surface
 
     /// The newest version of the document: after a save the file is re-read under the same id, and the
     /// copy this view was created with would still hold the text from before the edit.
@@ -18,34 +32,56 @@ struct EditorView: View {
 
     var body: some View {
         let doc = live
+        let userMode = mode == .user
+        let isLive = userMode && doc.type == .markdown
+        let prose = userMode && EditorView.isProse(doc.type)
+        let bookmarked = Set(library.bookmarks(for: doc.libraryID))
+        let numbers: LineNumbers? = !userMode && prefs.showLineNumbers
+            ? LineNumbers(size: size - 2, bookmarks: bookmarked, toggle: { line in
+                library.toggleBookmark(doc.libraryID, line: line)
+                state.notify(bookmarked.contains(line) ? L("Закладка убрана.") : L("Закладка добавлена: строка %lld.", line), symbol: "bookmark.fill")
+            })
+            : nil
         VStack(spacing: 0) {
             bar(doc)
             EditorTextView(
                 text: Binding(
                     get: { state.text(for: doc) },
                     set: { state.setDraft($0, for: doc) }),
-                font: .monospacedSystemFont(ofSize: size, weight: .regular),
+                font: prose ? TextBuilder.font(prefs, size: size) : .monospacedSystemFont(ofSize: size - 2, weight: .regular),
                 textColor: NSColor(theme.text),
                 type: doc.type,
+                live: isLive,
                 highlightOn: prefs.highlights(doc.type),
                 spellCheck: prefs.spellCheck && EditorView.isProse(doc.type),
                 theme: theme,
-                background: NSColor(theme.background),
+                background: NSColor(theme.background).withAlphaComponent(surface),
                 find: highlight,
                 scrollTarget: isScrollTarget ? state.scrollTarget : nil,
-                initialScrollID: state.scrollTarget?.id)
-                .id(doc.id)
+                initialScrollID: state.scrollTarget?.id,
+                numbers: numbers,
+                column: prose ? 760 : nil,
+                collapsed: state.collapsedSections[doc.id] ?? [],
+                onFold: { state.toggleSection(doc.id, key: $0) },
+                moveDoneTasks: prefs.moveDoneTasks,
+                onFocus: onFocus,
+                documentURL: doc.url,
+                styleKey: "\(prefs.themeID)|\(prefs.wantsDark)|\(prefs.syntaxEnabled)|\(prefs.syntaxOff.sorted().joined(separator: ","))|\(prefs.fontName)|\(size)")
+                .id("\(doc.id)-\(isLive)-\(prose)-\(numbers != nil)")
         }
     }
 
     /// Spelling and grammar are checked in prose; in source code and data files every identifier would be an "error".
     static func isProse(_ type: FileType) -> Bool { [.markdown, .text, .rtf, .tex].contains(type) }
 
-    /// Undo and Save, in the same style as the other buttons. The status line is gone: saving and similar
-    /// events are announced by notifications instead.
+    /// Formatting, Undo and Save, in the same style as the other buttons. Saving and similar events are announced
+    /// by notifications instead of a status line.
     private func bar(_ document: Document) -> some View {
         let dirty = state.isDirty(document.id)
         return HStack(spacing: 8) {
+            if document.type == .markdown {
+                ScrollView(.horizontal, showsIndicators: false) { FormatBar() }
+            }
             Spacer()
             Button { NSApp.sendAction(Selector(("undo:")), to: nil, from: nil) } label: {
                 Label("Отменить", systemImage: "arrow.uturn.backward")
@@ -55,10 +91,10 @@ struct EditorView: View {
                 Label("Сохранить", systemImage: "square.and.arrow.down")
             }
             .help("Сохранить (⌘S)")
+            .disabled(!dirty)
         }
         .buttonStyle(.hoverFilled)
-        .disabled(!dirty)
-        .font(.callout)
+        .font(AppFont.callout)
         .padding(.horizontal, 12)
         .padding(.vertical, 4)
     }
@@ -70,6 +106,8 @@ private struct EditorTextView: NSViewRepresentable {
     let font: NSFont
     let textColor: NSColor
     let type: FileType
+    /// User mode of a Markdown file: the formatting code is hidden (see `LiveStyler`).
+    let live: Bool
     let highlightOn: Bool
     let spellCheck: Bool
     let theme: Theme
@@ -78,12 +116,42 @@ private struct EditorTextView: NSViewRepresentable {
     /// Set when this pane should jump to the current hit; compared by id with the last one handled.
     let scrollTarget: ScrollTarget?
     let initialScrollID: UUID?
+    let numbers: LineNumbers?
+    /// Reading column width (nil: the text fills the pane).
+    let column: CGFloat?
+    let collapsed: Set<String>
+    let onFold: (String) -> Void
+    let moveDoneTasks: Bool
+    let onFocus: () -> Void
+    /// The file being edited: attachments are placed next to it.
+    let documentURL: URL
+    /// Changes with anything outside the text that changes how it is painted (theme, font settings).
+    let styleKey: String
 
     func makeCoordinator() -> Coordinator { Coordinator(self, handledScroll: initialScrollID) }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scroll = NSTextView.scrollableTextView()
-        guard let view = scroll.documentView as? NSTextView else { return scroll }
+        let scroll = NSScrollView()
+        let storage = NSTextStorage()
+        let layout = LiveLayoutManager()
+        storage.addLayoutManager(layout)
+        let container = NSTextContainer(size: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
+        container.widthTracksTextView = true
+        layout.addTextContainer(container)
+        let view = LiveTextView(frame: .zero, textContainer: container)
+        view.minSize = .zero
+        view.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        view.isVerticallyResizable = true
+        view.isHorizontallyResizable = false
+        view.autoresizingMask = [.width]
+        scroll.documentView = view
+        scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = false
+        scroll.automaticallyAdjustsContentInsets = false
+        scroll.contentInsets = NSEdgeInsetsZero
+        scroll.wantsLayer = true
+        scroll.layer?.masksToBounds = true
+
         view.delegate = context.coordinator
         view.isRichText = false
         view.allowsUndo = true
@@ -94,9 +162,21 @@ private struct EditorTextView: NSViewRepresentable {
         view.isAutomaticLinkDetectionEnabled = false
         view.textContainerInset = NSSize(width: 14, height: 12)
         view.string = text
+        view.onFocus = { [weak coordinator = context.coordinator] in coordinator?.parent.onFocus() }
+        view.onFold = { [weak coordinator = context.coordinator] key in coordinator?.parent.onFold(key) }
+        view.onTask = { [weak coordinator = context.coordinator] box in coordinator?.toggleTask(at: box) }
         // Russian and English are both checked: the checker picks the language of each phrase.
         NSSpellChecker.shared.automaticallyIdentifiesLanguages = true
-        style(view, scroll)
+        if column != nil || live {
+            scroll.contentView.postsFrameChangedNotifications = true
+            NotificationCenter.default.addObserver(context.coordinator, selector: #selector(Coordinator.frameChanged),
+                                                   name: NSView.frameDidChangeNotification, object: scroll.contentView)
+        }
+        context.coordinator.scroll = scroll
+        context.coordinator.view = view
+        NotificationCenter.default.addObserver(context.coordinator, selector: #selector(Coordinator.attachmentReady),
+                                               name: .grizzlyAttachmentReady, object: nil)
+        style(view, scroll, context.coordinator)
         DispatchQueue.main.async { view.window?.makeFirstResponder(view) }
         return scroll
     }
@@ -110,29 +190,61 @@ private struct EditorTextView: NSViewRepresentable {
             view.string = text
             view.setSelectedRange(NSRange(location: min(caret.location, (text as NSString).length), length: 0))
         }
-        style(view, scroll)
+        style(view, scroll, context.coordinator)
+        context.coordinator.updateInset()
+        context.coordinator.configureRuler(scroll, view)
         context.coordinator.applyFind(to: view)
     }
 
-    private func style(_ view: NSTextView, _ scroll: NSScrollView) {
-        view.font = font
-        view.textColor = textColor
+    private func style(_ view: NSTextView, _ scroll: NSScrollView, _ coordinator: Coordinator) {
         view.insertionPointColor = textColor
+        // With the glass effect the background is partly see-through: the scroll view then paints nothing of its own.
+        let translucent = background.alphaComponent < 0.999
+        view.drawsBackground = true
         view.backgroundColor = background
         scroll.backgroundColor = background
-        scroll.drawsBackground = true
+        scroll.drawsBackground = !translucent
+        scroll.contentView.drawsBackground = !translucent
+        if let layout = view.layoutManager as? LiveLayoutManager {
+            layout.live = live
+            layout.theme = theme
+        }
+        (view as? LiveTextView)?.live = live
+        (view as? LiveTextView)?.isMarkdown = type == .markdown
+        (view as? LiveTextView)?.documentURL = documentURL
         if view.isContinuousSpellCheckingEnabled != spellCheck { view.isContinuousSpellCheckingEnabled = spellCheck }
         if view.isGrammarCheckingEnabled != spellCheck { view.isGrammarCheckingEnabled = spellCheck }
+
+        // Painting the whole text is the expensive part: it is done only when the text or a setting that changes
+        // its look is different from last time (SwiftUI asks for an update on every change anywhere in the window).
+        let key = [styleKey, "\(live)", "\(highlightOn)", "\(type)", collapsed.sorted().joined(separator: ","),
+                   documentURL.path, "\(view.string.hashValue)", "\(view.string.utf16.count)"].joined(separator: "|")
+        guard key != coordinator.paintedStyleKey else { return }
+        coordinator.paintedStyleKey = key
+        view.font = font
+        view.textColor = textColor
         colorize(view)
+        coordinator.ruler?.setText(view.string)
+        view.needsDisplay = true
     }
 
     /// Syntax colors for the whole text (skipped for very large files, where rescanning on every key would lag).
     private func colorize(_ view: NSTextView) {
-        if EditorView.isProse(type), let storage = view.textStorage {
-            // #tags are colored like tokens; the background is reset first so a deleted '#' leaves nothing behind.
+        if type == .markdown, let storage = view.textStorage, storage.length <= 150_000 {
+            // Headings, bold, italic, highlights, lists and quotes show in the text as they will read.
             storage.beginEditing()
-            storage.removeAttribute(.backgroundColor, range: NSRange(location: 0, length: storage.length))
-            for (range, _) in LibraryStore.tagMatches(in: storage.string) {
+            if live {
+                LiveStyler.apply(to: storage, base: font, textColor: textColor, theme: theme, collapsed: collapsed, document: documentURL)
+            } else {
+                MarkdownStyler.apply(to: storage, base: font, textColor: textColor, theme: theme)
+            }
+            storage.endEditing()
+        }
+        if EditorView.isProse(type), let storage = view.textStorage {
+            // #tags are colored like tokens.
+            storage.beginEditing()
+            if type != .markdown { storage.removeAttribute(.backgroundColor, range: NSRange(location: 0, length: storage.length)) }
+            for (range, _) in LibraryStore.tagMatches(in: storage.string) where storage.attribute(.grizzlyHidden, at: range.location, effectiveRange: nil) == nil {
                 storage.addAttributes([.foregroundColor: NSColor(theme.accent),
                                        .backgroundColor: NSColor(theme.accent).withAlphaComponent(0.16)], range: range)
             }
@@ -157,8 +269,84 @@ private struct EditorTextView: NSViewRepresentable {
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: EditorTextView
+        weak var scroll: NSScrollView?
+        weak var view: NSTextView?
+        var ruler: LineNumberRuler?
+        var paintedStyleKey = ""
         private var handledScroll: UUID?
         private var paintedKey = ""
+
+        deinit { NotificationCenter.default.removeObserver(self) }
+
+        @objc func frameChanged() { updateInset() }
+        @objc func attachmentReady() { view?.needsDisplay = true }
+
+        /// Centers a column of at most `column` points in the pane; User mode also leaves room for the folding arrows.
+        func updateInset() {
+            guard let view, let scroll else { return }
+            guard let column = parent.column else {
+                let side: CGFloat = parent.live ? 44 : 14
+                if view.textContainerInset.width != side { view.textContainerInset = NSSize(width: side, height: 12) }
+                return
+            }
+            let side = max(parent.live ? 44 : 36, (scroll.contentView.bounds.width - column) / 2)
+            if abs(view.textContainerInset.width - side) > 0.5 { view.textContainerInset = NSSize(width: side, height: 20) }
+        }
+
+        /// The gutter with line numbers and bookmarks (Developer mode).
+        func configureRuler(_ scroll: NSScrollView, _ view: NSTextView) {
+            guard let numbers = parent.numbers else {
+                if scroll.hasVerticalRuler { scroll.hasVerticalRuler = false; scroll.rulersVisible = false }
+                ruler = nil
+                return
+            }
+            if ruler == nil {
+                let r = LineNumberRuler(scrollView: scroll, orientation: .verticalRuler)
+                r.clientView = view
+                r.ruleThickness = 58
+                scroll.verticalRulerView = r
+                scroll.hasVerticalRuler = true
+                scroll.rulersVisible = true
+                r.setText(view.string)
+                ruler = r
+            }
+            guard let r = ruler else { return }
+            r.numberFont = .monospacedSystemFont(ofSize: numbers.size * 0.8, weight: .regular)
+            r.numberColor = NSColor(parent.theme.gutter)
+            r.bookmarkColor = NSColor(parent.theme.bookmark)
+            r.background = parent.background
+            r.onToggle = numbers.toggle
+            if r.bookmarks != numbers.bookmarks { r.bookmarks = numbers.bookmarks }
+        }
+
+        /// A click on the circle of a check list item ticks it; with "move done tasks down" the item goes to the end of its list.
+        func toggleTask(at box: Int) {
+            guard let view, let edit = RichFormat.toggleTaskEdit(text: view.string, boxIndex: box, moveDone: parent.moveDoneTasks) else { return }
+            let caret = view.selectedRange()
+            FormatActions.apply(edit, to: view)
+            view.setSelectedRange(NSRange(location: min(caret.location, (view.string as NSString).length), length: 0))
+        }
+
+        private func isHidden(_ storage: NSTextStorage, _ i: Int) -> Bool {
+            i >= 0 && i < storage.length && storage.attribute(.grizzlyHidden, at: i, effectiveRange: nil) != nil
+        }
+
+        /// The caret never rests inside invisible code: it jumps over it in the direction of the move, and a line
+        /// that starts with hidden code (`# `, a list marker) puts the caret behind it.
+        func textView(_ textView: NSTextView, willChangeSelectionFromCharacterRange old: NSRange,
+                      toCharacterRange new: NSRange) -> NSRange {
+            guard parent.live, new.length == 0, let storage = textView.textStorage, storage.length > 0 else { return new }
+            var p = new.location
+            let ns = storage.string as NSString
+            let atLineStart = p == 0 || (p <= ns.length && ns.character(at: p - 1) == 10)
+            if isHidden(storage, p), atLineStart {
+                while isHidden(storage, p), p < storage.length { p += 1 }
+                return NSRange(location: p, length: 0)
+            }
+            guard isHidden(storage, p - 1), isHidden(storage, p) else { return new }
+            if new.location >= old.location { while isHidden(storage, p) { p += 1 } } else { while isHidden(storage, p - 1) { p -= 1 } }
+            return NSRange(location: p, length: 0)
+        }
 
         init(_ parent: EditorTextView, handledScroll: UUID?) {
             self.parent = parent
@@ -174,6 +362,21 @@ private struct EditorTextView: NSViewRepresentable {
         /// at every word, after a pause, when switching between typing and deleting, and for paste or Return.
         func textView(_ textView: NSTextView, shouldChangeTextIn range: NSRange, replacementString: String?) -> Bool {
             let s = replacementString ?? ""
+            // Backspace or Delete next to invisible code removes the visible character beyond it, never the code itself.
+            if parent.live, s.isEmpty, range.length == 1, let storage = textView.textStorage, isHidden(storage, range.location),
+               let event = NSApp.currentEvent, event.type == .keyDown, [51, 117].contains(event.keyCode) {
+                var i = range.location
+                if event.keyCode == 51 { while isHidden(storage, i) { i -= 1 } } else { while isHidden(storage, i) { i += 1 } }
+                if i >= 0, i < storage.length {
+                    let target = NSRange(location: i, length: 1)
+                    if textView.shouldChangeText(in: target, replacementString: "") {
+                        storage.replaceCharacters(in: target, with: "")
+                        textView.didChangeText()
+                        textView.setSelectedRange(NSRange(location: i, length: 0))
+                    }
+                }
+                return false
+            }
             let isSpace = s.utf16.count == 1 && s.rangeOfCharacter(from: .whitespaces) != nil
             // 1 typing one character, 2 deleting, 3 anything else (Return, paste, replacing a selection)
             let kind = s.isEmpty ? 2 : (s.utf16.count == 1 && !s.contains("\n") && range.length == 0 ? 1 : 3)
@@ -187,8 +390,21 @@ private struct EditorTextView: NSViewRepresentable {
             return true
         }
 
+        /// Return in a list or a quote continues it (a new bullet, number, box or `>`); on an empty item it ends the list.
+        func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+            guard selector == #selector(NSResponder.insertNewline(_:)), parent.type == .markdown,
+                  textView.selectedRange().length == 0, textView.hasMarkedText() == false,
+                  let edit = RichFormat.returnEdit(text: textView.string, caret: textView.selectedRange().location) else { return false }
+            FormatActions.apply(edit, to: textView)
+            return true
+        }
+
         func textDidChange(_ notification: Notification) {
             guard let view = notification.object as? NSTextView else { return }
+            // Formatting that lost its last character (`****`, `<u></u>`) is removed with it.
+            if parent.live, let storage = view.textStorage {
+                for r in RichFormat.emptyMarks(in: view.string).reversed() { storage.replaceCharacters(in: r, with: "") }
+            }
             parent.text = view.string
             suggestTagIfTyping(in: view)
         }
@@ -258,9 +474,17 @@ private struct EditorTextView: NSViewRepresentable {
 
             if let target = parent.scrollTarget, target.id != handledScroll {
                 handledScroll = target.id
-                if let current, let range = Self.range(of: current, query: query, in: text) {
+                if let current, current.unit == target.unit, let range = Self.range(of: current, query: query, in: text) {
                     view.scrollRangeToVisible(range)
                     view.showFindIndicator(for: range)
+                } else {
+                    // A bookmark: go to the start of the line.
+                    let lines = text.components(separatedBy: "\n")
+                    if lines.indices.contains(target.unit) {
+                        let offset = lines[..<target.unit].reduce(0) { $0 + $1.utf16.count + 1 }
+                        view.setSelectedRange(NSRange(location: offset, length: 0))
+                        view.scrollRangeToVisible(NSRange(location: offset, length: 0))
+                    }
                 }
             }
         }

@@ -58,3 +58,9 @@ npx electron scripts/smoke.js a.md b.csv # launch the real app and print the ren
 2. Update [CHANGELOG.md](../../CHANGELOG.md).
 3. Run `./scripts/test.sh`, build the artifacts and compute checksums with `shasum -a 256`.
 4. Tag `vX.Y.Z` and create a GitHub release with the artifacts and checksums. The in-app updater looks for `*-arm64.dmg`, `*-x64.dmg` and `*-portable.exe` and reads each file's SHA-256 from the release notes (a line with the file name and the 64-digit hash), so keep that format. A release without a checksum line is refused by the updater.
+
+## Update patches
+
+After `build-app.sh`: `./scripts/make-patch.sh build/release-X.Y.Z/Grizzly-X.Y.Z-arm64.dmg arm64` (previous release's image) writes
+`build/Grizzly-patch-<from>-to-<to>-arm64.zip` and prints its SHA-256. Upload it with the `.dmg` files and put the printed line in
+the release notes, like the checksums of the images. Do it for `x86_64` too. Apps on `<from>` download the patch; everyone else the image.

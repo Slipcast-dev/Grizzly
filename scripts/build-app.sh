@@ -15,6 +15,8 @@ swiftc -O -parse-as-library -target "$ARCH-apple-macos13.0" \
 # Icon and translations (resources/en.lproj, resources/ru.lproj).
 cp resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 cp -R resources/en.lproj resources/ru.lproj "$APP/Contents/Resources/"
+# Fonts that come with the app (SIL Open Font License; every family folder carries its OFL.txt).
+cp -R resources/fonts "$APP/Contents/Resources/Fonts"
 
 EXTS=$(cat <<'EOF'
 <string>md</string><string>markdown</string><string>mdown</string><string>txt</string><string>text</string>
