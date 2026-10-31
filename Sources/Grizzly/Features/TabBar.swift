@@ -3,6 +3,7 @@ import SwiftUI
 struct TabBar: View {
     @EnvironmentObject private var state: AppState
     @Environment(\.theme) private var theme
+    @Environment(\.surfaceOpacity) private var surface
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -13,7 +14,7 @@ struct TabBar: View {
             .padding(.top, 4)
         }
         .frame(height: 34)
-        .background(theme.codeBackground.opacity(0.7))
+        .background(theme.codeBackground.opacity(0.7 * surface))
         .overlay(alignment: .bottom) { Divider() }
     }
 }
@@ -22,6 +23,7 @@ private struct TabItem: View {
     let doc: Document
     @EnvironmentObject private var state: AppState
     @Environment(\.theme) private var theme
+    @Environment(\.surfaceOpacity) private var surface
     @State private var hovering = false
 
     private var isLeft: Bool { state.selection == doc.id }
@@ -31,10 +33,10 @@ private struct TabItem: View {
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: doc.type.symbol)
-                .font(.caption)
+                .font(AppFont.caption)
                 .foregroundColor(theme.secondary)
             Text(doc.name)
-                .font(.callout)
+                .font(AppFont.callout)
                 .lineLimit(1)
                 .foregroundColor(isFocused || isLeft || isRight ? theme.text : theme.secondary)
             if state.isDirty(doc.id) {
@@ -43,7 +45,7 @@ private struct TabItem: View {
             }
             if isRight {
                 Image(systemName: "rectangle.righthalf.inset.filled")
-                    .font(.caption2)
+                    .font(AppFont.caption2)
                     .foregroundColor(theme.accent)
                     .help("Показан в правой панели")
             }
@@ -75,8 +77,8 @@ private struct TabItem: View {
     }
 
     private var fill: Color {
-        if isFocused { return theme.background }
-        if isLeft || isRight { return theme.background.opacity(0.55) }
+        if isFocused { return theme.background.opacity(surface) }
+        if isLeft || isRight { return theme.background.opacity(0.55 * surface) }
         return hovering ? Color.primary.opacity(0.07) : .clear
     }
 }

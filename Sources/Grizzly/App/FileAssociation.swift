@@ -84,7 +84,7 @@ struct FileAssociationsView: View {
                 Spacer()
             }
             Text("Нажмите на расширение, чтобы открывать такие файлы в Grizzly. macOS может запросить подтверждение.")
-                .font(.caption).foregroundColor(.secondary)
+                .font(AppFont.caption).foregroundColor(.secondary)
 
             LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
                 ForEach(assoc.extensions, id: \.self) { ext in chip(ext) }
@@ -99,7 +99,7 @@ struct FileAssociationsView: View {
             }
 
             if let message = assoc.message {
-                Text(message).font(.caption).foregroundColor(.red)
+                Text(message).font(AppFont.caption).foregroundColor(.red)
             }
         }
         .onAppear { assoc.refresh() }

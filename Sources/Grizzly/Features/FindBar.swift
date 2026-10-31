@@ -16,7 +16,7 @@ struct FindBar: View {
                 .onExitCommand { state.hideFind() }
 
             Text(countLabel)
-                .font(.caption)
+                .font(AppFont.caption)
                 .foregroundColor(theme.secondary)
                 .monospacedDigit()
 
@@ -65,10 +65,10 @@ struct BookmarksButton: View {
     private var list: some View {
         let doc = state.current
         VStack(alignment: .leading, spacing: 6) {
-            Text("Закладки").font(.headline)
+            Text("Закладки").font(AppFont.headline)
             if lines.isEmpty {
                 Text("Пока нет закладок. В режиме «Исходник» нажмите на номер строки, чтобы поставить закладку.")
-                    .font(.callout)
+                    .font(AppFont.callout)
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             } else {

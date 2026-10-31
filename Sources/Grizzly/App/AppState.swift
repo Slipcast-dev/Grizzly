@@ -2,7 +2,8 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-enum ReadMode: String { case source, reading, edit }
+/// User mode: the document as it reads, formatting code hidden. Developer mode: the text exactly as in the file.
+enum ReadMode: String { case user, developer }
 enum Pane { case left, right }
 
 struct Toast: Equatable, Identifiable {
@@ -26,7 +27,14 @@ final class AppState: ObservableObject {
     @Published var focusedPane: Pane = .left
     /// Library entry highlighted in the sidebar; follows the focused pane.
     @Published var selectedFileID: UUID?
-    @Published var mode: ReadMode = .reading
+    /// The mode of each pane: in split view one pane can be in User mode while the other shows the code.
+    @Published var paneModes: [Pane: ReadMode] = [.left: .user, .right: .developer]
+    /// The mode of the focused pane (the one the toolbar and the menus act on).
+    var mode: ReadMode {
+        get { paneModes[isSplit ? focusedPane : .left] ?? .user }
+        set { paneModes[isSplit ? focusedPane : .left] = newValue }
+    }
+    func mode(of pane: Pane) -> ReadMode { paneModes[pane] ?? .user }
     /// A short message at the bottom of the window ("Saved", "Tag created", ...).
     @Published private(set) var toast: Toast?
     /// Tags picked in the sidebar: the list shows the files that carry all of them.
@@ -38,6 +46,8 @@ final class AppState: ObservableObject {
     @Published private(set) var changedOnDisk: Set<UUID> = []
     /// Edited text per open document, kept only while it differs from the file.
     @Published private(set) var drafts: [UUID: String] = [:]
+    /// Folded sections (Title and Heading lines) per open document, by `MarkdownParser.sectionKeys`.
+    @Published private(set) var collapsedSections: [UUID: Set<String>] = [:]
     private var watcher: Timer?
 
     /// Polls open files once a second; called once the app has launched.
@@ -132,7 +142,7 @@ final class AppState: ObservableObject {
         let session: [String: Any] = [
             "paths": documents.map { $0.url.path },
             "left": index(selection), "right": index(rightSelection),
-            "split": isSplit, "mode": mode.rawValue, "scroll": scrolls,
+            "split": isSplit, "mode": mode(of: .left).rawValue, "modeRight": mode(of: .right).rawValue, "scroll": scrolls,
             "date": Date().timeIntervalSince1970,
         ]
         UserDefaults.standard.set(session, forKey: Self.sessionKey)
@@ -153,7 +163,8 @@ final class AppState: ObservableObject {
             show(library.file(atPath: url.standardizedFileURL.path)?.id, url: url, pane: .left)
             if let doc = documents.first(where: { $0.url.standardizedFileURL == url.standardizedFileURL }) { ids[i] = doc.id }
         }
-        if let m = s["mode"] as? String, let mode = ReadMode(rawValue: m) { self.mode = mode }
+        if let m = s["mode"] as? String, let mode = ReadMode(rawValue: m) { paneModes[.left] = mode }
+        if let m = s["modeRight"] as? String, let mode = ReadMode(rawValue: m) { paneModes[.right] = mode }
         let left = ids[s["left"] as? Int ?? -1] ?? documents.first?.id
         let right = ids[s["right"] as? Int ?? -1]
         selection = left
@@ -233,9 +244,21 @@ final class AppState: ObservableObject {
     func presentOpenPanel() {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
-        panel.canChooseDirectories = false
-        panel.allowedContentTypes = FileType.allExtensions.compactMap { UTType(filenameExtension: $0) }
-        if panel.runModal() == .OK { open(urls: panel.urls) }
+        // Folders can be picked too: one is added to the sidebar with the supported files in it, the rest is ignored.
+        // (A list of allowed file types would grey the folders out, so the panel itself filters nothing.)
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = true
+        panel.treatsFilePackagesAsDirectories = false
+        panel.message = L("Выберите файлы или папки")
+        panel.prompt = L("Открыть")
+        let supported = Set(FileType.allExtensions)
+        let filter = OpenPanelFilter { url in
+            if (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true { return true }
+            return supported.contains(url.pathExtension.lowercased())
+        }
+        panel.delegate = filter
+        let result = withExtendedLifetime(filter) { panel.runModal() }
+        if result == .OK { open(urls: panel.urls) }
     }
 
     func presentFolderPanel() {
@@ -246,28 +269,59 @@ final class AppState: ObservableObject {
         if panel.runModal() == .OK { for url in panel.urls { importFolder(url) } }
     }
 
-    /// Mirrors a directory into the library: its supported files (subfolders too) become entries in folders named after the directories.
+    /// Directories that hold generated or downloaded files, not documents: they are skipped when a folder is added.
+    private static let skippedDirectories: Set<String> = ["node_modules", "Pods", "DerivedData", "__pycache__", "venv", "bower_components", ".build"]
+    private static let importLimit = 5000
+
+    /// Lists the supported files under a directory (off the main thread: a folder can hold thousands of files).
+    private func scan(_ root: URL, completion: @escaping ([URL], Bool) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let supported = Set(FileType.allExtensions)
+            var found: [URL] = []
+            var truncated = false
+            if let walker = FileManager.default.enumerator(
+                at: root, includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey],
+                options: [.skipsHiddenFiles, .skipsPackageDescendants]) {
+                for case let url as URL in walker {
+                    let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey])
+                    if values?.isDirectory == true {
+                        if Self.skippedDirectories.contains(url.lastPathComponent) { walker.skipDescendants() }
+                        continue
+                    }
+                    guard values?.isRegularFile == true, supported.contains(url.pathExtension.lowercased()) else { continue }
+                    if found.count >= Self.importLimit { truncated = true; break }
+                    found.append(url)
+                }
+            }
+            DispatchQueue.main.async { completion(found, truncated) }
+        }
+    }
+
+    /// Mirrors a directory into the library: its supported files become entries in folders named after the directories,
+    /// subdirectories included (folders inside folders). Nothing is opened in a tab: the folder just appears in the sidebar.
     func importFolder(_ url: URL) {
-        let root = library.folder(forDirectory: url, name: url.lastPathComponent)
-        syncFolder(root.id, root: url)
+        notify(L("Читаем папку «%@»…", url.lastPathComponent), symbol: "folder.badge.plus")
+        scan(url) { [weak self] files, truncated in
+            guard let self else { return }
+            let result = self.library.importTree(root: url, files: files)
+            self.selectedTags = []
+            self.sidebarRevealToken += 1
+            let name = self.library.folder(result.folderID)?.name ?? url.lastPathComponent
+            self.notify(truncated ? L("Папка «%@» добавлена: первые %lld файлов.", name, Self.importLimit)
+                                  : L("Папка «%@» добавлена: файлов %lld.", name, result.added),
+                        symbol: "folder.badge.plus")
+            self.scanTagsInLibrary()
+        }
     }
 
     /// Re-scans a folder that was added from disk and adds files that appeared since.
     func syncFolder(_ id: UUID, root: URL? = nil) {
         guard let rootURL = root ?? library.folderURL(id) else { return }
-        let fm = FileManager.default
-        let supported = Set(FileType.allExtensions)
-        guard let walker = fm.enumerator(at: rootURL, includingPropertiesForKeys: [.isRegularFileKey],
-                                         options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { return }
-        for case let file as URL in walker {
-            guard supported.contains(file.pathExtension.lowercased()),
-                  (try? file.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { continue }
-            let dir = file.deletingLastPathComponent()
-            let target = dir.standardizedFileURL == rootURL.standardizedFileURL
-                ? id
-                : library.folder(forDirectory: dir, name: dir.lastPathComponent).id
-            let entry = library.add(url: file)
-            if entry.folderID == nil { library.move(entry.id, to: target) }
+        scan(rootURL) { [weak self] files, _ in
+            guard let self else { return }
+            let result = self.library.importTree(root: rootURL, files: files)
+            self.notify(L("Папка обновлена: новых файлов %lld.", result.added), symbol: "arrow.triangle.2.circlepath")
+            self.scanTagsInLibrary()
         }
     }
 
@@ -369,11 +423,15 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Reads every prose file of the library once at launch, so tags written in the texts show up in the sidebar.
+    private var tagScanned = Set<UUID>()
+
+    /// Reads the prose files of the library that were not read yet, so tags written in the texts show up in the sidebar.
     func scanTagsInLibrary() {
         // Paths are resolved here (the library is main-thread state); only the reading happens in the background.
-        let files = library.allFiles.filter { Self.proseTypes.contains($0.type) }
-            .compactMap { f in library.resolve(f.id).map { (f.id, $0) } }
+        let files = library.allFiles.filter { Self.proseTypes.contains($0.type) && !tagScanned.contains($0.id) }
+            .map { ($0.id, URL(fileURLWithPath: $0.path)) }
+        tagScanned.formUnion(files.map(\.0))
+        guard !files.isEmpty else { return }
         DispatchQueue.global(qos: .utility).async { [weak self] in
             var found: [(UUID, [String])] = []
             for (id, url) in files {
@@ -381,7 +439,7 @@ final class AppState: ObservableObject {
                       let loaded = try? FileLoader.read(url) else { continue }
                 found.append((id, LibraryStore.extractTags(from: loaded.text)))
             }
-            DispatchQueue.main.async { for (id, tags) in found { self?.library.setInlineTags(id, tags) } }
+            DispatchQueue.main.async { self?.library.setInlineTags(found) }
         }
     }
 
@@ -439,7 +497,7 @@ final class AppState: ObservableObject {
         if drafts[doc.id] != value { drafts[doc.id] = value }
         scheduleTagRefresh(for: doc, text: text)
         // Hits move while the text is being typed; recount them without jumping the caret.
-        if isFindVisible, mode == .edit, !findQuery.isEmpty { recomputeMatches(reset: false, reveal: false) }
+        if isFindVisible, !findQuery.isEmpty { recomputeMatches(reset: false, reveal: false) }
     }
 
     func discardDraft(_ id: UUID) {
@@ -561,7 +619,6 @@ final class AppState: ObservableObject {
         }
         UserDefaults.standard.set(url.deletingLastPathComponent().path, forKey: "newFileDirectory")
         open(urls: [url])
-        mode = .edit
         notify(L("Файл создан: %@", url.lastPathComponent), symbol: "doc.badge.plus")
     }
 
@@ -604,6 +661,15 @@ final class AppState: ObservableObject {
         return true
     }
 
+    // MARK: Folded sections and check lists (Reading mode)
+
+    /// The arrow next to a Title or Heading folds everything up to the next heading of the same or a higher level.
+    func toggleSection(_ docID: UUID, key: String) {
+        var set = collapsedSections[docID] ?? []
+        if !set.insert(key).inserted { set.remove(key) }
+        collapsedSections[docID] = set.isEmpty ? nil : set
+    }
+
     // MARK: Find and bookmarks
 
     var currentMatch: SearchMatch? { matches.indices.contains(matchIndex) ? matches[matchIndex] : nil }
@@ -627,12 +693,8 @@ final class AppState: ObservableObject {
             matchIndex = 0
             return
         }
-        if mode == .edit {
-            // The editor is searched as it is right now, unsaved changes included.
-            matches = Searcher.matches(query: findQuery, inLines: text(for: doc).components(separatedBy: "\n"))
-        } else {
-            matches = Searcher.matches(query: findQuery, in: doc, mode: mode)
-        }
+        // The editor is searched as it is right now, unsaved changes included.
+        matches = Searcher.matches(query: findQuery, inLines: text(for: doc).components(separatedBy: "\n"))
         matchIndex = reset ? 0 : min(matchIndex, max(0, matches.count - 1))
         if reveal { revealCurrentMatch() }
     }
@@ -650,7 +712,7 @@ final class AppState: ObservableObject {
 
     /// Jumps to a bookmarked line (0-based) in the source view.
     func goToLine(_ line: Int) {
-        mode = .source
+        mode = .developer
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
             self?.scrollTarget = ScrollTarget(unit: line)
         }
@@ -682,6 +744,8 @@ final class AppState: ObservableObject {
     func toggleSplit() {
         isSplit.toggle()
         if isSplit {
+            // Code on the right, the result on the left: edit in one, see it in the other.
+            paneModes[.right] = .developer
             if rightSelection == nil || doc(in: .right) == nil {
                 rightSelection = documents.first { $0.id != selection }?.id
             }
@@ -707,6 +771,7 @@ final class AppState: ObservableObject {
         documents.remove(at: i)
         changedOnDisk.remove(id)
         drafts[id] = nil
+        collapsedSections[id] = nil
         tagTimers[id]?.invalidate()
         tagTimers[id] = nil
         noteTags(in: closed)
@@ -744,9 +809,51 @@ final class AppState: ObservableObject {
         selectedFileID = current?.libraryID
     }
 
+    /// Removes a folder from the sidebar together with its subfolders and files (the files on disk stay).
+    func deleteFolder(_ id: UUID) { removeFromLibrary(folders: [id], files: []) }
+
+    /// Removes folders (with everything in them) and files from the sidebar; the files on disk stay. Asks first unless it is
+    /// a single file or an empty folder, and closes the tabs of the files that go away.
+    func removeFromLibrary(folders: Set<UUID>, files: Set<UUID>) {
+        var doomedFolders = Set<UUID>()
+        for id in folders { doomedFolders.formUnion(library.subtreeIDs(of: id)) }
+        let loose = files.filter { id in !(library.file(id)?.folderID.map(doomedFolders.contains) ?? false) }
+        let inFolders = doomedFolders.isEmpty ? 0 : library.allFiles.filter { $0.folderID.map(doomedFolders.contains) ?? false }.count
+        let total = inFolders + loose.count
+        guard !folders.isEmpty || !files.isEmpty else { return }
+        if folders.count + files.count > 1 || total > 0 && !folders.isEmpty {
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            if folders.count == 1, files.isEmpty, let name = library.folder(folders.first!)?.name {
+                alert.messageText = L("Удалить папку «%@»?", name)
+            } else {
+                alert.messageText = L("Убрать выбранное из боковой панели?")
+            }
+            alert.informativeText = L("Будут убраны папки (%lld, вместе со всеми вложенными) и файлы (%lld). Сами файлы на диске не удаляются.", doomedFolders.count, total)
+            alert.addButton(withTitle: L("Убрать"))
+            alert.addButton(withTitle: L("Отмена"))
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+        }
+        let leaving = Set(library.allFiles.filter { f in f.folderID.map(doomedFolders.contains) ?? false }.map(\.id)).union(loose)
+        for doc in documents where doc.libraryID.map(leaving.contains) ?? false {
+            guard close(doc.id) else { return }
+        }
+        for id in folders { library.deleteFolder(id) }
+        library.remove(loose)
+        notify(L("Убрано из боковой панели: %lld.", folders.count + files.count), symbol: "trash.fill")
+    }
+
     /// Removes a file from the library (the file on disk stays) and closes it if open.
     func removeFromLibrary(_ id: UUID) {
         if let doc = documents.first(where: { $0.libraryID == id }), !close(doc.id) { return }
         library.remove(id)
     }
+}
+
+
+/// Lets the Open panel show folders and the file types Grizzly reads, and grey out everything else.
+final class OpenPanelFilter: NSObject, NSOpenSavePanelDelegate {
+    private let allows: (URL) -> Bool
+    init(_ allows: @escaping (URL) -> Bool) { self.allows = allows }
+    func panel(_ sender: Any, shouldEnable url: URL) -> Bool { allows(url) }
 }

@@ -43,6 +43,7 @@ lib.remove(entry.id)
 check(lib.recents.count == 1 && lib.file(atPath: histFile.standardizedFileURL.path) == nil, "history keeps a file removed from the library")
 lib.recordOpened(histFile)
 check(lib.recents.count == 1, "history has no duplicates")
+lib.flush()
 check(LibraryStore(storeURL: dir.appendingPathComponent("lib.json")).recents.count == 1, "history is saved to disk")
 lib.clearRecents()
 check(lib.recents.isEmpty, "clear empties history")
@@ -78,6 +79,7 @@ let tagFile = lib.add(url: histFile)
 check(lib.createTag("#Работа") == "Работа" && lib.createTag("работа") == "Работа" && lib.createTag("  ") == nil, "tags are cleaned and not duplicated")
 lib.toggleTag(tagFile.id, "Работа")
 check(lib.files(withTag: "работа").count == 1 && lib.hasTag(tagFile.id, "РАБОТА"), "files are found by tag, case-insensitively")
+lib.flush()
 check(LibraryStore(storeURL: dir.appendingPathComponent("lib.json")).files(withTag: "Работа").count == 1, "tags are saved to disk")
 lib.renameTag("Работа", to: "Дом")
 check(lib.files(withTag: "Дом").count == 1 && lib.files(withTag: "Работа").isEmpty, "renaming a tag moves its files")
@@ -116,6 +118,181 @@ check(parsed?.version == "1.2.0" && parsed?.assetName == "Grizzly-1.2.0-arm64.dm
 check(try UpdateCheck.parse(Data(release.utf8), assetSuffix: "-win.exe") == nil, "release without a matching asset is ignored")
 check(!UpdateCheck.isTrustedDownload(URL(string: "https://evil.example/a.dmg")!) && !UpdateCheck.isTrustedDownload(URL(string: "http://github.com/a.dmg")!)
       && UpdateCheck.isTrustedDownload(URL(string: "https://objects.githubusercontent.com/a.dmg")!), "downloads are limited to GitHub over HTTPS")
+
+
+// Rich text: parser
+let rich = MarkdownParser.parse([
+    "# Title", "<div align=\"center\">Centered</div>", "", "* dot", "* dot 2", "- dash", "- [ ] todo", "- [x] done", "", "> quote",
+])
+func kinds(_ blocks: [MDBlock]) -> [String] {
+    blocks.map { b -> String in
+        switch b {
+        case .heading: return "heading"
+        case .paragraph: return "paragraph"
+        case .bullets: return "bullets"
+        case .dashes: return "dashes"
+        case .numbered: return "numbered"
+        case .tasks: return "tasks"
+        case .code: return "code"
+        case .quote: return "quote"
+        case .rule: return "rule"
+        case .table: return "table"
+        case .aligned(let a, _): return "aligned-\(a.rawValue)"
+        }
+    }
+}
+check(kinds(rich) == ["heading", "aligned-center", "bullets", "dashes", "tasks", "quote"], "blocks: headings, alignment, dot / dash / check lists, quote")
+if case .tasks(let items) = rich[4] { check(items.count == 2 && !items[0].done && items[1].done && items[1].line == 7, "check list items know their line") }
+check(MarkdownParser.splitAlignment("<div align=\"right\">x</div>").0 == .right && MarkdownParser.splitAlignment("plain").0 == nil, "alignment wrapper is read")
+check(MarkdownParser.sectionKeys(MarkdownParser.parse(["# A", "## B", "### C", "# A"])).count == 3, "only Title and Heading lines fold, equal ones get their own key")
+check(InlineMarkup.stripped(InlineMarkup.prepare("a <u>b</u> <mark class=\"pink\">c</mark> `<u>`")) == "a b c `<u>`", "underline and highlight tags are placeholders, code is left alone")
+
+// Rich text: editor commands
+func run(_ command: FormatCommand, _ text: String, _ sel: NSRange) -> (String, NSRange)? {
+    guard let e = RichFormat.apply(command, text: text, selection: sel) else { return nil }
+    return ((text as NSString).replacingCharacters(in: e.range, with: e.text), e.selection)
+}
+check(run(.paragraph(.title), "Hello", NSRange(location: 2, length: 0))?.0 == "# Hello", "Title")
+check(run(.paragraph(.subheading), "## Hello", NSRange(location: 0, length: 0))?.0 == "### Hello", "Subheading replaces Heading")
+check(run(.paragraph(.body), "## Hello", NSRange(location: 0, length: 0))?.0 == "Hello", "Body removes the heading")
+check(run(.paragraph(.monospaced), "code", NSRange(location: 0, length: 4))?.0 == "```\ncode\n```", "Monospaced fences the lines")
+check(run(.paragraph(.monospaced), "```\ncode\n```", NSRange(location: 4, length: 4))?.0 == "code", "Monospaced again takes the fence off")
+check(run(.inline(.bold), "a word b", NSRange(location: 2, length: 4))?.0 == "a **word** b", "bold")
+check(run(.inline(.bold), "a **word** b", NSRange(location: 4, length: 4))?.0 == "a word b", "bold off")
+check(run(.inline(.italic), "a **word** b", NSRange(location: 4, length: 4))?.0 == "a ***word*** b", "italic inside bold")
+check(run(.inline(.italic), "a ***word*** b", NSRange(location: 5, length: 4))?.0 == "a **word** b", "italic off inside bold")
+check(run(.inline(.bold), "a word b", NSRange(location: 4, length: 0))?.0 == "a **word** b", "no selection: the word under the caret")
+check(run(.inline(.underline), "x", NSRange(location: 0, length: 1))?.0 == "<u>x</u>" && run(.inline(.underline), "<u>x</u>", NSRange(location: 3, length: 1))?.0 == "x", "underline on and off")
+check(run(.inline(.strike), "x", NSRange(location: 0, length: 1))?.0 == "~~x~~", "strikethrough")
+check(run(.highlight("mint"), "a b", NSRange(location: 2, length: 1))?.0 == "a <mark class=\"mint\">b</mark>", "highlight")
+check(run(.highlight("blue"), "<mark class=\"mint\">b</mark>", NSRange(location: 19, length: 1))?.0 == "<mark class=\"blue\">b</mark>", "highlight color changes")
+check(run(.highlight(nil), "<mark class=\"mint\">b</mark>", NSRange(location: 19, length: 1))?.0 == "b", "highlight removed")
+check(run(.align(.center), "## Hi", NSRange(location: 0, length: 0))?.0 == "## <div align=\"center\">Hi</div>", "alignment keeps the heading marker")
+check(run(.align(.left), "<div align=\"right\">Hi</div>", NSRange(location: 0, length: 0))?.0 == "Hi", "left alignment removes the wrapper")
+check(run(.list(.bullet), "a\nb", NSRange(location: 0, length: 3))?.0 == "* a\n* b", "bullets")
+check(run(.list(.numbered), "a\nb", NSRange(location: 0, length: 3))?.0 == "1. a\n2. b", "numbered list")
+check(run(.list(.checklist), "- a", NSRange(location: 0, length: 3))?.0 == "- [ ] a", "check list replaces a dash list")
+check(run(.list(.dash), "- a\n- b", NSRange(location: 0, length: 7))?.0 == "a\nb", "dash list off")
+check(run(.quote, "a\nb", NSRange(location: 0, length: 3))?.0 == "> a\n> b" && run(.quote, "> a", NSRange(location: 0, length: 3))?.0 == "a", "quote on and off")
+check(run(.rule, "text", NSRange(location: 4, length: 0))?.0 == "text\n\n---\n", "rule goes after a blank line")
+check(RichFormat.returnEdit(text: "- a", caret: 3)?.text == "\n- " && RichFormat.returnEdit(text: "1. a", caret: 4)?.text == "\n2. " && RichFormat.returnEdit(text: "- [x] a", caret: 7)?.text == "\n- [ ] ", "Return continues a list")
+check(RichFormat.returnEdit(text: "- ", caret: 2)?.text == "" && RichFormat.returnEdit(text: "plain", caret: 5) == nil, "Return on an empty item ends the list")
+let tableText = "| A | B |\n| --- | --- |\n| 1 | 2 |"
+check(RichFormat.isInTable(text: tableText, caret: 14) && !RichFormat.isInTable(text: "no table", caret: 2), "the caret in a table is found")
+check(run(.table(.addRow), tableText, NSRange(location: 25, length: 0))?.0.components(separatedBy: "\n").count == 4, "table: add a row")
+check(run(.table(.addColumn), tableText, NSRange(location: 25, length: 0))?.0.components(separatedBy: "\n")[0].filter { $0 == "|" }.count == 4, "table: add a column")
+check(run(.table(.moveColumnRight), tableText, NSRange(location: 2, length: 0))?.0.hasPrefix("| B   | A   |") == true, "table: move a column")
+check(run(.table(.toText), tableText, NSRange(location: 2, length: 0))?.0 == "A\tB\n1\t2", "table back to plain text")
+check(run(.table(.insert), "", NSRange(location: 0, length: 0))?.0.hasPrefix("| Колонка 1") == true, "table: insert")
+check(RichFormat.movingTaskToEnd(of: ["- [x] a", "- [ ] b", "- [ ] c"], at: 0) == ["- [ ] b", "- [ ] c", "- [x] a"], "a ticked item moves to the end of its list")
+check(RichFormat.toggledTask("- [ ] a")?.text == "- [x] a" && RichFormat.toggledTask("  * [x] b")?.done == false && RichFormat.toggledTask("- a") == nil, "check list line is ticked and unticked")
+
+let tasks = "- [ ] a\n- [ ] b\n- [ ] c"
+let tick = RichFormat.toggleTaskEdit(text: tasks, boxIndex: 3, moveDone: true)
+check(tick.map { (tasks as NSString).replacingCharacters(in: $0.range, with: $0.text) } == "- [ ] b\n- [ ] c\n- [x] a", "ticking a box moves the item down")
+let tickStay = RichFormat.toggleTaskEdit(text: tasks, boxIndex: 11, moveDone: false)
+check(tickStay.map { (tasks as NSString).replacingCharacters(in: $0.range, with: $0.text) } == "- [ ] a\n- [x] b\n- [ ] c", "ticking a box in place")
+check(RichFormat.emptyMarks(in: "a **** b").count == 1 && RichFormat.emptyMarks(in: "****").isEmpty && RichFormat.emptyMarks(in: "x <u></u>").count == 1, "empty formatting marks are found")
+
+// Attachments
+check(Attachments.parse(line: "![Фото](a.assets/p%201.png)") == .init(kind: .image, title: "Фото", target: "a.assets/p%201.png"), "image line")
+check(Attachments.parse(line: "![v](a.assets/v.MOV)")?.kind == .video && Attachments.parse(line: "[doc](a.assets/x.pdf)")?.kind == .pdf && Attachments.parse(line: "[z](a.assets/x.zip)")?.kind == .file, "video, pdf and other files")
+check(Attachments.parse(line: "[site](https://example.com)") == nil && Attachments.parse(line: "text [a](b.pdf)") == nil && Attachments.parse(line: "[p](a.png)")?.kind == .file, "web links and inline links are not attachments")
+check(Attachments.markdown(title: "My photo", path: "Notes.assets/my photo (1).png", kind: .image) == "![My photo](Notes.assets/my%20photo%20%281%29.png)", "path is percent-encoded")
+check(Attachments.decode("Notes.assets/my%20photo%20%281%29.png") == "Notes.assets/my photo (1).png", "path is decoded")
+check(Attachments.resolve(target: "n.assets/a%20b.png", relativeTo: URL(fileURLWithPath: "/tmp/docs/n.md"))?.path == "/tmp/docs/n.assets/a b.png", "relative target is resolved next to the document")
+check(Attachments.assetsFolderName(for: URL(fileURLWithPath: "/x/Notes.md")) == "Notes.assets", "assets folder name")
+check(Attachments.webLink(title: "", address: "example.com/page") == "[example.com](https://example.com/page)" && Attachments.webLink(title: "Site", address: "ftp://x.y") == nil && Attachments.webLink(title: "x", address: "not a url") == nil, "web link")
+let linkEdit = RichFormat.linkEdit(("", "https://example.com"), text: "see docs here", selection: NSRange(location: 4, length: 4))
+check(linkEdit.map { ("see docs here" as NSString).replacingCharacters(in: $0.range, with: $0.text) } == "see [docs](https://example.com) here", "selected text becomes a link")
+check(RichFormat.insertBlock("![a](b.png)", text: "text", selection: NSRange(location: 2, length: 0)).text == "\n\n![a](b.png)\n", "attachment goes after a blank line")
+
+// Binary delta and update patches
+var oldBytes = Data((0..<20_000).map { UInt8(truncatingIfNeeded: $0 &* 31 &+ ($0 >> 5)) })
+var newBytes = oldBytes
+newBytes.replaceSubrange(5_000..<5_040, with: Data(repeating: 7, count: 100))
+newBytes.append(Data("tail".utf8))
+newBytes.insert(contentsOf: Data("head".utf8), at: 0)
+let delta = BinaryDelta.make(old: oldBytes, new: newBytes)
+check((try? BinaryDelta.apply(old: oldBytes, delta: delta)) == newBytes && delta.count < newBytes.count / 4, "delta rebuilds the new file and is much smaller")
+check((try? BinaryDelta.apply(old: Data(), delta: BinaryDelta.make(old: Data(), new: Data("abc".utf8)))) == Data("abc".utf8), "delta against an empty file")
+check((try? BinaryDelta.apply(old: oldBytes, delta: Data(delta.dropLast(3)))) == nil, "a truncated delta is refused")
+
+func makeApp(_ root: URL, version: String, files: [String: String]) throws {
+    try FileManager.default.createDirectory(at: root.appendingPathComponent("Contents/MacOS"), withIntermediateDirectories: true)
+    let plist = ["CFBundleIdentifier": "app.grizzly.Grizzly", "CFBundleShortVersionString": version] as NSDictionary
+    plist.write(to: root.appendingPathComponent("Contents/Info.plist"), atomically: true)
+    for (path, body) in files {
+        let url = root.appendingPathComponent(path)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try body.write(to: url, atomically: true, encoding: .utf8)
+    }
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root.appendingPathComponent("Contents/MacOS/Grizzly").path)
+}
+do {
+    let big = String(repeating: "grizzly binary content ", count: 3000)
+    let oldApp = dir.appendingPathComponent("old/Grizzly.app"), newApp = dir.appendingPathComponent("new/Grizzly.app")
+    try makeApp(oldApp, version: "1.0.0", files: ["Contents/MacOS/Grizzly": big, "Contents/Resources/a.txt": "same", "Contents/Resources/gone.txt": "bye"])
+    try makeApp(newApp, version: "1.1.0", files: ["Contents/MacOS/Grizzly": big + "new code", "Contents/Resources/a.txt": "same", "Contents/Resources/fresh.txt": "hello"])
+    let patch = dir.appendingPathComponent("patch.zip")
+    try AppPatch.build(oldApp: oldApp, newApp: newApp, output: patch)
+    let work = dir.appendingPathComponent("work")
+    try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+    let staged = try AppPatch.apply(patch: patch, to: oldApp, from: "1.0.0", to: "1.1.0", bundleID: "app.grizzly.Grizzly", work: work)
+    let a = try AppPatch.listFiles(in: staged), b = try AppPatch.listFiles(in: newApp)
+    check(a == b, "patched app has exactly the files of the new version")
+    check(try a.allSatisfy { try Data(contentsOf: staged.appendingPathComponent($0)) == Data(contentsOf: newApp.appendingPathComponent($0)) }, "patched files are identical to the new build")
+    check((try FileManager.default.attributesOfItem(atPath: staged.appendingPathComponent("Contents/MacOS/Grizzly").path))[.posixPermissions] as? Int == 0o755, "executable bit survives the patch")
+    check((try? Data(contentsOf: patch).count) ?? Int.max < big.utf8.count / 3, "the patch is much smaller than the app")
+    let other = dir.appendingPathComponent("other/Grizzly.app")
+    try makeApp(other, version: "1.0.0", files: ["Contents/MacOS/Grizzly": big + "tampered", "Contents/Resources/a.txt": "same"])
+    check((try? AppPatch.apply(patch: patch, to: other, from: "1.0.0", to: "1.1.0", bundleID: "app.grizzly.Grizzly", work: dir.appendingPathComponent("work2"))) == nil, "a patch does not apply to a changed installation")
+    check((try? AppPatch.apply(patch: patch, to: oldApp, from: "0.9.0", to: "1.1.0", bundleID: "app.grizzly.Grizzly", work: dir.appendingPathComponent("work3"))) == nil, "a patch for another version is refused")
+    check(!AppPatch.isSafe("../x") && !AppPatch.isSafe("/etc/passwd") && AppPatch.isSafe("Contents/Info.plist"), "patch paths must stay inside the app")
+} catch {
+    check(false, "patch round trip: \(error)")
+}
+let withPatch = "{\"tag_name\":\"v1.3.0\",\"body\":\"\(String(repeating: "c", count: 64)) Grizzly-patch-1.2.2-to-1.3.0-arm64.zip\\n\(String(repeating: "d", count: 64)) Grizzly-1.3.0-arm64.dmg\",\"assets\":[{\"name\":\"Grizzly-patch-1.2.2-to-1.3.0-arm64.zip\",\"browser_download_url\":\"https://github.com/Slipcast-dev/Grizzly/releases/download/v1.3.0/Grizzly-patch-1.2.2-to-1.3.0-arm64.zip\"},{\"name\":\"Grizzly-1.3.0-arm64.dmg\",\"browser_download_url\":\"https://github.com/Slipcast-dev/Grizzly/releases/download/v1.3.0/Grizzly-1.3.0-arm64.dmg\"}]}"
+let withPatchInfo = try UpdateCheck.parse(Data(withPatch.utf8), assetSuffix: "-arm64.dmg", patchFrom: ("1.2.2", "arm64"))
+check(withPatchInfo?.patch?.name == "Grizzly-patch-1.2.2-to-1.3.0-arm64.zip" && withPatchInfo?.patch?.sha256 == String(repeating: "c", count: 64), "the release patch for the installed version is found")
+check(try UpdateCheck.parse(Data(withPatch.utf8), assetSuffix: "-arm64.dmg", patchFrom: ("1.2.0", "arm64"))?.patch == nil, "no patch for another installed version")
+
+// Big folders: one import step, counts and tags stay right
+let bigLib = LibraryStore(storeURL: dir.appendingPathComponent("big.json"))
+let bigRoot = dir.appendingPathComponent("big")
+var bigFiles: [URL] = []
+for d in 0..<30 { for f in 0..<100 { bigFiles.append(bigRoot.appendingPathComponent("d\(d)/sub/f\(f).md")) } }
+let started = Date()
+let imported = bigLib.importTree(root: bigRoot, files: bigFiles)
+check(imported.added == 3000 && bigLib.fileCount(in: imported.folderID) == 3000, "3000 files are imported in one step")
+check(bigLib.folders(in: imported.folderID).count == 30 && bigLib.files(in: imported.folderID).isEmpty, "the directory tree becomes folders inside folders")
+check(bigLib.importTree(root: bigRoot, files: bigFiles).added == 0, "importing the same folder again adds nothing")
+check(bigLib.folder(bigLib.folders(in: imported.folderID)[0].id)?.isExpanded == false && bigLib.folder(imported.folderID)?.isExpanded == true, "only the top folder starts open")
+check(Date().timeIntervalSince(started) < 3, "importing and counting 3000 files is quick")
+check(LibraryStore.extractTags(from: "#14b1f2 #a1b #123 #idea") == ["123", "idea"], "color codes are not tags")
+
+// Nested folders
+let nestLib = LibraryStore(storeURL: dir.appendingPathComponent("nest.json"))
+let top = nestLib.createFolder("Work")
+let child = nestLib.createFolder("2026", parent: top.id)
+let grand = nestLib.createFolder("Reports", parent: child.id)
+check(nestLib.folders(in: nil).map(\.id) == [top.id] && nestLib.folders(in: top.id).map(\.id) == [child.id], "folders nest")
+check(nestLib.folderPath(grand.id) == "Work / 2026 / Reports", "folder path")
+let nestedFile = nestLib.add(url: dir.appendingPathComponent("n.md"))
+nestLib.move(nestedFile.id, to: grand.id)
+check(nestLib.fileCount(in: top.id) == 1 && nestLib.fileCount(in: child.id) == 1, "files are counted through subfolders")
+check(!nestLib.moveFolder(top.id, to: grand.id) && !nestLib.moveFolder(child.id, to: child.id), "a folder cannot go into itself or its own subfolder")
+check(nestLib.moveFolder(grand.id, to: nil) && nestLib.folders(in: nil).count == 2, "a folder can move to the top level")
+nestLib.move(nestedFile.id, to: nil)
+let removed = nestLib.deleteFolder(child.id)
+check(nestLib.folders(in: top.id).isEmpty && nestLib.folder(child.id) == nil && nestLib.folder(grand.id) != nil && removed.isEmpty, "deleting a folder leaves folders that live elsewhere alone")
+let top2 = nestLib.createFolder("Inbox")
+let sub2 = nestLib.createFolder("Old", parent: top2.id)
+let doomedFile = nestLib.add(url: dir.appendingPathComponent("doomed.md"))
+nestLib.move(doomedFile.id, to: sub2.id)
+check(nestLib.deleteFolder(top2.id) == [doomedFile.id] && nestLib.file(doomedFile.id) == nil && nestLib.folder(sub2.id) == nil, "deleting a folder removes the files inside it from the library")
+nestLib.flush()
+check(LibraryStore(storeURL: dir.appendingPathComponent("nest.json")).folders(in: nil).count == 2, "nesting is saved to disk")
 
 try? FileManager.default.removeItem(at: dir)
 exit(failures == 0 ? 0 : 1)

@@ -35,11 +35,15 @@ struct SidebarView: View {
     @EnvironmentObject private var library: LibraryStore
     @AppStorage("sidebarSection") private var section: SidebarSection = .files
 
+    /// Rows picked in the list: files and folders, several at once with ⌘-click and ⇧-click.
+    @State private var selection: Set<UUID> = []
     @State private var query = ""
     @State private var isNaming = false
     @State private var newName = ""
     @State private var nameError: String?
     @State private var pendingMove: UUID?
+    /// The folder a new folder is being created in (nil: the top level).
+    @State private var namingParent: UUID?
     @State private var renamingID: UUID?
     @State private var renameText = ""
     @State private var targetedFolder: UUID?
@@ -85,11 +89,11 @@ struct SidebarView: View {
                 Button { state.presentNewFilePanel() } label: { Image(systemName: "doc.badge.plus") }
                     .help("Новый файл (⌘N)")
                 Button { state.presentOpenPanel() } label: { Image(systemName: "folder") }
-                    .help("Открыть файл (⌘O)")
+                    .help("Открыть файл или папку (⌘O)")
                 Button {
                     section = .files
                     pendingMove = nil
-                    beginNaming()
+                    beginNaming(in: nil)
                 } label: { Image(systemName: "folder.badge.plus") }
                     .help("Новая папка")
                 Button { state.presentSaveAsPanel() } label: { Image(systemName: "square.and.arrow.down") }
@@ -100,7 +104,7 @@ struct SidebarView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
 
-            List(selection: $state.selectedFileID) {
+            List(selection: $selection) {
                 if !state.selectedTags.isEmpty {
                     tagContent(state.selectedTags)
                 } else {
@@ -117,10 +121,16 @@ struct SidebarView: View {
                 return drop(items, into: nil)
             }
             .overlay { emptyState }
+            .onDeleteCommand { deleteSelection(selection) }
 
             TagPanel()
         }
+        .onChange(of: selection) { picked in
+            // One file picked: it opens. Several rows picked: they wait for a command (move, delete, update ...).
+            if picked.count == 1, let id = picked.first, library.file(id) != nil, state.selectedFileID != id { state.selectedFileID = id }
+        }
         .onChange(of: state.selectedFileID) { id in
+            if let id, selection != [id] { selection = [id] }
             // Option-click opens the file in the right pane.
             state.openLibraryFile(id, inRight: NSEvent.modifierFlags.contains(.option))
         }
@@ -130,7 +140,7 @@ struct SidebarView: View {
         .onChange(of: nameFocused) { focused in
             guard !focused else { return }
             if isNaming { commitNew() }
-            else if let id = renamingID, let folder = library.folders.first(where: { $0.id == id }) { commitRename(folder) }
+            else if let id = renamingID, let folder = library.folder(id) { commitRename(folder) }
         }
         .quickLookPreview($previewURL)
         .onAppear(perform: installSpaceMonitor)
@@ -142,8 +152,8 @@ struct SidebarView: View {
     @ViewBuilder
     private var filesContent: some View {
         Section {
-            if isNaming { nameField }
-            ForEach(visibleFolders) { folder in folderRow(folder) }
+            if isNaming && namingParent == nil { nameField }
+            ForEach(visibleFolders(in: nil)) { folder in folderRow(folder) }
             ForEach(filtered(library.files(in: nil))) { file in fileRow(file) }
         } header: {
             HStack {
@@ -209,7 +219,7 @@ struct SidebarView: View {
     @ViewBuilder
     private var sectionEmptyState: some View {
         switch section {
-        case .files where library.folders.isEmpty && library.files(in: nil).isEmpty && !isNaming:
+        case .files where library.folders(in: nil).isEmpty && library.files(in: nil).isEmpty && !isNaming:
             hint("doc.badge.plus", "Откройте файл (⌘O) или перетащите его в окно.")
         case .recent where library.recents.isEmpty:
             hint("clock", "Здесь появятся файлы, которые вы открывали.")
@@ -223,7 +233,7 @@ struct SidebarView: View {
     private func hint(_ symbol: String, _ text: LocalizedStringKey) -> some View {
         VStack(spacing: 8) {
             Image(systemName: symbol).font(.system(size: 26, weight: .light))
-            Text(text).multilineTextAlignment(.center).font(.callout)
+            Text(text).multilineTextAlignment(.center).font(AppFont.callout)
         }
         .foregroundColor(.secondary)
         .padding(24)
@@ -231,10 +241,16 @@ struct SidebarView: View {
 
     // MARK: Rows
 
-    /// A folder stays when its name matches (then all its files show) or when some file inside matches.
-    private var visibleFolders: [LibraryFolder] {
-        guard !query.isEmpty else { return library.folders }
-        return library.folders.filter { Searcher.nameMatches($0.name, query: query) || !filtered(library.files(in: $0.id)).isEmpty }
+    /// A folder stays when its name matches (then all its files show) or when some file or folder inside matches.
+    private func visibleFolders(in parent: UUID?) -> [LibraryFolder] {
+        let all = library.folders(in: parent)
+        return query.isEmpty ? all : all.filter(folderMatches)
+    }
+
+    private func folderMatches(_ folder: LibraryFolder) -> Bool {
+        Searcher.nameMatches(folder.name, query: query)
+            || !filtered(library.files(in: folder.id)).isEmpty
+            || library.folders(in: folder.id).contains(where: folderMatches)
     }
 
     private func filtered(_ entries: [HistoryEntry]) -> [HistoryEntry] {
@@ -255,36 +271,107 @@ struct SidebarView: View {
         query.isEmpty ? files : files.filter(matches)
     }
 
-    private func folderRow(_ folder: LibraryFolder) -> some View {
+    /// Folders nest to any depth, so a folder row draws its subfolders with the same function.
+    private func folderRow(_ folder: LibraryFolder) -> AnyView { AnyView(folderRowBody(folder)) }
+
+    @ViewBuilder
+    private func folderRowBody(_ folder: LibraryFolder) -> some View {
         let all = library.files(in: folder.id)
-        let files = !query.isEmpty && Searcher.nameMatches(folder.name, query: query) ? all : filtered(all)
-        return DisclosureGroup(
+        let nameHit = !query.isEmpty && Searcher.nameMatches(folder.name, query: query)
+        let files = nameHit ? all : filtered(all)
+        let subfolders = nameHit ? library.folders(in: folder.id) : visibleFolders(in: folder.id)
+        let count = query.isEmpty ? library.fileCount(in: folder.id) : files.count
+        DisclosureGroup(
             isExpanded: Binding(
                 get: { folder.isExpanded },
                 set: { library.setExpanded(folder.id, $0) })
         ) {
+            if isNaming && namingParent == folder.id { nameField }
+            ForEach(subfolders) { sub in folderRow(sub) }
             ForEach(files) { file in fileRow(file) }
-            if files.isEmpty && query.isEmpty {
+            if files.isEmpty && subfolders.isEmpty && query.isEmpty && !(isNaming && namingParent == folder.id) {
                 Text("Пусто. Перетащите сюда файл.")
-                    .font(.caption)
+                    .font(AppFont.caption)
                     .foregroundColor(.secondary)
             }
         } label: {
-            folderLabel(folder, count: files.count)
+            folderLabel(folder, count: count)
         }
-        .contextMenu {
+        .tag(folder.id)
+        .contextMenu { folderMenu(folder) }
+    }
+
+    /// The commands of a folder row. When the row is one of several picked rows, they act on all of them.
+    @ViewBuilder
+    private func folderMenu(_ folder: LibraryFolder) -> some View {
+        let ids = targets(folder.id)
+        if ids.count > 1 {
+            Button("Развернуть выбранные папки") { setExpanded(ids, true) }
+            Button("Свернуть выбранные папки") { setExpanded(ids, false) }
+            Button("Переместить в…") { popUpMove(ids) }
+            Button("Обновить из папок") { ids.filter { library.folderURL($0) != nil }.forEach { state.syncFolder($0) } }
+            Divider()
+            Button("Убрать выбранное (\(ids.count))", role: .destructive) { deleteSelection(ids) }
+        } else {
+            Button("Новая папка внутри") {
+                section = .files
+                pendingMove = nil
+                library.setExpanded(folder.id, true)
+                beginNaming(in: folder.id)
+            }
             Button("Переименовать") {
                 renameText = folder.name
                 renamingID = folder.id
                 nameFocused = true
             }
+            Button("Переместить в…") { popUpMove(ids) }
             Button("Показать в Finder") {
                 if let url = library.folderURL(folder.id) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
             }
             .disabled(library.folderURL(folder.id) == nil)
             Button("Обновить из папки") { state.syncFolder(folder.id) }
                 .disabled(library.folderURL(folder.id) == nil)
-            Button("Удалить папку", role: .destructive) { library.deleteFolder(folder.id) }
+            Button("Удалить папку", role: .destructive) { state.deleteFolder(folder.id) }
+        }
+    }
+
+    // MARK: Several rows at once
+
+    private func targets(_ id: UUID) -> Set<UUID> { selection.contains(id) ? selection : [id] }
+
+    private func setExpanded(_ ids: Set<UUID>, _ expanded: Bool) {
+        for id in ids where library.folder(id) != nil { library.setExpanded(id, expanded) }
+    }
+
+    /// What a drag carries: the dragged row, or all picked rows when it is one of them.
+    private func dragPayload(_ id: UUID) -> String {
+        let ids = selection.contains(id) && selection.count > 1 ? Array(selection) : [id]
+        return ids.map { library.folder($0) != nil ? "folder:" + $0.uuidString : $0.uuidString }.joined(separator: "\n")
+    }
+
+    private func deleteSelection(_ ids: Set<UUID>) {
+        guard section == .files || !state.selectedTags.isEmpty else { return }
+        state.removeFromLibrary(folders: ids.filter { library.folder($0) != nil }, files: ids.filter { library.file($0) != nil })
+        selection = []
+    }
+
+    private func moveItems(_ ids: Set<UUID>, to parent: UUID?) {
+        var failed: [String] = []
+        for id in ids {
+            if let folder = library.folder(id) {
+                if !library.moveFolder(id, to: parent) && folder.parentID != parent { failed.append(folder.name) }
+            } else if library.file(id) != nil {
+                library.move(id, to: parent)
+            }
+        }
+        if !failed.isEmpty {
+            state.errorMessage = L("Не удалось переместить папки: %@. В том месте уже есть папка с таким именем.", failed.joined(separator: ", "))
+        }
+    }
+
+    private func moveFolder(_ folder: LibraryFolder, to parent: UUID?) {
+        if !library.moveFolder(folder.id, to: parent) {
+            state.errorMessage = L("Не удалось переместить папку «%@»: в том месте уже есть папка с таким именем.", folder.name)
         }
     }
 
@@ -299,7 +386,7 @@ struct SidebarView: View {
             HStack {
                 Label(folder.name, systemImage: "folder").lineLimit(1)
                 Spacer()
-                Text("\(count)").font(.caption).foregroundColor(.secondary)
+                Text("\(count)").font(AppFont.caption).foregroundColor(.secondary)
             }
             .padding(.vertical, 1)
             .background(
@@ -307,7 +394,10 @@ struct SidebarView: View {
                     .fill(targetedFolder == folder.id ? Color.accentColor.opacity(0.28) : .clear)
             )
             .contentShape(Rectangle())
-            .onTapGesture { library.setExpanded(folder.id, !folder.isExpanded) }
+            .onTapGesture {
+                if NSEvent.modifierFlags.intersection([.command, .shift]).isEmpty { library.setExpanded(folder.id, !folder.isExpanded) }
+            }
+            .draggable(dragPayload(folder.id))
             .dropDestination(for: String.self) { items, _ in
                 drop(items, into: folder.id)
             } isTargeted: { targeted in
@@ -326,19 +416,20 @@ struct SidebarView: View {
                 .foregroundColor(isMissing ? .secondary : .primary)
             Spacer(minLength: 4)
             if showsDate, let date = file.lastOpened {
-                Text(relative(date)).font(.caption).foregroundColor(.secondary)
+                Text(relative(date)).font(AppFont.caption).foregroundColor(.secondary)
             }
             if file.isFavorite {
-                Image(systemName: "star.fill").font(.caption).foregroundColor(.yellow)
+                Image(systemName: "star.fill").font(AppFont.caption).foregroundColor(.yellow)
             }
         }
         .padding(.vertical, 3)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
         .tag(file.id)
-        .draggable(file.id.uuidString)
+        .draggable(dragPayload(file.id))
         // Hit-testing of a draggable row is flaky near its edges; handle the click on the whole row ourselves.
         .simultaneousGesture(TapGesture().onEnded {
+            guard NSEvent.modifierFlags.intersection([.command, .shift]).isEmpty else { return }
             let inRight = NSEvent.modifierFlags.contains(.option)
             if state.selectedFileID == file.id {
                 state.openLibraryFile(file.id, inRight: inRight)
@@ -359,7 +450,7 @@ struct SidebarView: View {
                 .lineLimit(1)
                 .foregroundColor(isMissing ? .secondary : .primary)
             Spacer(minLength: 4)
-            Text(relative(entry.date)).font(.caption).foregroundColor(.secondary)
+            Text(relative(entry.date)).font(AppFont.caption).foregroundColor(.secondary)
         }
         .padding(.vertical, 3)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -380,6 +471,21 @@ struct SidebarView: View {
 
     @ViewBuilder
     private func fileMenu(_ file: LibraryFile) -> some View {
+        let ids = targets(file.id)
+        if ids.count > 1 {
+            Button("Открыть выбранные (\(ids.filter { library.file($0) != nil }.count))") {
+                for id in ids where library.file(id) != nil { state.openLibraryFile(id) }
+            }
+            Button("Переместить в…") { popUpMove(ids) }
+            Divider()
+            Button("Убрать выбранное (\(ids.count))", role: .destructive) { deleteSelection(ids) }
+        } else {
+            singleFileMenu(file)
+        }
+    }
+
+    @ViewBuilder
+    private func singleFileMenu(_ file: LibraryFile) -> some View {
         Button("Открыть") { state.openLibraryFile(file.id) }
         Button("Открыть справа") { state.openLibraryFile(file.id, inRight: true) }
         Button("Быстрый просмотр") { quickLook(file.id) }
@@ -387,40 +493,10 @@ struct SidebarView: View {
             library.toggleFavorite(file.id)
             state.notify(file.isFavorite ? L("Убрано из избранного.") : L("Добавлено в избранное."), symbol: "star.fill")
         }
-        Menu("Теги") {
-            ForEach(library.allTags, id: \.self) { tag in
-                Button {
-                    state.notify(library.hasTag(file.id, tag) ? L("Тег #%@ убран.", tag) : L("Тег #%@ добавлен.", tag), symbol: "tag.fill")
-                    library.toggleTag(file.id, tag)
-                } label: {
-                    if library.hasTag(file.id, tag) { Label("#\(tag)", systemImage: "checkmark") } else { Text("#\(tag)") }
-                }
-            }
-            if !library.allTags.isEmpty { Divider() }
-            Button("Новый тег…") {
-                if let name = TextPrompt.ask(title: L("Новый тег"), confirm: L("Создать")),
-                   let tag = library.createTag(name), !library.hasTag(file.id, tag) {
-                    library.toggleTag(file.id, tag)
-                    state.notify(L("Тег #%@ добавлен.", tag), symbol: "tag.fill")
-                }
-            }
-        }
-        Menu("Переместить в…") {
-            ForEach(library.folders) { folder in
-                Button(folder.name) { library.move(file.id, to: folder.id) }
-                    .disabled(file.folderID == folder.id)
-            }
-            if file.folderID != nil {
-                Divider()
-                Button("Вне папки") { library.move(file.id, to: nil) }
-            }
-            Divider()
-            Button("Новая папка…") {
-                section = .files
-                pendingMove = file.id
-                beginNaming()
-            }
-        }
+        // These two menus list every tag and every folder. A row's context menu is built when the row is drawn, and with
+        // thousands of rows that was seconds of work, so the lists are built only when the item is clicked.
+        Button("Теги…") { popUpTags(for: file) }
+        Button("Переместить в…") { popUpMove([file.id]) }
         Divider()
         Button("Показать в Finder") {
             if let url = library.resolve(file.id) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
@@ -438,9 +514,53 @@ struct SidebarView: View {
                     .onExitCommand(perform: cancelNaming)
             }
             if let nameError {
-                Text(nameError).font(.caption).foregroundColor(.red)
+                Text(nameError).font(AppFont.caption).foregroundColor(.red)
             }
         }
+    }
+
+    // MARK: Menus built on demand
+
+    private func popUp(_ items: [NSMenuItem]) {
+        let menu = NSMenu()
+        items.forEach(menu.addItem)
+        DispatchQueue.main.async { menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil) }
+    }
+
+    private func popUpTags(for file: LibraryFile) {
+        var items: [NSMenuItem] = library.allTags.map { tag in
+            ClosureItem("#" + tag, checked: library.hasTag(file.id, tag)) {
+                state.notify(library.hasTag(file.id, tag) ? L("Тег #%@ убран.", tag) : L("Тег #%@ добавлен.", tag), symbol: "tag.fill")
+                library.toggleTag(file.id, tag)
+            }
+        }
+        if !items.isEmpty { items.append(.separator()) }
+        items.append(ClosureItem(L("Новый тег…")) {
+            if let name = TextPrompt.ask(title: L("Новый тег"), confirm: L("Создать")),
+               let tag = library.createTag(name), !library.hasTag(file.id, tag) {
+                library.toggleTag(file.id, tag)
+                state.notify(L("Тег #%@ добавлен.", tag), symbol: "tag.fill")
+            }
+        })
+        popUp(items)
+    }
+
+    private func popUpMove(_ ids: Set<UUID>) {
+        var blocked = Set<UUID>()
+        for id in ids where library.folder(id) != nil { blocked.formUnion(library.subtreeIDs(of: id)) }
+        var items: [NSMenuItem] = [ClosureItem(L("На верхний уровень")) { moveItems(ids, to: nil) }, .separator()]
+        items += library.folderChoices.filter { !blocked.contains($0.folder.id) }.map { choice in
+            ClosureItem(choice.path) { moveItems(ids, to: choice.folder.id) }
+        }
+        if ids.count == 1, let id = ids.first, library.file(id) != nil {
+            items.append(.separator())
+            items.append(ClosureItem(L("Новая папка…")) {
+                section = .files
+                pendingMove = id
+                beginNaming(in: library.file(id)?.folderID)
+            })
+        }
+        popUp(items)
     }
 
     // MARK: Quick Look
@@ -476,7 +596,8 @@ struct SidebarView: View {
 
     // MARK: Actions
 
-    private func beginNaming() {
+    private func beginNaming(in parent: UUID?) {
+        namingParent = parent
         newName = ""
         nameError = nil
         isNaming = true
@@ -488,6 +609,7 @@ struct SidebarView: View {
         newName = ""
         nameError = nil
         pendingMove = nil
+        namingParent = nil
     }
 
     /// Creates the folder if a name was typed, otherwise just closes the field.
@@ -501,32 +623,33 @@ struct SidebarView: View {
         guard isNaming else { return }
         let name = newName.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty else { cancelNaming(); return }
-        guard !library.folderExists(name) else {
+        guard !library.folderExists(name, in: namingParent) else {
             nameError = L("Папка с таким именем уже есть.")
             return
         }
-        let folder = library.createFolder(name)
+        let folder = library.createFolder(name, parent: namingParent)
         if let pendingMove { library.move(pendingMove, to: folder.id) }
         cancelNaming()
     }
 
     private func commitRename(_ folder: LibraryFolder) {
         let name = renameText.trimmingCharacters(in: .whitespaces)
-        if !name.isEmpty, name != folder.name, !library.folderExists(name) {
+        if !name.isEmpty, name != folder.name, !library.folderExists(name, in: folder.parentID, ignoring: folder.id) {
             library.renameFolder(folder.id, to: name)
         }
         renamingID = nil
     }
 
     private func drop(_ items: [String], into folderID: UUID?) -> Bool {
-        var moved = false
-        for item in items {
-            if let id = UUID(uuidString: item), library.file(id) != nil {
-                library.move(id, to: folderID)
-                moved = true
-            }
+        var ids = Set<UUID>()
+        for item in items.flatMap({ $0.split(separator: "\n").map(String.init) }) {
+            let raw = item.hasPrefix("folder:") ? String(item.dropFirst(7)) : item
+            if let id = UUID(uuidString: raw) { ids.insert(id) }
         }
-        return moved
+        let known = ids.filter { library.folder($0) != nil || library.file($0) != nil }
+        guard !known.isEmpty else { return false }
+        moveItems(known, to: folderID)
+        return true
     }
 
     private func relative(_ date: Date) -> String {

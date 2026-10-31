@@ -13,15 +13,23 @@
 
 `⌘N` / `Ctrl+N` (or the *New File* button in the sidebar next to *New Folder*) asks for a name, folder and format in the save dialog, creates the file with a
 small starter template (a heading for Markdown, `{}` for JSON, a header row for CSV, a skeleton for HTML, C/C++, C#, PHP and so on) and opens it in a new tab in
-Edit mode. Existing files are replaced only after the system dialog's confirmation.
+edit mode. Existing files are replaced only after the system dialog's confirmation.
 
-## Three modes
+## Modes
 
-| Mode | Shortcut (macOS / Windows) | What it is for |
+**macOS: two modes, shown as two buttons in the title bar (and in the header of each pane in split view).**
+
+| Mode | Shortcut | What it is for |
 |---|---|---|
-| **Reading** | `⌥⌘1` / `Ctrl+Alt+1` | Rendered Markdown, formatted CSV tables |
-| **Source** | `⌥⌘2` / `Ctrl+Alt+2` | Raw text with line numbers, bookmarks and syntax colors |
-| **Edit** | `⌥⌘3` / `Ctrl+Alt+3` | Change the text and save with `⌘S` / `Ctrl+S` |
+| **User** | `⌥⌘1` | Edit the text with the formatting code hidden: it looks the way it reads |
+| **Developer** | `⌥⌘2` | The file exactly as it is: all the markup, line numbers, bookmarks and syntax colors |
+
+Both modes edit the same file; save with `⌘S`. CSV files are shown as a table in User mode. In split view every pane has its own mode (the right
+one starts as Developer), so you can type code on one side and see the result on the other; drag the divider between the panes to change their widths
+(a double click makes them equal).
+
+**Windows: three modes** — **Reading** (`Ctrl+Alt+1`, rendered Markdown, CSV tables), **Source** (`Ctrl+Alt+2`, raw text with line numbers, bookmarks and syntax colors)
+and **Edit** (`Ctrl+Alt+3`, change the text and save with `Ctrl+S`).
 
 Saving writes the text back in the encoding the file was read with; a UTF-8 BOM is kept.
 
@@ -35,7 +43,7 @@ tables and links are rendered in the current theme. Open [`samples/README.md`](.
 | Type | Treatment |
 |---|---|
 | CSV / TSV | Shown as a table; the delimiter (`,` `;` tab) is detected automatically |
-| Python, Swift, C / C++, C#, JavaScript, TypeScript, CSS, PHP | Syntax colors in Reading and Source modes (and live in Edit mode on macOS); comments and strings spanning lines are supported. Fenced Markdown blocks (```` ```python ````) use the same colors |
+| Python, Swift, C / C++, C#, JavaScript, TypeScript, CSS, PHP | Syntax colors in the source views (and live while editing on macOS); comments and strings spanning lines are supported. Fenced Markdown blocks (```` ```python ````) use the same colors |
 | JSON, YAML, INI / conf / TOML | Syntax colors in source mode |
 | XML / HTML | Shown as source with syntax colors (HTML is never executed) |
 | TeX | Syntax colors |
@@ -52,25 +60,25 @@ The line-number gutter can be turned off in Settings.
 `⌘F` / `Ctrl+F` opens the find bar; matches are highlighted as you type. `⌘G` / `Ctrl+G` goes to the next match,
 `⇧⌘G` / `Ctrl+Shift+G` to the previous one (Windows also accepts `F3` / `Shift+F3`). `Esc` closes the bar.
 
-Find also works in Edit mode: hits are highlighted in the text you are editing.
+Hits are highlighted in the text you are editing.
 
 ## Select all and copy
 
-In Reading and Source, `⌘A` / `Ctrl+A` selects the whole document and `⌘C` / `Ctrl+C` copies all of it.
+`⌘A` / `Ctrl+A` selects the whole document and `⌘C` / `Ctrl+C` copies all of it.
 
 ## Search files, tags
 
 The sidebar field **Search files** matches the beginning of a file or folder name, or of any word in it ("gri" finds "My Grizzly notes.md"). Typing `#work` searches tags.
 
-**Tags** live at the bottom of the sidebar. Create one with **+**, assign it from a file's context menu (*Tags*), rename or delete it from the tag's context menu. Tags are the `#words` you write in a Markdown / text file: they are colored in the text, a click on one lists the files that carry it, and typing `#` in Edit mode suggests the known tags. In the sidebar, click a tag to filter, click more tags to narrow the list (files must carry all of them), or *All Tags* to reset. *Rename* and *Delete* in a tag's context menu also change the text of every file that uses it (RTF files and files with unsaved edits are skipped).
+**Tags** live at the bottom of the sidebar. Create one with **+**, assign it from a file's context menu (*Tags*), rename or delete it from the tag's context menu. Tags are the `#words` you write in a Markdown / text file: they are colored in the text, a click on one lists the files that carry it, and typing `#` suggests the known tags. In the sidebar, click a tag to filter, click more tags to narrow the list (files must carry all of them), or *All Tags* to reset. *Rename* and *Delete* in a tag's context menu also change the text of every file that uses it (RTF files and files with unsaved edits are skipped).
 
 ## Spelling and grammar
 
-In Edit mode, Markdown, TXT, RTF and TeX files are checked in Russian and English; mistakes are underlined and corrections are in the context menu (macOS also checks grammar). Switch it off in *Settings → Text*. Source code is never checked. On Windows the dictionaries are downloaded by the system on first use.
+While you edit, Markdown, TXT, RTF and TeX files are checked in Russian and English; mistakes are underlined and corrections are in the context menu (macOS also checks grammar). Switch it off in *Settings → Text*. Source code is never checked. On Windows the dictionaries are downloaded by the system on first use.
 
 ## Emoji
 
-The 😀 button at the right end of the toolbar (Edit mode) opens the system emoji picker (`⌃⌘Space` on macOS, `Win+.` on Windows). If a file is in an 8-bit encoding (Windows-1251, ISO-8859-1) that cannot hold emoji, Grizzly offers to save it as UTF-8.
+The 😀 button in the toolbar opens the system emoji picker (`⌃⌘Space` on macOS, `Win+.` on Windows). If a file is in an 8-bit encoding (Windows-1251, ISO-8859-1) that cannot hold emoji, Grizzly offers to save it as UTF-8.
 
 Tag names may contain emoji (`#🍕`). A tag typed into the text appears in the sidebar after a short pause, without saving.
 
@@ -78,9 +86,9 @@ Tag names may contain emoji (`#🍕`). A tag typed into the text appears in the 
 
 Closing a tab or the window with unsaved edits asks whether to save, discard or cancel.
 
-## Edit mode buttons and notifications
+## Undo, Save and notifications
 
-In Edit mode the *Undo* button (top right) reverts one step at a time (a word, a deletion, a paste) and *Save* writes the file. Short pop-up notifications confirm actions such as saving, copying all text, creating a file, reloading, and changing tags, bookmarks or favorites.
+Above the editor the *Undo* button (top right) reverts one step at a time (a word, a deletion, a paste) and *Save* writes the file. Short pop-up notifications confirm actions such as saving, copying all text, creating a file, reloading, and changing tags, bookmarks or favorites.
 
 ## Updates
 
@@ -148,9 +156,19 @@ Open Settings (`⌘,` / `Ctrl+,`):
 | Find / next / previous | `⌘F` / `⌘G` / `⇧⌘G` | `Ctrl+F` / `Ctrl+G` / `Ctrl+Shift+G` |
 | Next / previous tab | `⇧⌘]` / `⇧⌘[` | `Ctrl+Shift+]` / `[` (or `Ctrl+Tab`) |
 | Split view | `⌘\` | `Ctrl+\` |
-| Reading / Source / Edit | `⌥⌘1` / `2` / `3` | `Ctrl+Alt+1` / `2` / `3` |
+| User / Developer (Windows: Reading / Source / Edit) | `⌥⌘1` / `2` | `Ctrl+Alt+1` / `2` / `3` |
 | Reload | `⌘R` | `Ctrl+R` |
-| Select all / copy (Reading, Source) | `⌘A` / `⌘C` | `Ctrl+A` / `Ctrl+C` |
-| Undo / redo (Edit) | `⌘Z` / `⇧⌘Z` | `Ctrl+Z` / `Ctrl+Shift+Z` |
-| Emoji picker (Edit) | `⌃⌘Space` | `Win+.` |
+| Select all / copy | `⌘A` / `⌘C` | `Ctrl+A` / `Ctrl+C` |
+| Undo / redo | `⌘Z` / `⇧⌘Z` | `Ctrl+Z` / `Ctrl+Shift+Z` |
+| Emoji picker | `⌃⌘Space` | `Win+.` |
 | Font larger / smaller | `⌘+` / `⌘-` | `Ctrl++` / `Ctrl+-` |
+
+## Formatting (Markdown)
+
+The bar above the editor (and the *Format* menu) writes plain Markdown: `# Title`, `## Heading`, `### Subheading`, `**bold**`,
+`*italic*`, `<u>underline</u>`, `~~strikethrough~~`, `<mark class="mint">highlight</mark>` (violet, pink, orange, mint, blue),
+`<div align="center">…</div>` for alignment, `* ` bullets, `- ` dashes, `1. ` numbers, `- [ ] ` check lists, `> ` quotes, `---` dividers
+and `| a | b |` tables. In User mode (the code above is hidden there; Developer mode shows it) the arrow next to a Title or Heading folds its section, and the circle of a check list item can
+be ticked (the file is saved). Folders can be nested; *Open* accepts a folder and adds it to the sidebar with its supported files.
+
+**Attachments.** The paperclip button (or *Format → Insert*, or the right-click menu, or drag and drop, or paste) adds a photo, video, PDF, any file or a link to a web page. Files are copied to `<name>.assets` next to the document and written as `![name](Notes.assets/photo.png)` or `[name](Notes.assets/paper.pdf)`. In split view each pane has its own mode and the divider between them can be dragged.

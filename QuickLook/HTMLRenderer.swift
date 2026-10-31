@@ -19,6 +19,10 @@ enum HTMLRenderer {
         th, td { border: 1px solid rgba(127,127,127,.35); padding: 4px 10px; text-align: left; vertical-align: top; }
         th { background: rgba(127,127,127,.15); }
         .plain { margin: 0; padding: 0; background: none; }
+        mark { color: inherit; border-radius: 3px; padding: 0 2px; }
+        mark.violet { background: rgba(179,157,255,.45); } mark.pink { background: rgba(255,158,196,.45); }
+        mark.orange { background: rgba(255,176,112,.45); } mark.mint { background: rgba(143,227,192,.45); }
+        mark.blue { background: rgba(142,197,255,.45); }
         .note { opacity: .6; font-size: 12px; margin-top: 18px; }
         </style></head><body>\(body)</body></html>
         """
@@ -69,22 +73,33 @@ enum HTMLRenderer {
 
     static func markdown(_ lines: [String]) -> String {
         var out = ""
-        for block in MarkdownParser.parse(lines) {
-            switch block {
-            case .heading(let level, let text):
-                let n = min(max(level, 1), 6)
-                out += "<h\(n)>\(inline(text))</h\(n)>"
-            case .paragraph(let text): out += "<p>\(inline(text))</p>"
-            case .bullets(let items): out += "<ul>" + items.map { "<li>\(inline($0))</li>" }.joined() + "</ul>"
-            case .numbered(let items): out += "<ol>" + items.map { "<li>\(inline($0))</li>" }.joined() + "</ol>"
-            case .code(_, let body): out += "<pre><code>\(escape(body))</code></pre>"
-            case .quote(let text): out += "<blockquote>\(inline(text))</blockquote>"
-            case .rule: out += "<hr>"
-            case .table(let header, let rows):
-                out += "<table><tr>" + header.map { "<th>\(inline($0))</th>" }.joined() + "</tr>"
-                for r in rows { out += "<tr>" + r.map { "<td>\(inline($0))</td>" }.joined() + "</tr>" }
-                out += "</table>"
-            }
+        for block in MarkdownParser.parse(lines) { out += render(block) }
+        return out
+    }
+
+    private static func render(_ block: MDBlock) -> String {
+        var out = ""
+        switch block {
+        case .aligned(let align, let inner):
+            out += "<div style=\"text-align:\(align.rawValue)\">" + render(inner) + "</div>"
+        case .heading(let level, let text):
+            let n = min(max(level, 1), 6)
+            out += "<h\(n)>\(inline(text))</h\(n)>"
+        case .paragraph(let text): out += "<p>\(inline(text))</p>"
+        case .bullets(let items): out += "<ul>" + items.map { "<li>\(inline($0))</li>" }.joined() + "</ul>"
+        case .dashes(let items): out += "<ul style=\"list-style-type:'– '\">" + items.map { "<li>\(inline($0))</li>" }.joined() + "</ul>"
+        case .tasks(let items):
+            out += "<ul style=\"list-style:none;padding-left:4px\">" + items.map {
+                "<li>\($0.done ? "&#9679;" : "&#9675;") \($0.done ? "<s>\(inline($0.text))</s>" : inline($0.text))</li>"
+            }.joined() + "</ul>"
+        case .numbered(let items): out += "<ol>" + items.map { "<li>\(inline($0))</li>" }.joined() + "</ol>"
+        case .code(_, let body): out += "<pre><code>\(escape(body))</code></pre>"
+        case .quote(let text): out += "<blockquote>\(inline(text))</blockquote>"
+        case .rule: out += "<hr>"
+        case .table(let header, let rows):
+            out += "<table><tr>" + header.map { "<th>\(inline($0))</th>" }.joined() + "</tr>"
+            for r in rows { out += "<tr>" + r.map { "<td>\(inline($0))</td>" }.joined() + "</tr>" }
+            out += "</table>"
         }
         return out
     }
@@ -96,6 +111,10 @@ enum HTMLRenderer {
             ("`([^`]+)`", "<code>$1</code>"),
             ("\\*\\*([^*]+)\\*\\*", "<strong>$1</strong>"),
             ("(?<![*\\w])\\*([^*\\n]+)\\*(?!\\w)", "<em>$1</em>"),
+            ("~~([^~]+)~~", "<s>$1</s>"),
+            // The tags were escaped above; the few Grizzly writes itself are turned back.
+            ("&lt;u&gt;(.*?)&lt;/u&gt;", "<u>$1</u>"),
+            ("&lt;mark class=&quot;(violet|pink|orange|mint|blue)&quot;&gt;(.*?)&lt;/mark&gt;", "<mark class=\"$1\">$2</mark>"),
         ]
         for (pattern, template) in rules {
             s = s.replacingOccurrences(of: pattern, with: template, options: .regularExpression)

@@ -17,6 +17,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.async { AppState.shared.markReady() }
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        AppState.shared.library.flush()
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         let state = AppState.shared
         return state.confirmDiscard(state.documents.map(\.id)) ? .terminateNow : .terminateCancel
@@ -91,10 +95,77 @@ struct GrizzlyApp: App {
                 Button("Два файла рядом") { state.toggleSplit() }
                     .keyboardShortcut("\\")
             }
+            CommandMenu("Формат") {
+                Group {
+                    Button("Название") { FormatActions.perform(.paragraph(.title)) }
+                        .keyboardShortcut("t", modifiers: [.command, .shift])
+                    Button("Заголовок") { FormatActions.perform(.paragraph(.heading)) }
+                        .keyboardShortcut("h", modifiers: [.command, .shift])
+                    Button("Подзаголовок") { FormatActions.perform(.paragraph(.subheading)) }
+                        .keyboardShortcut("j", modifiers: [.command, .shift])
+                    Button("Основной текст") { FormatActions.perform(.paragraph(.body)) }
+                        .keyboardShortcut("b", modifiers: [.command, .shift])
+                    Button("Моноширинный") { FormatActions.perform(.paragraph(.monospaced)) }
+                        .keyboardShortcut("m", modifiers: [.command, .shift])
+                    Divider()
+                    Button("Жирный") { FormatActions.perform(.inline(.bold)) }.keyboardShortcut("b")
+                    Button("Курсив") { FormatActions.perform(.inline(.italic)) }.keyboardShortcut("i")
+                    Button("Подчёркнутый") { FormatActions.perform(.inline(.underline)) }.keyboardShortcut("u")
+                    Button("Зачёркнутый") { FormatActions.perform(.inline(.strike)) }
+                        .keyboardShortcut("x", modifiers: [.command, .shift])
+                    Menu("Цветной маркер") {
+                        ForEach(InlineMarkup.highlightNames, id: \.self) { name in
+                            Button(FormatBar.colorTitle(name)) { FormatActions.perform(.highlight(name)) }
+                        }
+                        Divider()
+                        Button("Без выделения") { FormatActions.perform(.highlight(nil)) }
+                    }
+                    Menu("Выравнивание") {
+                        Button("По левому краю") { FormatActions.perform(.align(.left)) }
+                        Button("По центру") { FormatActions.perform(.align(.center)) }
+                        Button("По правому краю") { FormatActions.perform(.align(.right)) }
+                        Button("По ширине") { FormatActions.perform(.align(.justify)) }
+                    }
+                    Divider()
+                    Button("Маркированный список") { FormatActions.perform(.list(.bullet)) }
+                        .keyboardShortcut("7", modifiers: [.command, .shift])
+                    Button("Штриховой список") { FormatActions.perform(.list(.dash)) }
+                        .keyboardShortcut("8", modifiers: [.command, .shift])
+                    Button("Нумерованный список") { FormatActions.perform(.list(.numbered)) }
+                        .keyboardShortcut("9", modifiers: [.command, .shift])
+                    Button("Список задач") { FormatActions.perform(.list(.checklist)) }
+                        .keyboardShortcut("l", modifiers: [.command, .shift])
+                    Button("Цитата") { FormatActions.perform(.quote) }.keyboardShortcut("'")
+                    Button("Линия-разделитель") { FormatActions.perform(.rule) }
+                    Button("Вставить таблицу") { FormatActions.perform(.table(.insert)) }
+                        .keyboardShortcut("t", modifiers: [.command, .option])
+                    Menu("Вставить") {
+                    Button("Фото…") { FormatActions.attach(.image) }
+                    Button("Видео…") { FormatActions.attach(.video) }
+                    Button("PDF…") { FormatActions.attach(.pdf) }
+                    Button("Файл…") { FormatActions.attach(.file) }
+                    Divider()
+                    Button("Ссылка на сайт…") { FormatActions.insertWebLink() }
+                }
+                Menu("Таблица") {
+                        Button("Добавить строку") { FormatActions.perform(.table(.addRow)) }
+                        Button("Добавить столбец") { FormatActions.perform(.table(.addColumn)) }
+                        Button("Удалить строку") { FormatActions.perform(.table(.deleteRow)) }
+                        Button("Удалить столбец") { FormatActions.perform(.table(.deleteColumn)) }
+                        Divider()
+                        Button("Строку вверх") { FormatActions.perform(.table(.moveRowUp)) }
+                        Button("Строку вниз") { FormatActions.perform(.table(.moveRowDown)) }
+                        Button("Столбец влево") { FormatActions.perform(.table(.moveColumnLeft)) }
+                        Button("Столбец вправо") { FormatActions.perform(.table(.moveColumnRight)) }
+                        Divider()
+                        Button("Преобразовать таблицу в текст") { FormatActions.perform(.table(.toText)) }
+                    }
+                }
+                .disabled(state.current?.type != .markdown)
+            }
             CommandMenu("Вид") {
-                Button("Режим чтения") { state.mode = .reading }.keyboardShortcut("1", modifiers: [.command, .option])
-                Button("Исходник") { state.mode = .source }.keyboardShortcut("2", modifiers: [.command, .option])
-                Button("Правка") { state.mode = .edit }.keyboardShortcut("3", modifiers: [.command, .option])
+                Button("Пользователь") { state.mode = .user }.keyboardShortcut("1", modifiers: [.command, .option])
+                Button("Разработчик") { state.mode = .developer }.keyboardShortcut("2", modifiers: [.command, .option])
                 Divider()
                 Button("Копировать весь текст") { state.copyAllText() }
                     .keyboardShortcut("c", modifiers: [.command, .option])
