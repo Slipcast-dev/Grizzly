@@ -3,7 +3,9 @@
 All notable changes are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.4.0] - 2026-11-01
+
+> Both new features are in the **macOS** app. The Windows build is version-aligned and keeps the feature set of 1.3.0.
 
 ### Added
 - **Smart folders** (macOS): the *New folder* button of the sidebar opens a menu with *New Folder* and *Smart Folder…*. A smart folder (folder-and-gear icon, as in Apple Notes) has a settings sheet with a name, tags (all or any of them), file types and a sort order (name, file type, date opened). Files come into the folder by themselves as soon as a chosen `#tag` appears in their text, or by type alone when no tag is set; the sheet shows how many files fit. Files stay where they are, deleting the folder never removes them, tags renamed or deleted are updated in the rules.
