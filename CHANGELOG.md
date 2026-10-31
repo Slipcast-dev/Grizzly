@@ -3,6 +3,12 @@
 All notable changes are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **Smart folders** (macOS): the *New folder* button of the sidebar opens a menu with *New Folder* and *Smart Folder…*. A smart folder (folder-and-gear icon, as in Apple Notes) has a settings sheet with a name, tags (all or any of them), file types and a sort order (name, file type, date opened). Files come into the folder by themselves as soon as a chosen `#tag` appears in their text, or by type alone when no tag is set; the sheet shows how many files fit. Files stay where they are, deleting the folder never removes them, tags renamed or deleted are updated in the rules.
+- **Look inside folders, archives and disk images** (macOS): Space on a folder of the sidebar (or *Quick Look* in its menu) lists its contents with sizes. Opening or dropping a `.zip`, `.tar(.gz/.bz2/.xz)`, `.7z`, `.rar`, `.jar`, `.pkg`, `.iso` or `.dmg` shows the same list instead of opening a tab. Nothing is unpacked; a `.dmg` is attached read-only, hidden from Finder and detached again at once.
+
 ## [1.3.0] - 2026-10-31
 
 > **Updating from 1.2.2 or older:** those versions can get stuck on "Installing…" (fixed in this release). If that happens, quit Grizzly

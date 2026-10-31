@@ -42,6 +42,8 @@ final class AppState: ObservableObject {
     /// Bumped when the sidebar should switch to the file list (a tag was clicked in a document).
     @Published var sidebarRevealToken = 0
     @Published var errorMessage: String?
+    /// The folder, archive or disk image whose contents are being looked at (shown as a sheet).
+    @Published var contentsPreview: ContentsPreviewModel?
     /// Open documents whose file changed on disk after they were read.
     @Published private(set) var changedOnDisk: Set<UUID> = []
     /// Edited text per open document, kept only while it differs from the file.
@@ -112,9 +114,45 @@ final class AppState: ObservableObject {
                 importFolder(url)
                 continue
             }
+            // An archive or a disk image is not a document: show what is inside instead of opening it.
+            if ContentsLister.isContainer(url) {
+                previewContents(of: url)
+                continue
+            }
             let entry = library.add(url: url)
             show(entry.id, url: url, pane: inRight ? .right : nil)
         }
+    }
+
+    // MARK: Contents of folders, archives and disk images
+
+    /// Lists what is inside an archive, a disk image or a folder on disk, without opening or unpacking it.
+    func previewContents(of url: URL) {
+        contentsPreview = ContentsPreviewModel(url: url)
+    }
+
+    /// Lists a folder of the sidebar: the directory it mirrors, or, for a folder that exists only in the library, what the
+    /// library keeps in it (for a smart folder, the files it has collected).
+    func previewFolder(_ id: UUID) {
+        guard let folder = library.folder(id) else { return }
+        if let url = library.folderURL(id) {
+            contentsPreview = ContentsPreviewModel(url: url, title: folder.name)
+            return
+        }
+        var listing = ContentsListing()
+        func entries(in parent: UUID) -> [ContentEntry] {
+            let subfolders = library.folders(in: parent).map { sub -> ContentEntry in
+                listing.folders += 1
+                return ContentEntry(id: sub.id.uuidString, name: sub.name, isDirectory: true, size: nil, children: entries(in: sub.id))
+            }
+            let files = library.files(in: parent).map { file -> ContentEntry in
+                listing.files += 1
+                return ContentEntry(id: "\(parent.uuidString)/\(file.id.uuidString)", name: file.name, isDirectory: false, size: nil, children: nil)
+            }
+            return subfolders + files
+        }
+        listing.entries = entries(in: id)
+        contentsPreview = ContentsPreviewModel(title: folder.name, symbol: folder.isSmart ? SmartFolderIcon.symbol : "folder", listing: listing)
     }
 
     // MARK: Session kept across an update restart
@@ -249,12 +287,12 @@ final class AppState: ObservableObject {
         panel.canChooseDirectories = true
         panel.canChooseFiles = true
         panel.treatsFilePackagesAsDirectories = false
-        panel.message = L("Выберите файлы или папки")
+        panel.message = L("Выберите файлы, папки или архивы")
         panel.prompt = L("Открыть")
         let supported = Set(FileType.allExtensions)
         let filter = OpenPanelFilter { url in
             if (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true { return true }
-            return supported.contains(url.pathExtension.lowercased())
+            return supported.contains(url.pathExtension.lowercased()) || ContentsLister.isContainer(url)
         }
         panel.delegate = filter
         let result = withExtendedLifetime(filter) { panel.runModal() }

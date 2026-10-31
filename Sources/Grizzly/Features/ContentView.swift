@@ -95,6 +95,7 @@ struct ContentView: View {
         }
         .animation(.easeOut(duration: 0.2), value: state.toast?.id)
         .sheet(isPresented: $updater.sheetVisible) { UpdateSheet(updater: updater) }
+        .sheet(item: $state.contentsPreview) { ContentsPreviewView(model: $0) }
         .alert("Ошибка", isPresented: Binding(
             get: { state.errorMessage != nil },
             set: { if !$0 { state.errorMessage = nil } })

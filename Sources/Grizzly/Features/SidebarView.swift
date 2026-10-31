@@ -49,6 +49,7 @@ struct SidebarView: View {
     @State private var targetedFolder: UUID?
     @FocusState private var nameFocused: Bool
     @State private var previewURL: URL?
+    @State private var smartRequest: SmartFolderRequest?
     @State private var spaceMonitor: Any?
 
     var body: some View {
@@ -90,12 +91,8 @@ struct SidebarView: View {
                     .help("Новый файл (⌘N)")
                 Button { state.presentOpenPanel() } label: { Image(systemName: "folder") }
                     .help("Открыть файл или папку (⌘O)")
-                Button {
-                    section = .files
-                    pendingMove = nil
-                    beginNaming(in: nil)
-                } label: { Image(systemName: "folder.badge.plus") }
-                    .help("Новая папка")
+                Button { popUpNewFolderMenu() } label: { Image(systemName: "folder.badge.plus") }
+                    .help("Новая папка или смарт-папка")
                 Button { state.presentSaveAsPanel() } label: { Image(systemName: "square.and.arrow.down") }
                     .help("Сохранить как… (⇧⌘S)")
                     .disabled(state.current == nil)
@@ -143,6 +140,15 @@ struct SidebarView: View {
             else if let id = renamingID, let folder = library.folder(id) { commitRename(folder) }
         }
         .quickLookPreview($previewURL)
+        .sheet(item: $smartRequest) { request in
+            SmartFolderEditor(request: request) { id in
+                section = .files
+                state.selectedTags = []
+                library.setExpanded(id, true)
+                state.scanTagsInLibrary()
+                state.notify(request.folderID == nil ? L("Смарт-папка создана.") : L("Смарт-папка сохранена."), symbol: SmartFolderIcon.symbol)
+            }
+        }
         .onAppear(perform: installSpaceMonitor)
         .onDisappear(perform: removeSpaceMonitor)
     }
@@ -290,7 +296,9 @@ struct SidebarView: View {
             ForEach(subfolders) { sub in folderRow(sub) }
             ForEach(files) { file in fileRow(file) }
             if files.isEmpty && subfolders.isEmpty && query.isEmpty && !(isNaming && namingParent == folder.id) {
-                Text("Пусто. Перетащите сюда файл.")
+                Text(folder.smart?.isEmpty == true ? "Условия не заданы. Откройте настройки папки."
+                     : folder.isSmart ? "Подходящих файлов пока нет."
+                     : "Пусто. Перетащите сюда файл.")
                     .font(AppFont.caption)
                     .foregroundColor(.secondary)
             }
@@ -313,11 +321,18 @@ struct SidebarView: View {
             Divider()
             Button("Убрать выбранное (\(ids.count))", role: .destructive) { deleteSelection(ids) }
         } else {
-            Button("Новая папка внутри") {
-                section = .files
-                pendingMove = nil
-                library.setExpanded(folder.id, true)
-                beginNaming(in: folder.id)
+            if folder.isSmart {
+                Button("Настроить смарт-папку…") { smartRequest = SmartFolderRequest(folderID: folder.id) }
+                Button("Быстрый просмотр") { state.previewFolder(folder.id) }
+                Divider()
+            } else {
+                Button("Новая папка внутри") {
+                    section = .files
+                    pendingMove = nil
+                    library.setExpanded(folder.id, true)
+                    beginNaming(in: folder.id)
+                }
+                Button("Быстрый просмотр") { state.previewFolder(folder.id) }
             }
             Button("Переименовать") {
                 renameText = folder.name
@@ -384,7 +399,7 @@ struct SidebarView: View {
                 .onExitCommand { renamingID = nil }
         } else {
             HStack {
-                Label(folder.name, systemImage: "folder").lineLimit(1)
+                Label(folder.name, systemImage: folder.isSmart ? SmartFolderIcon.symbol : "folder").lineLimit(1)
                 Spacer()
                 Text("\(count)").font(AppFont.caption).foregroundColor(.secondary)
             }
@@ -401,7 +416,8 @@ struct SidebarView: View {
             .dropDestination(for: String.self) { items, _ in
                 drop(items, into: folder.id)
             } isTargeted: { targeted in
-                targetedFolder = targeted ? folder.id : (targetedFolder == folder.id ? nil : targetedFolder)
+                // A smart folder takes no files, so it does not light up as a drop target.
+                targetedFolder = targeted && !folder.isSmart ? folder.id : (targetedFolder == folder.id ? nil : targetedFolder)
             }
         }
     }
@@ -527,6 +543,21 @@ struct SidebarView: View {
         DispatchQueue.main.async { menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil) }
     }
 
+    private func popUpNewFolderMenu() {
+        func icon(_ name: String) -> NSImage? { NSImage(systemSymbolName: name, accessibilityDescription: nil) }
+        popUp([
+            ClosureItem(L("Новая папка"), image: icon("folder")) {
+                section = .files
+                pendingMove = nil
+                beginNaming(in: nil)
+            },
+            ClosureItem(L("Смарт-папка…"), image: icon(SmartFolderIcon.symbol)) {
+                section = .files
+                smartRequest = SmartFolderRequest()
+            },
+        ])
+    }
+
     private func popUpTags(for file: LibraryFile) {
         var items: [NSMenuItem] = library.allTags.map { tag in
             ClosureItem("#" + tag, checked: library.hasTag(file.id, tag)) {
@@ -579,12 +610,17 @@ struct SidebarView: View {
     private func installSpaceMonitor() {
         guard spaceMonitor == nil else { return }
         spaceMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            let pickedFolder = selection.count == 1 ? selection.first.flatMap { library.folder($0) != nil ? $0 : nil } : nil
             guard event.keyCode == 49,
                   event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty,
                   !(NSApp.keyWindow?.firstResponder is NSText),
                   NSApp.keyWindow?.identifier?.rawValue.contains("QLPreview") != true,
-                  state.selectedFileID != nil else { return event }
-            if previewURL != nil { previewURL = nil } else { quickLook(state.selectedFileID) }
+                  state.contentsPreview != nil || pickedFolder != nil || state.selectedFileID != nil else { return event }
+            // Space on a picked folder looks into it; on a file it opens the system Quick Look. Space again closes either.
+            if state.contentsPreview != nil { state.contentsPreview = nil }
+            else if let pickedFolder { state.previewFolder(pickedFolder) }
+            else if previewURL != nil { previewURL = nil }
+            else { quickLook(state.selectedFileID) }
             return nil
         }
     }
@@ -641,6 +677,7 @@ struct SidebarView: View {
     }
 
     private func drop(_ items: [String], into folderID: UUID?) -> Bool {
+        if let folderID, library.folder(folderID)?.isSmart == true { return false }
         var ids = Set<UUID>()
         for item in items.flatMap({ $0.split(separator: "\n").map(String.init) }) {
             let raw = item.hasPrefix("folder:") ? String(item.dropFirst(7)) : item

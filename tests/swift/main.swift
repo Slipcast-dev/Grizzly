@@ -294,5 +294,85 @@ check(nestLib.deleteFolder(top2.id) == [doomedFile.id] && nestLib.file(doomedFil
 nestLib.flush()
 check(LibraryStore(storeURL: dir.appendingPathComponent("nest.json")).folders(in: nil).count == 2, "nesting is saved to disk")
 
+// Smart folders collect files by tag and type
+let smartLib = LibraryStore(storeURL: dir.appendingPathComponent("smart.json"))
+let sNote = smartLib.add(url: dir.appendingPathComponent("note.md"))
+let sPlain = smartLib.add(url: dir.appendingPathComponent("plain.txt"))
+let sCode = smartLib.add(url: dir.appendingPathComponent("tool.py"))
+let sHome = smartLib.createFolder("Home")
+smartLib.move(sNote.id, to: sHome.id)
+smartLib.setInlineTags([(sNote.id, ["проект"]), (sPlain.id, ["Проект", "идея"])])
+let byTag = smartLib.createSmartFolder("Проекты", rule: SmartRule(tags: ["ПРОЕКТ"]))
+check(smartLib.files(in: byTag.id).map(\.id).sorted { $0.uuidString < $1.uuidString } == [sNote.id, sPlain.id].sorted { $0.uuidString < $1.uuidString },
+      "a smart folder collects the files that carry its tag, whatever their case and folder")
+check(smartLib.fileCount(in: byTag.id) == 2 && smartLib.files(in: sHome.id).map(\.id) == [sNote.id], "files stay in their own folders")
+smartLib.setInlineTags(sCode.id, ["проект"])
+check(smartLib.files(in: byTag.id).count == 3, "a tag that appears in a text brings the file into the folder")
+smartLib.setInlineTags(sCode.id, [])
+check(smartLib.files(in: byTag.id).count == 2, "and takes it out again when the tag is gone")
+let both = smartLib.createSmartFolder("Обе", rule: SmartRule(tags: ["проект", "идея"], matchAllTags: true))
+let either = smartLib.createSmartFolder("Любая", rule: SmartRule(tags: ["идея", "нет такого"], matchAllTags: false))
+check(smartLib.files(in: both.id).map(\.id) == [sPlain.id] && smartLib.files(in: either.id).map(\.id) == [sPlain.id], "match all / match any tags")
+let byType = smartLib.createSmartFolder("Заметки", rule: SmartRule(types: ["markdown"]))
+check(smartLib.files(in: byType.id).map(\.id) == [sNote.id], "a smart folder with no tag collects files of the chosen type")
+let typeAndTag = smartLib.createSmartFolder("Текст с тегом", rule: SmartRule(tags: ["идея"], types: ["text", "markdown"]))
+check(smartLib.files(in: typeAndTag.id).map(\.id) == [sPlain.id], "tag and type conditions are combined")
+let anyType = smartLib.createSmartFolder("Всё", rule: SmartRule())
+check(smartLib.files(in: anyType.id).isEmpty, "a rule with no condition collects nothing")
+let sortedByType = smartLib.createSmartFolder("По типу", rule: SmartRule(types: ["python", "markdown", "text"], sort: .type))
+check(smartLib.files(in: sortedByType.id).map(\.id) == [sNote.id, sCode.id, sPlain.id], "sorting by file type")
+smartLib.move(sPlain.id, to: byTag.id)
+check(smartLib.file(sPlain.id)?.folderID == nil, "files cannot be moved into a smart folder")
+check(!smartLib.moveFolder(sHome.id, to: byTag.id) && !smartLib.folderChoices.contains { $0.folder.isSmart }, "folders cannot go into a smart folder and it is not a move target")
+smartLib.renameTag("проект", to: "work")
+check(smartLib.folder(byTag.id)?.smart?.tags == ["work"] && smartLib.files(in: byTag.id).count == 2, "renaming a tag updates smart folders")
+smartLib.deleteTag("идея")
+check(smartLib.folder(both.id)?.smart?.tags == ["work"], "deleting a tag removes it from smart folders")
+smartLib.updateSmartFolder(byTag.id, name: "Work", rule: SmartRule(types: ["python"]))
+check(smartLib.folder(byTag.id)?.name == "Work" && smartLib.files(in: byTag.id).map(\.id) == [sCode.id], "editing a smart folder changes its rule")
+check(smartLib.deleteFolder(byTag.id).isEmpty && smartLib.file(sCode.id) != nil, "deleting a smart folder keeps the files")
+smartLib.flush()
+let reloaded = LibraryStore(storeURL: dir.appendingPathComponent("smart.json"))
+check(reloaded.folder(typeAndTag.id)?.smart?.types == ["text", "markdown"] && reloaded.folder(typeAndTag.id)?.isSmart == true, "smart folders are saved to disk")
+
+// Contents of folders, archives and disk images, read without opening them
+let peek = dir.appendingPathComponent("peek", isDirectory: true)
+try FileManager.default.createDirectory(at: peek.appendingPathComponent("src/deep"), withIntermediateDirectories: true)
+try "hello".write(to: peek.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+try String(repeating: "x", count: 2000).write(to: peek.appendingPathComponent("src/deep/Привет мир.md"), atomically: true, encoding: .utf8)
+try "hidden".write(to: peek.appendingPathComponent(".secret"), atomically: true, encoding: .utf8)
+let folderListing = ContentsLister.listFolder(peek)
+check(folderListing.files == 2 && folderListing.folders == 2 && folderListing.size == 2005, "folder listing counts files, folders and bytes (hidden files skipped)")
+check(folderListing.entries.first?.name == "src" && folderListing.entries.first?.children?.first?.children?.first?.name == "Привет мир.md", "folders come first and nest")
+check(folderListing.entries.first?.size == 2000, "a folder's size is the sum of what is inside")
+func shell(_ path: String, _ args: [String], in directory: URL? = nil) -> Bool {
+    let p = Process(); p.executableURL = URL(fileURLWithPath: path); p.arguments = args; p.currentDirectoryURL = directory
+    p.standardOutput = FileHandle.nullDevice; p.standardError = FileHandle.nullDevice
+    do { try p.run() } catch { return false }
+    p.waitUntilExit(); return p.terminationStatus == 0
+}
+let zipURL = dir.appendingPathComponent("sample.zip")
+check(shell("/usr/bin/zip", ["-qr", zipURL.path, "a.txt", "src"], in: peek), "test zip is created")
+if let listing = try? ContentsLister.list(zipURL) {
+    check(listing.files == 2 && listing.folders == 2 && listing.entries.contains { $0.name == "a.txt" && $0.size == 5 }, "zip contents are listed")
+    check(listing.entries.first?.children?.first?.children?.first?.name == "Привет мир.md", "non-ASCII names with spaces survive in a zip listing")
+} else { check(false, "zip contents are listed") }
+let tgzURL = dir.appendingPathComponent("sample.tar.gz")
+check(shell("/usr/bin/tar", ["-czf", tgzURL.path, "a.txt", "src"], in: peek), "test tar.gz is created")
+check((try? ContentsLister.list(tgzURL))?.files == 2, "tar.gz contents are listed")
+let notArchive = dir.appendingPathComponent("broken.zip")
+try "not a zip".write(to: notArchive, atomically: true, encoding: .utf8)
+check((try? ContentsLister.list(notArchive)) == nil, "a broken archive is an error, not an empty listing")
+check(ContentsLister.kind(of: URL(fileURLWithPath: "/a/b.DMG")) == .diskImage && ContentsLister.kind(of: URL(fileURLWithPath: "/a/b.tar.xz")) == .archive
+      && ContentsLister.kind(of: URL(fileURLWithPath: "/a/b.md")) == nil, "containers are recognised by name")
+let dmgURL = dir.appendingPathComponent("sample.dmg")
+if shell("/usr/bin/hdiutil", ["create", "-quiet", "-srcfolder", peek.path, "-format", "UDZO", "-volname", "PeekTest", dmgURL.path]) {
+    if let listing = try? ContentsLister.list(dmgURL) {
+        check(listing.files == 2 && listing.entries.contains { $0.name == "a.txt" }, "dmg contents are listed")
+    } else { check(false, "dmg contents are listed") }
+    let info = (try? ContentsLister.run("/usr/bin/hdiutil", ["info"], timeout: 30))?.out ?? Data()
+    check(!String(decoding: info, as: UTF8.self).contains("sample.dmg"), "the dmg is detached again")
+} else { print("skip: hdiutil cannot create an image here") }
+
 try? FileManager.default.removeItem(at: dir)
 exit(failures == 0 ? 0 : 1)

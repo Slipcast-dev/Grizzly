@@ -65,6 +65,8 @@ Get the files from the **[latest release](https://github.com/Slipcast-dev/Grizzl
 - **Live reload** — a banner appears when the file changes on disk (handy for files written by scripts or AI tools).
 - **7 themes** (Xcode, GitHub, Solarized, Dracula, Monokai, Nord, One Dark), light / dark / follow system, the glass effect of macOS with adjustable
   transparency, 16 built-in fonts (Cyrillic included) and a font and size of its own for the interface.
+- **Smart folders** (macOS) — folders that collect files by `#tag` and file type by themselves, marked with a gear like in Apple Notes.
+- **Look inside** (macOS) — a quick listing of the contents of folders, archives (zip, tar, 7z, rar …) and disk images (dmg, iso) without opening or unpacking them.
 - **Quick Look in Finder** (macOS) — press Space on Markdown, YAML, CSV or log files to preview them without opening Grizzly.
 - **Default app picker** (macOS) — Settings → File types makes Grizzly the default app for chosen extensions.
 - **English and Russian** interface.

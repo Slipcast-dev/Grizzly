@@ -38,6 +38,47 @@ extension LibraryFile {
     }
 }
 
+/// What a smart folder collects: the files of the library that carry its tags and are of its types. The folder holds no
+/// files of its own; its content is worked out from the rule, so a file lands in it the moment a tag appears in its text.
+struct SmartRule: Codable, Hashable {
+    enum Sort: String, Codable, CaseIterable { case name, type, opened }
+
+    /// Tags without the leading "#". Empty: tags are not considered.
+    var tags: [String] = []
+    /// True: a file needs every tag; false: any one of them is enough.
+    var matchAllTags = true
+    /// `FileType` raw values. Empty: the type is not considered.
+    var types: [String] = []
+    var sort: Sort = .name
+
+    init(tags: [String] = [], matchAllTags: Bool = true, types: [String] = [], sort: Sort = .name) {
+        self.tags = tags; self.matchAllTags = matchAllTags; self.types = types; self.sort = sort
+    }
+
+    // Written by hand so a rule saved by a later version with other keys still loads.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
+        matchAllTags = try c.decodeIfPresent(Bool.self, forKey: .matchAllTags) ?? true
+        types = try c.decodeIfPresent([String].self, forKey: .types) ?? []
+        sort = (try? c.decodeIfPresent(Sort.self, forKey: .sort)) ?? .name
+    }
+
+    /// A rule with no condition matches nothing (rather than every file).
+    var isEmpty: Bool { tags.isEmpty && types.isEmpty }
+
+    func matches(_ file: LibraryFile) -> Bool {
+        guard !isEmpty else { return false }
+        if !tags.isEmpty {
+            let own = file.tags + file.inlineTags
+            let has: (String) -> Bool = { tag in own.contains { $0.caseInsensitiveCompare(tag) == .orderedSame } }
+            if matchAllTags ? !tags.allSatisfy(has) : !tags.contains(where: has) { return false }
+        }
+        if !types.isEmpty, !types.contains(file.type.rawValue) { return false }
+        return true
+    }
+}
+
 struct LibraryFolder: Identifiable, Codable, Hashable {
     var id = UUID()
     var name: String
@@ -46,6 +87,10 @@ struct LibraryFolder: Identifiable, Codable, Hashable {
     var sourcePath: String?
     /// The folder this one lives in; nil for a folder at the top level of the library.
     var parentID: UUID?
+    /// Set for a smart folder, which collects files by tag and type instead of holding them.
+    var smart: SmartRule?
+
+    var isSmart: Bool { smart != nil }
 }
 
 /// A file the reader opened. Lives apart from the library, so removing a file from the sidebar keeps its history.
@@ -112,6 +157,8 @@ final class LibraryStore: ObservableObject {
         var tagsBuilt = false
         var allTags: [String] = []
         var tagCounts: [String: Int] = [:]
+        /// Members of each smart folder, worked out on first use and dropped on any change of the library.
+        var smart: [UUID: [UUID]] = [:]
     }
     private let cache = Cache()
 
@@ -174,6 +221,7 @@ final class LibraryStore: ObservableObject {
     }
 
     private func invalidate(_ change: Change) {
+        cache.smart = [:]
         switch change {
         case .structure: cache.built = false; cache.tagsBuilt = false
         case .tags: cache.tagsBuilt = false
@@ -217,8 +265,43 @@ final class LibraryStore: ObservableObject {
     func file(_ id: UUID) -> LibraryFile? { structure().positions[id].map { data.files[$0] } }
 
     func files(in folderID: UUID?) -> [LibraryFile] {
-        (structure().filesIn[folderID] ?? []).compactMap { structure().positions[$0].map { data.files[$0] } }
+        if let folderID, folder(folderID)?.isSmart == true {
+            return smartMembers(folderID).compactMap { structure().positions[$0].map { data.files[$0] } }
+        }
+        return (structure().filesIn[folderID] ?? []).compactMap { structure().positions[$0].map { data.files[$0] } }
     }
+
+    /// The files a smart folder collects, in the order its rule asks for.
+    private func smartMembers(_ id: UUID) -> [UUID] {
+        if let hit = cache.smart[id] { return hit }
+        guard let rule = folder(id)?.smart else { return [] }
+        let ids = ordered(data.files.filter(rule.matches), by: rule.sort).map(\.id)
+        cache.smart[id] = ids
+        return ids
+    }
+
+    private func ordered(_ files: [LibraryFile], by sort: SmartRule.Sort) -> [LibraryFile] {
+        switch sort {
+        case .name:
+            return files.sorted { Self.before($0.name, $1.name) }
+        case .type:
+            return files.sorted { a, b in
+                a.type == b.type ? Self.before(a.name, b.name) : Self.before(a.type.title, b.type.title)
+            }
+        case .opened:
+            return files.sorted { a, b in
+                switch (a.lastOpened, b.lastOpened) {
+                case let (x?, y?) where x != y: return x > y
+                case (_?, nil): return true
+                case (nil, _?): return false
+                default: return Self.before(a.name, b.name)
+                }
+            }
+        }
+    }
+
+    /// How many files a rule would collect right now (the settings of a smart folder show it while being edited).
+    func smartMatchCount(_ rule: SmartRule) -> Int { rule.isEmpty ? 0 : data.files.filter(rule.matches).count }
 
     /// Opened files, newest first, whether or not they are still in the library.
     var recents: [HistoryEntry] {
@@ -256,7 +339,9 @@ final class LibraryStore: ObservableObject {
     }
 
     /// Number of files in a folder and all the folders inside it.
-    func fileCount(in id: UUID) -> Int { structure().counts[id] ?? 0 }
+    func fileCount(in id: UUID) -> Int {
+        folder(id)?.isSmart == true ? smartMembers(id).count : (structure().counts[id] ?? 0)
+    }
 
     /// "Work / 2026 / Reports": where a folder lives, for menus that list every folder.
     func folderPath(_ id: UUID) -> String {
@@ -272,8 +357,9 @@ final class LibraryStore: ObservableObject {
     }
 
     /// Every folder with its path, sorted by path: the targets of "Move to…".
+    /// Smart folders are left out: files cannot be put into them.
     var folderChoices: [(folder: LibraryFolder, path: String)] {
-        data.folders.map { ($0, folderPath($0.id)) }.sorted { Self.before($0.1, $1.1) }
+        data.folders.filter { !$0.isSmart }.map { ($0, folderPath($0.id)) }.sorted { Self.before($0.1, $1.1) }
     }
 
     func isMissing(_ id: UUID) -> Bool { missing.contains(id) }
@@ -393,6 +479,7 @@ final class LibraryStore: ObservableObject {
     }
 
     func move(_ fileID: UUID, to folderID: UUID?) {
+        if let folderID, folder(folderID)?.isSmart == true { return }
         mutate { d in
             guard let i = d.files.firstIndex(where: { $0.id == fileID }), d.files[i].folderID != folderID else { return }
             d.files[i].folderID = folderID
@@ -604,6 +691,7 @@ final class LibraryStore: ObservableObject {
         mutate(.tags) { d in
             swap(&d.tags)
             for i in d.files.indices { swap(&d.files[i].tags); swap(&d.files[i].inlineTags) }
+            for i in d.folders.indices where d.folders[i].smart != nil { swap(&d.folders[i].smart!.tags) }
         }
     }
 
@@ -612,6 +700,9 @@ final class LibraryStore: ObservableObject {
             d.tags.removeAll { $0.caseInsensitiveCompare(tag) == .orderedSame }
             for i in d.files.indices { d.files[i].inlineTags.removeAll { $0.caseInsensitiveCompare(tag) == .orderedSame } }
             for i in d.files.indices { d.files[i].tags.removeAll { $0.caseInsensitiveCompare(tag) == .orderedSame } }
+            for i in d.folders.indices where d.folders[i].smart != nil {
+                d.folders[i].smart!.tags.removeAll { $0.caseInsensitiveCompare(tag) == .orderedSame }
+            }
         }
     }
 
@@ -639,6 +730,8 @@ final class LibraryStore: ObservableObject {
 
     @discardableResult
     func createFolder(_ name: String, parent: UUID? = nil) -> LibraryFolder {
+        // Nothing lives inside a smart folder: a folder meant for it goes next to it instead.
+        let parent = parent.flatMap { self.folder($0)?.isSmart == true ? self.folder($0)?.parentID : $0 }
         var folder = LibraryFolder(name: name)
         folder.parentID = parent
         mutate { d in
@@ -646,6 +739,24 @@ final class LibraryStore: ObservableObject {
             if let parent, let p = d.folders.firstIndex(where: { $0.id == parent }) { d.folders[p].isExpanded = true }
         }
         return folder
+    }
+
+    @discardableResult
+    func createSmartFolder(_ name: String, rule: SmartRule, parent: UUID? = nil) -> LibraryFolder {
+        var folder = LibraryFolder(name: name)
+        folder.parentID = parent.flatMap { self.folder($0)?.isSmart == true ? nil : $0 }
+        folder.smart = rule
+        mutate { $0.folders.append(folder) }
+        return folder
+    }
+
+    /// Changes the name and the rule of a smart folder.
+    func updateSmartFolder(_ id: UUID, name: String, rule: SmartRule) {
+        mutate { d in
+            guard let i = d.folders.firstIndex(where: { $0.id == id }), d.folders[i].smart != nil else { return }
+            d.folders[i].name = name
+            d.folders[i].smart = rule
+        }
     }
 
     func renameFolder(_ id: UUID, to name: String) {
@@ -659,7 +770,7 @@ final class LibraryStore: ObservableObject {
     @discardableResult
     func moveFolder(_ id: UUID, to parent: UUID?) -> Bool {
         guard let folder = folder(id), folder.parentID != parent else { return false }
-        if let parent, subtreeIDs(of: id).contains(parent) { return false }
+        if let parent, subtreeIDs(of: id).contains(parent) || self.folder(parent)?.isSmart == true { return false }
         if folderExists(folder.name, in: parent, ignoring: id) { return false }
         mutate { d in
             guard let i = d.folders.firstIndex(where: { $0.id == id }) else { return }
