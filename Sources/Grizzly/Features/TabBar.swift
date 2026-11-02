@@ -3,7 +3,7 @@ import SwiftUI
 struct TabBar: View {
     @EnvironmentObject private var state: AppState
     @Environment(\.theme) private var theme
-    @Environment(\.surfaceOpacity) private var surface
+    @Environment(\.tabsOpacity) private var surface
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -23,7 +23,7 @@ private struct TabItem: View {
     let doc: Document
     @EnvironmentObject private var state: AppState
     @Environment(\.theme) private var theme
-    @Environment(\.surfaceOpacity) private var surface
+    @Environment(\.tabsOpacity) private var surface
     @State private var hovering = false
 
     private var isLeft: Bool { state.selection == doc.id }

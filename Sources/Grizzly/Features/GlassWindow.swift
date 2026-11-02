@@ -1,28 +1,6 @@
 import AppKit
 import SwiftUI
 
-/// How the glass looks: which system material is blurred behind the window.
-enum GlassMaterial: String, CaseIterable, Identifiable {
-    case window, sidebar, hud
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .window: return L("Окно")
-        case .sidebar: return L("Боковая панель")
-        case .hud: return L("Тёмное стекло")
-        }
-    }
-
-    var material: NSVisualEffectView.Material {
-        switch self {
-        case .window: return .underWindowBackground
-        case .sidebar: return .sidebar
-        case .hud: return .hudWindow
-        }
-    }
-}
-
 /// The blurred, see-through layer behind the content of the window (the "glass" of macOS).
 struct VisualEffect: NSViewRepresentable {
     let material: NSVisualEffectView.Material
@@ -54,7 +32,15 @@ struct GlassWindowConfigurator: NSViewRepresentable {
 
 private struct SurfaceOpacityKey: EnvironmentKey { static let defaultValue = 1.0 }
 
+private struct TabsOpacityKey: EnvironmentKey { static let defaultValue = 1.0 }
+
 extension EnvironmentValues {
+    /// How opaque the tab bar is.
+    var tabsOpacity: Double {
+        get { self[TabsOpacityKey.self] }
+        set { self[TabsOpacityKey.self] = newValue }
+    }
+
     /// How opaque the document backgrounds are: below 1 the glass behind the window shows through.
     var surfaceOpacity: Double {
         get { self[SurfaceOpacityKey.self] }

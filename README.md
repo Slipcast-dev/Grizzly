@@ -36,9 +36,9 @@ Get the files from the **[latest release](https://github.com/Slipcast-dev/Grizzl
 
 | Platform | File | Notes |
 |---|---|---|
-| macOS 13+, Apple Silicon | `Grizzly-1.4.0-arm64.dmg` | Drag *Grizzly* to *Applications* |
-| macOS 13+, Intel | `Grizzly-1.4.0-x64.dmg` | Drag *Grizzly* to *Applications* |
-| Windows 10/11, x64 | `Grizzly-1.4.0-portable.exe` | Portable, no installer |
+| macOS 13+, Apple Silicon | `Grizzly-1.4.1-arm64.dmg` | Drag *Grizzly* to *Applications* |
+| macOS 13+, Intel | `Grizzly-1.4.1-x64.dmg` | Drag *Grizzly* to *Applications* |
+| Windows 10/11, x64 | `Grizzly-1.4.1-portable.exe` | Portable, no installer |
 
 > [!IMPORTANT]
 > The builds are **not code-signed or notarized**. macOS Gatekeeper and Windows SmartScreen will warn on first
@@ -63,8 +63,8 @@ Get the files from the **[latest release](https://github.com/Slipcast-dev/Grizzl
 - **Tabs** and **two files side by side**.
 - **Virtual library** — folders (also inside folders; open a whole folder or pick several rows at once) and favorites that never touch your files (only renaming or deleting a tag edits the text of files that use it, after a confirmation), plus an open history that survives removing a file from the sidebar.
 - **Live reload** — a banner appears when the file changes on disk (handy for files written by scripts or AI tools).
-- **7 themes** (Xcode, GitHub, Solarized, Dracula, Monokai, Nord, One Dark), light / dark / follow system, the glass effect of macOS with adjustable
-  transparency, 16 built-in fonts (Cyrillic included) and a font and size of its own for the interface.
+- **7 themes** (Xcode, GitHub, Solarized, Dracula, Monokai, Nord, One Dark), light / dark / follow system, the glass effect of macOS with separate
+  transparency for the sidebar, tabs and document, 16 built-in fonts (Cyrillic included) and a font and size of its own for the interface.
 - **Smart folders** (macOS) — folders that collect files by `#tag` and file type by themselves, marked with a gear like in Apple Notes.
 - **Look inside** (macOS) — a quick listing of the contents of folders, archives (zip, tar, 7z, rar …) and disk images (dmg, iso) without opening or unpacking them.
 - **Quick Look in Finder** (macOS) — press Space on Markdown, YAML, CSV or log files to preview them without opening Grizzly.

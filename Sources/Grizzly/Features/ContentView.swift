@@ -11,13 +11,14 @@ struct ContentView: View {
 
         NavigationSplitView {
             SidebarView()
+                .background(theme.background.opacity(prefs.sidebarTint))
                 .id(prefs.uiFontKey)
                 .navigationSplitViewColumnWidth(min: 190, ideal: 230, max: 320)
         } detail: {
             DetailView(fontSize: CGFloat(prefs.fontSize))
                 .id(prefs.uiFontKey)
                 .background(theme.background.opacity(prefs.surfaceOpacity))
-                .background { if prefs.glassEnabled { VisualEffect(material: prefs.glassMaterial.material) } }
+                .background { if prefs.glassEnabled { VisualEffect(material: .underWindowBackground) } }
         }
         .environment(\.font, AppFont.body)
         .background(WindowFrameSaver(name: "GrizzlyMainWindow"))
@@ -68,6 +69,7 @@ struct ContentView: View {
         }
         .environment(\.theme, theme)
         .environment(\.surfaceOpacity, prefs.surfaceOpacity)
+        .environment(\.tabsOpacity, prefs.tabsOpacity)
         .preferredColorScheme(theme.isDark ? .dark : .light)
         .onChange(of: state.mode) { _ in
             state.recomputeMatches(reset: false)

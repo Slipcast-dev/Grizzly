@@ -96,21 +96,10 @@ struct SettingsView: View {
             }
             card("Эффект стекла") {
                 Toggle("Прозрачное окно с размытием, как в macOS", isOn: $settings.glassEnabled)
-                row("Прозрачность") {
-                    Slider(value: $settings.glassAmount, in: 0...1)
-                    Text("\(Int(settings.glassAmount * 100))%").monospacedDigit().frame(width: 48, alignment: .trailing)
-                }
-                .disabled(!settings.glassEnabled)
-                row("Материал") {
-                    Picker("", selection: $settings.glassMaterial) {
-                        ForEach(GlassMaterial.allCases) { Text($0.title).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .frame(width: 300)
-                }
-                .disabled(!settings.glassEnabled)
-                Text("Сквозь фон окна и документа проступает рабочий стол. Чем выше прозрачность, тем слабее фон; если текст читается плохо, уменьшите её или выключите эффект.")
+                glassRow("Боковая панель", $settings.glassSidebar)
+                glassRow("Вкладки", $settings.glassTabs)
+                glassRow("Документ", $settings.glassAmount)
+                Text("Сквозь фон окна проступает рабочий стол; у боковой панели, вкладок и документа своя прозрачность. Чем выше значение, тем слабее фон; если текст читается плохо, уменьшите его или выключите эффект.")
                     .font(AppFont.caption).foregroundColor(.secondary)
             }
             card("Шрифт интерфейса") {
@@ -233,6 +222,14 @@ struct SettingsView: View {
             }
         }
         .disabled(!settings.syntaxEnabled)
+    }
+
+    private func glassRow(_ title: LocalizedStringKey, _ value: Binding<Double>) -> some View {
+        row(title) {
+            Slider(value: value, in: 0...1)
+            Text("\(Int(value.wrappedValue * 100))%").monospacedDigit().frame(width: 48, alignment: .trailing)
+        }
+        .disabled(!settings.glassEnabled)
     }
 
     private func card<C: View>(_ title: LocalizedStringKey, @ViewBuilder _ content: () -> C) -> some View {

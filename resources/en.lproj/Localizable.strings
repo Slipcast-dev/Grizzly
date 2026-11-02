@@ -327,7 +327,7 @@
 "Окно" = "Window";
 "Боковая панель" = "Sidebar";
 "Тёмное стекло" = "Dark Glass";
-"Сквозь фон окна и документа проступает рабочий стол. Чем выше прозрачность, тем слабее фон; если текст читается плохо, уменьшите её или выключите эффект." = "The desktop shows through the background of the window and the document. The higher the transparency, the weaker the background; if the text is hard to read, lower it or turn the effect off.";
+"Сквозь фон окна проступает рабочий стол; у боковой панели, вкладок и документа своя прозрачность. Чем выше значение, тем слабее фон; если текст читается плохо, уменьшите его или выключите эффект." = "The desktop shows through the window; the sidebar, the tabs and the document each have their own transparency. The higher the value, the weaker the background; if the text is hard to read, lower it or turn the effect off.";
 "Читаем содержимое…" = "Reading contents…";
 "Не удалось прочитать" = "Couldn’t read it";
 "Файлов: %lld" = "Files: %lld";
@@ -358,3 +358,4 @@
 "Условия не заданы. Откройте настройки папки." = "No conditions set. Open the folder settings.";
 "Подходящих файлов пока нет." = "No matching files yet.";
 "Настроить смарт-папку…" = "Smart Folder Settings…";
+"Документ" = "Document";

@@ -49,8 +49,8 @@ final class Preferences: ObservableObject {
 
     private let defaults = UserDefaults.standard
 
-    @Published var appearance: Appearance { didSet { defaults.set(appearance.rawValue, forKey: "appearance") } }
-    @Published var themeID: String { didSet { defaults.set(themeID, forKey: "themeID") } }
+    @Published var appearance: Appearance { didSet { defaults.set(appearance.rawValue, forKey: "appearance"); applyAppearance() } }
+    @Published var themeID: String { didSet { defaults.set(themeID, forKey: "themeID"); applyAppearance() } }
     @Published var fontName: String { didSet { defaults.set(fontName, forKey: "fontName") } }
     @Published var fontSize: Double { didSet { defaults.set(fontSize, forKey: "fontSize") } }
     /// Font and size of the application's own interface (not of the documents).
@@ -61,8 +61,10 @@ final class Preferences: ObservableObject {
     @Published var showLineNumbers: Bool { didSet { defaults.set(showLineNumbers, forKey: "showLineNumbers") } }
     /// The glass effect: the window is see-through and blurs what is behind it. `glassAmount` is how much (0...1).
     @Published var glassEnabled: Bool { didSet { defaults.set(glassEnabled, forKey: "glassEnabled") } }
+    /// How much each part lets the desktop through (0...1): the document, the tab bar and the sidebar are set apart.
     @Published var glassAmount: Double { didSet { defaults.set(glassAmount, forKey: "glassAmount") } }
-    @Published var glassMaterial: GlassMaterial { didSet { defaults.set(glassMaterial.rawValue, forKey: "glassMaterial") } }
+    @Published var glassTabs: Double { didSet { defaults.set(glassTabs, forKey: "glassTabs") } }
+    @Published var glassSidebar: Double { didSet { defaults.set(glassSidebar, forKey: "glassSidebar") } }
     @Published var autoReload: Bool { didSet { defaults.set(autoReload, forKey: "autoReload") } }
     /// A check list item that gets ticked moves to the end of its list.
     @Published var moveDoneTasks: Bool { didSet { defaults.set(moveDoneTasks, forKey: "moveDoneTasks") } }
@@ -72,7 +74,7 @@ final class Preferences: ObservableObject {
     /// Spelling and grammar checking (Russian and English) with underlined mistakes in Edit mode.
     @Published var spellCheck: Bool { didSet { defaults.set(spellCheck, forKey: "spellCheck") } }
     @Published var language: AppLanguage { didSet { language.apply() } }
-    @Published private(set) var systemIsDark: Bool
+    @Published private(set) var systemIsDark: Bool { didSet { applyAppearance() } }
 
     private init() {
         let d = UserDefaults.standard
@@ -86,7 +88,8 @@ final class Preferences: ObservableObject {
         showLineNumbers = d.object(forKey: "showLineNumbers") as? Bool ?? true
         glassEnabled = d.object(forKey: "glassEnabled") as? Bool ?? true
         glassAmount = d.object(forKey: "glassAmount") as? Double ?? 0.35
-        glassMaterial = GlassMaterial(rawValue: d.string(forKey: "glassMaterial") ?? "") ?? .window
+        glassTabs = d.object(forKey: "glassTabs") as? Double ?? (d.object(forKey: "glassAmount") as? Double ?? 0.35)
+        glassSidebar = d.object(forKey: "glassSidebar") as? Double ?? 1
         autoReload = d.object(forKey: "autoReload") as? Bool ?? false
         moveDoneTasks = d.object(forKey: "moveDoneTasks") as? Bool ?? true
         syntaxEnabled = d.object(forKey: "syntaxEnabled") as? Bool ?? true
@@ -98,12 +101,27 @@ final class Preferences: ObservableObject {
         DistributedNotificationCenter.default().addObserver(
             forName: Notification.Name("AppleInterfaceThemeChangedNotification"), object: nil, queue: .main
         ) { [weak self] _ in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { self?.systemIsDark = Preferences.readSystemDark() }
+            // The preference may not be written yet when the notification arrives: read it again a little later.
+            for delay in [0.2, 0.8] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { self?.systemIsDark = Preferences.readSystemDark() }
+            }
         }
     }
 
     private static func readSystemDark() -> Bool {
-        UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark"
+        CFPreferencesAppSynchronize(kCFPreferencesAnyApplication)
+        let style = CFPreferencesCopyAppValue("AppleInterfaceStyle" as CFString, kCFPreferencesAnyApplication) as? String
+        return style == "Dark"
+    }
+
+    /// Makes the whole app (sidebar, toolbar, Settings, panels), not only the document area, follow the chosen look.
+    /// It is set explicitly, never left to the system, so that nothing stays in the previous scheme.
+    func applyAppearance() {
+        guard let app = NSApp else { return }
+        let name: NSAppearance.Name = theme.isDark ? .darkAqua : .aqua
+        guard app.appearance?.name != name else { return }
+        app.appearance = NSAppearance(named: name)
+        for window in app.windows { window.appearance = nil; window.invalidateShadow() }
     }
 
     /// Changes with the interface font; the views that use `AppFont` are rebuilt when it does.
@@ -111,6 +129,10 @@ final class Preferences: ObservableObject {
 
     /// Opacity of the backgrounds of documents and tabs: 1 without the glass effect.
     var surfaceOpacity: Double { glassEnabled ? 1 - 0.8 * glassAmount : 1 }
+    /// The same for the tab bar.
+    var tabsOpacity: Double { glassEnabled ? 1 - 0.8 * glassTabs : 1 }
+    /// Opacity of the tint over the sidebar's own material: 0 (the plain system sidebar) when the slider is at 100%.
+    var sidebarTint: Double { glassEnabled ? 1 - glassSidebar : 0 }
 
     var wantsDark: Bool {
         switch appearance {

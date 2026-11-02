@@ -5,6 +5,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWindow.allowsAutomaticWindowTabbing = false
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        Preferences.shared.applyAppearance()
+        WindowFronting.installGuard()
         AppState.shared.startWatching()
         AppState.shared.scanTagsInLibrary()
         // Every launch asks GitHub whether a newer version is out; the answer appears only if there is one.
@@ -28,8 +30,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Finder (double click, "Open With"), the Dock and `open -a` deliver files here, also while the app is launching.
     func application(_ application: NSApplication, open urls: [URL]) {
+        WindowFronting.noteExternalOpen()
         AppState.shared.openExternal(urls)
-        NSApp.activate(ignoringOtherApps: true)
+        WindowFronting.bringMainWindowForward()
     }
 
     /// Clicking the Dock icon after the last window was closed brings a window back.
@@ -55,7 +58,7 @@ struct GrizzlyApp: App {
                 .environmentObject(settings)
                 .frame(minWidth: 720, minHeight: 460)
                 // Some macOS versions deliver Finder's open event to the scene instead of the app delegate.
-                .onOpenURL { state.openExternal([$0]) }
+                .onOpenURL { state.openExternal([$0]); WindowFronting.bringMainWindowForward() }
         }
         .windowToolbarStyle(.unified)
         Settings { SettingsView().environmentObject(settings) }
@@ -176,6 +179,35 @@ struct GrizzlyApp: App {
                 Button("Мельче") { settings.resizeFont(by: -1) }.keyboardShortcut("-")
             }
         }
+    }
+}
+
+/// A file opened from Finder must never shrink the window into the Dock: bring it back and to the front instead.
+enum WindowFronting {
+    private static var lastExternalOpen = Date.distantPast
+    private static var observers: [NSObjectProtocol] = []
+
+    /// While a file is being handed over by Finder, the window is not allowed to go into the Dock or the app to hide.
+    static func installGuard() {
+        let center = NotificationCenter.default
+        observers.append(center.addObserver(forName: NSWindow.didMiniaturizeNotification, object: nil, queue: .main) { note in
+            guard Date().timeIntervalSince(lastExternalOpen) < 3, let window = note.object as? NSWindow else { return }
+            DispatchQueue.main.async { window.deminiaturize(nil) }
+        })
+        observers.append(center.addObserver(forName: NSApplication.didHideNotification, object: nil, queue: .main) { _ in
+            guard Date().timeIntervalSince(lastExternalOpen) < 3 else { return }
+            DispatchQueue.main.async { NSApp.unhide(nil) }
+        })
+    }
+
+    static func noteExternalOpen() { lastExternalOpen = Date() }
+
+    static func bringMainWindowForward() {
+        lastExternalOpen = Date()
+        NSApp.activate(ignoringOtherApps: true)
+        guard let window = NSApp.windows.first(where: { $0.canBecomeMain && !($0 is NSPanel) }) else { return }
+        if window.isMiniaturized { window.deminiaturize(nil) }
+        window.makeKeyAndOrderFront(nil)
     }
 }
 

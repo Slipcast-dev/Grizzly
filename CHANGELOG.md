@@ -3,6 +3,17 @@
 All notable changes are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.4.1] - 2026-11-02
+
+> The fixes and the glass settings are in the **macOS** app. The Windows build is version-aligned and unchanged.
+
+### Changed
+- **Glass effect** (macOS): the sidebar, the tab bar and the document now have their own transparency sliders (*Settings → Appearance*), instead of one slider for everything. The material picker (Window, Sidebar, Dark Glass) is gone: the blur is always the standard window material. The sidebar slider at 100% keeps the system look and makes the sidebar denser as it goes down. The tab bar starts from your previous transparency.
+
+### Fixed
+- **Themes** (macOS): Light, Dark and *Same as system* now change the whole app (sidebar, toolbar, Settings and panels), not only the document area, so nothing stays in the previous scheme; *Same as system* follows the system switch, also the automatic one.
+- **Window shrinking into the Dock** (macOS): a file opened from Finder while another is already open no longer minimizes the window; the window comes back to the front.
+
 ## [1.4.0] - 2026-11-01
 
 > Both new features are in the **macOS** app. The Windows build is version-aligned and keeps the feature set of 1.3.0.

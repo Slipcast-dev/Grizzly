@@ -11,3 +11,4 @@ docs/reference-style.webp
 *.exe
 # the project website lives in its own repository
 website/
+.build/
