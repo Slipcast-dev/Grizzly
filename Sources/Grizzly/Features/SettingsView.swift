@@ -203,6 +203,8 @@ struct SettingsView: View {
                 UpdateView(updater: updater)
                 Text("Grizzly проверяет GitHub при каждом запуске. Новая версия скачивается и устанавливается прямо из приложения.")
                     .font(AppFont.caption).foregroundColor(.secondary)
+                Text("Лицензия: © 2026 Slipcast-dev. Изменять и распространять Grizzly без письменного согласия автора запрещено.")
+                    .font(AppFont.caption).foregroundColor(.secondary)
             }
 
         case .types:

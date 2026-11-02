@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://github.com/Slipcast-dev/Grizzly/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Slipcast-dev/Grizzly?style=for-the-badge&color=ff9f0a"></a>
   <a href="https://github.com/Slipcast-dev/Grizzly/releases"><img alt="Total downloads" src="https://img.shields.io/github/downloads/Slipcast-dev/Grizzly/total?style=for-the-badge&color=34c759&label=downloads"></a>
-  <a href="LICENSE"><img alt="License: Proprietary" src="https://img.shields.io/github/license/Slipcast-dev/Grizzly?style=for-the-badge&color=7fd4c1"></a>
+  <a href="LICENSE"><img alt="License: Proprietary" src="https://img.shields.io/badge/license-Proprietary-7fd4c1?style=for-the-badge"></a>
   <a href="https://github.com/Slipcast-dev/Grizzly/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/Slipcast-dev/Grizzly/ci.yml?branch=main&style=for-the-badge&label=CI"></a>
   <img alt="Platforms" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-4a9eff?style=for-the-badge">
   <img alt="Languages" src="https://img.shields.io/badge/UI-EN%20%7C%20RU-c9b6f5?style=for-the-badge">
@@ -124,4 +124,4 @@ Issues and pull requests are welcome — read [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## License
 
-[Grizzly Proprietary License](LICENSE) © 2026 Slipcast-dev
+[Grizzly Proprietary License](LICENSE) © 2026 Slipcast-dev. Modifying or redistributing the app without the author's written consent is prohibited.

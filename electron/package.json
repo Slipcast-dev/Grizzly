@@ -5,6 +5,9 @@
   "description": "Reader for Markdown and text files (Windows/Electron port of Grizzly)",
   "main": "main.js",
   "private": true,
+  "license": "SEE LICENSE IN LICENSE",
+  "author": "Slipcast-dev",
+  "copyright": "Copyright © 2026 Slipcast-dev. All rights reserved.",
   "scripts": {
     "start": "electron .",
     "strings": "node scripts/gen-strings.js",

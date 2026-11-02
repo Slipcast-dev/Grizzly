@@ -3,6 +3,11 @@
 All notable changes are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- **License**: Grizzly is now under the proprietary Grizzly Proprietary License instead of MIT. Modifying and redistributing the app without the author's written consent is prohibited. The license is shown in *Settings → Updates*, in the README, in the app bundle and in the repository.
+
 ## [1.4.1] - 2026-11-02
 
 > The fixes and the glass settings are in the **macOS** app. The Windows build is version-aligned and unchanged.

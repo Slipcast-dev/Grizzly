@@ -34,4 +34,4 @@ cd electron && npm ci && npm start # Windows port, run from source
 2. Make the change, update docs and [CHANGELOG.md](CHANGELOG.md) when behavior changes.
 3. Fill in the pull request template. CI must pass.
 
-By contributing you agree that your work is released under the [Grizzly Proprietary License](LICENSE).
+By contributing you agree to the contribution terms in the [Grizzly Proprietary License](LICENSE) (section 4): the author may use, modify and distribute your contribution as part of Grizzly.

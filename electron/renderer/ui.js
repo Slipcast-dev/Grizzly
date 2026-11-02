@@ -1527,7 +1527,7 @@ function openSettings() {
       h('div', { class: 'btn-row' }, allBtn('Включить все', false), allBtn('Выключить все', true))],
     files: () => [card('Обновление', check('Обновлять файл автоматически, когда он изменился на диске', 'autoReload'))],
     language: () => [card('Язык интерфейса', language, h('div', { class: 'small muted' }, t('Язык меняется сразу.')))],
-    updates: () => [card('Обновления', ...updatesCard())],
+    updates: () => [card('Обновления', ...updatesCard(), h('div', { class: 'small muted' }, t('Лицензия: © 2026 Slipcast-dev. Изменять и распространять Grizzly без письменного согласия автора запрещено.')))],
   };
 
   const paintNav = () => nav.replaceChildren(...SETTINGS_PANES.map(([id, label, ic]) => h('button', {
