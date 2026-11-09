@@ -3,7 +3,9 @@
 All notable changes are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [2.0.0] - 2026-11-09
+
+> Major release: Grizzly is distributed under its own proprietary license (since 1.4.2), and the sidebar can be emptied in one step. The Windows build is version-aligned and gets the same *Clear* button.
 
 ### Added
 - **Clear the sidebar list**: the *Files* section of the sidebar has a *Clear* button that removes every file and folder from the list in one step, after a confirmation. The files on disk are not touched; open library files are closed.
