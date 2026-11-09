@@ -881,6 +881,26 @@ final class AppState: ObservableObject {
         notify(L("Убрано из боковой панели: %lld.", folders.count + files.count), symbol: "trash.fill")
     }
 
+    /// Clears the whole sidebar list in one step after a confirmation: closes the open library files, then removes every
+    /// folder and file reference. The files on disk stay.
+    func clearLibrary() {
+        let files = library.allFiles.count
+        let folders = library.allFolders.count
+        guard files + folders > 0 else { return }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = L("Очистить весь список в боковой панели?")
+        alert.informativeText = L("Будут убраны папки (%lld, вместе со всеми вложенными) и файлы (%lld). Сами файлы на диске не удаляются.", folders, files)
+        alert.addButton(withTitle: L("Очистить"))
+        alert.addButton(withTitle: L("Отмена"))
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        for doc in documents where doc.libraryID != nil {
+            guard close(doc.id) else { return }
+        }
+        library.clearAll()
+        notify(L("Убрано из боковой панели: %lld.", files + folders), symbol: "trash.fill")
+    }
+
     /// Removes a file from the library (the file on disk stays) and closes it if open.
     func removeFromLibrary(_ id: UUID) {
         if let doc = documents.first(where: { $0.libraryID == id }), !close(doc.id) { return }

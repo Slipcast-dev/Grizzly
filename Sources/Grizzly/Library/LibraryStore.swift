@@ -261,6 +261,7 @@ final class LibraryStore: ObservableObject {
     }
 
     var allFiles: [LibraryFile] { data.files }
+    var allFolders: [LibraryFolder] { data.folders }
 
     func file(_ id: UUID) -> LibraryFile? { structure().positions[id].map { data.files[$0] } }
 
@@ -469,6 +470,16 @@ final class LibraryStore: ObservableObject {
     func remove(_ id: UUID) {
         mutate { $0.files.removeAll { $0.id == id } }
         missing.remove(id)
+    }
+
+    /// Empties the sidebar: every folder and every file reference. Files on disk are never touched.
+    func clearAll() {
+        guard !data.files.isEmpty || !data.folders.isEmpty else { return }
+        mutate { d in
+            d.files = []
+            d.folders = []
+        }
+        missing.removeAll()
     }
 
     /// Removes several references at once.

@@ -539,7 +539,9 @@ function renderSidebarList() {
     if (!files.length) frag.append(hint('tag', t('Нет файлов со всеми выбранными тегами.')));
   } else if (section === 'files') {
     const head = h('div', { class: 'sec-head' }, h('span', null, t('Файлы')),
-      h('span'));
+      Library.data.files.length || Library.data.folders.length
+        ? h('button', { class: 'plain link', title: t('Убрать из боковой панели все файлы и папки'), onclick: () => App.clearLibrary() }, t('Очистить'))
+        : h('span'));
     frag.append(head);
     if (SidebarUI.isNaming) frag.append(nameField());
     // A folder stays when its name matches (then all its files show) or when some file inside matches.

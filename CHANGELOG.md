@@ -3,6 +3,11 @@
 All notable changes are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **Clear the sidebar list**: the *Files* section of the sidebar has a *Clear* button that removes every file and folder from the list in one step, after a confirmation. The files on disk are not touched; open library files are closed.
+
 ## [1.4.2] - 2026-11-03
 
 ### Changed

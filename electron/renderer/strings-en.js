@@ -317,6 +317,8 @@ window.STRINGS_EN = {
  "Обновить из папок": "Update from Folders",
  "Убрать выбранное (%lld)": "Remove Selected (%@)",
  "Не удалось переместить папки: %@. В том месте уже есть папка с таким именем.": "Couldn’t move the folders: %@. A folder with that name is already there.",
+ "Очистить весь список в боковой панели?": "Clear the whole list in the sidebar?",
+ "Убрать из боковой панели все файлы и папки": "Remove all files and folders from the sidebar",
  "Убрать выбранное из боковой панели?": "Remove the selected items from the sidebar?",
  "Будут убраны папки (%lld, вместе со всеми вложенными) и файлы (%lld). Сами файлы на диске не удаляются.": "Folders (%lld, with everything inside them) and files (%lld) will be removed. The files on disk are not deleted.",
  "Убрать": "Remove",

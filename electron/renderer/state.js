@@ -137,6 +137,13 @@ const Library = {
     this.missing.delete(id);
   },
 
+  /** Empties the sidebar: every folder and file reference. Files on disk are never touched. */
+  clearAll() {
+    if (!this.data.files.length && !this.data.folders.length) return;
+    this.mutate((d) => { d.files = []; d.folders = []; });
+    this.missing.clear();
+  },
+
   move(fileID, folderID) {
     this.mutate((d) => {
       const f = d.files.find((x) => x.id === fileID);
@@ -694,6 +701,20 @@ const App = {
     this.selectedFileID = (this.current || {}).libraryID || null;
     this.recomputeMatches(true);
     this.render(['all']);
+  },
+
+  /** Clears the whole sidebar list after a confirmation; open library files are closed, files on disk stay. */
+  async clearLibrary() {
+    const files = Library.data.files.length;
+    const folders = Library.folders.length;
+    if (!files && !folders) return;
+    if (!(await askConfirm(t('Очистить весь список в боковой панели?'),
+      t('Будут убраны папки (%lld, вместе со всеми вложенными) и файлы (%lld). Сами файлы на диске не удаляются.', folders, files),
+      t('Очистить')))) return;
+    for (const doc of this.documents.filter((d) => d.libraryID)) {
+      if (!(await this.close(doc.id))) return;
+    }
+    Library.clearAll();
   },
 
   /** Removes a file from the library (the file on disk stays) and closes it if open. */

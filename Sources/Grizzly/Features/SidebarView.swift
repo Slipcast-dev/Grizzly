@@ -165,6 +165,11 @@ struct SidebarView: View {
             HStack {
                 Text("Файлы")
                 Spacer()
+                if !library.allFiles.isEmpty || !library.allFolders.isEmpty {
+                    Button("Очистить") { state.clearLibrary() }
+                        .buttonStyle(.borderless)
+                        .help(L("Убрать из боковой панели все файлы и папки"))
+                }
             }
         }
     }
