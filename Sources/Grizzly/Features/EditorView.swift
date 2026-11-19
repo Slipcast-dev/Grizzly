@@ -194,6 +194,7 @@ private struct EditorTextView: NSViewRepresentable {
         context.coordinator.updateInset()
         context.coordinator.configureRuler(scroll, view)
         context.coordinator.applyFind(to: view)
+        context.coordinator.applyPendingEdit(to: view)
     }
 
     private func style(_ view: NSTextView, _ scroll: NSScrollView, _ coordinator: Coordinator) {
@@ -456,18 +457,12 @@ private struct EditorTextView: NSViewRepresentable {
                 let full = NSRange(location: 0, length: (text as NSString).length)
                 layout.removeTemporaryAttribute(.backgroundColor, forCharacterRange: full)
                 if !query.isEmpty {
-                    let lines = text.components(separatedBy: "\n")
-                    var offset = 0
-                    for (i, line) in lines.enumerated() {
-                        for (k, r) in Searcher.ranges(of: query, in: line).enumerated() {
-                            let ns = NSRange(r, in: line)
-                            let isCurrent = current == SearchMatch(unit: i, occurrence: k)
-                            layout.addTemporaryAttribute(
-                                .backgroundColor,
-                                value: NSColor(isCurrent ? parent.theme.currentMatch : parent.theme.match),
-                                forCharacterRange: NSRange(location: offset + ns.location, length: ns.length))
-                        }
-                        offset += line.utf16.count + 1
+                    for hit in TextSearch.locate(query, in: text, options: Searcher.options) {
+                        let isCurrent = current == SearchMatch(unit: hit.unit, occurrence: hit.occurrence)
+                        layout.addTemporaryAttribute(
+                            .backgroundColor,
+                            value: NSColor(isCurrent ? parent.theme.currentMatch : parent.theme.match),
+                            forCharacterRange: hit.range)
                     }
                 }
             }
@@ -490,13 +485,28 @@ private struct EditorTextView: NSViewRepresentable {
         }
 
         static func range(of match: SearchMatch, query: String, in text: String) -> NSRange? {
-            let lines = text.components(separatedBy: "\n")
-            guard lines.indices.contains(match.unit) else { return nil }
-            let found = Searcher.ranges(of: query, in: lines[match.unit])
-            guard found.indices.contains(match.occurrence) else { return nil }
-            let ns = NSRange(found[match.occurrence], in: lines[match.unit])
-            let offset = lines[..<match.unit].reduce(0) { $0 + $1.utf16.count + 1 }
-            return NSRange(location: offset + ns.location, length: ns.length)
+            TextSearch.locate(query, in: text, options: Searcher.options)
+                .first { $0.unit == match.unit && $0.occurrence == match.occurrence }?.range
+        }
+
+        var handledEdit: UUID?
+
+        /// Carries out a Replace request through the text view's undo machinery: one ⌘Z takes back all of it.
+        func applyPendingEdit(to view: NSTextView) {
+            let state = AppState.shared
+            guard let request = state.editRequest, request.id != handledEdit else { return }
+            handledEdit = request.id
+            guard request.documentURL == parent.documentURL, view.string == request.base, let storage = view.textStorage else { return }
+            let ranges = request.edits.map { NSValue(range: $0.range) }
+            guard view.shouldChangeText(inRanges: ranges, replacementStrings: request.edits.map(\.text)) else { return }
+            view.undoManager?.beginUndoGrouping()
+            view.breakUndoCoalescing()
+            storage.beginEditing()
+            for e in request.edits.reversed() { storage.replaceCharacters(in: e.range, with: e.text) }
+            storage.endEditing()
+            view.didChangeText()
+            view.undoManager?.endUndoGrouping()
+            state.editAcknowledged = true
         }
     }
 }

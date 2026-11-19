@@ -100,7 +100,9 @@ enum SyntaxEngine {
     private static let quotes2: [UInt16] = [34, 39]          // " '
     private static let quotes3: [UInt16] = [34, 39, 96]      // " ' `
 
-    private static let codeLangs: [FileType: CodeLang] = [
+    private static let codeLangs: [FileType: CodeLang] = moreLangs.merging(baseLangs) { a, _ in a }
+
+    private static let baseLangs: [FileType: CodeLang] = [
         .python: CodeLang(
             lineComments: [Array("#".utf16)],
             blocks: [Block("\"\"\"", "\"\"\"", .string), Block("'''", "'''", .string)],
@@ -175,6 +177,84 @@ enum SyntaxEngine {
                 Rule(#"\$\w+"#, .key),
                 words("abstract and array as break callable case catch class clone const continue declare default do echo else elseif empty enddeclare endfor endforeach endif endswitch endwhile enum extends final finally fn for foreach function global goto if implements include include_once instanceof insteadof interface isset list match namespace new or print private protected public readonly require require_once return static switch throw trait try unset use var while xor yield", .keyword),
                 Rule(#"\b(?:true|false|null|TRUE|FALSE|NULL)\b"#, .number),
+                codeNumber, typeName,
+            ]),
+    ]
+
+    private static func icWords(_ list: String, _ role: SyntaxRole) -> Rule {
+        Rule(#"\b(?:"# + list.split(separator: " ").joined(separator: "|") + #")\b"#, role, options: [.caseInsensitive])
+    }
+
+    private static let moreLangs: [FileType: CodeLang] = [
+        .go: CodeLang(
+            lineComments: slashComments,
+            blocks: [Block("`", "`", .string), cBlock],
+            quotes: quotes2,
+            rules: [
+                words("break case chan const continue default defer else fallthrough for func go goto if import interface map package range return select struct switch type var", .keyword),
+                words("true false nil iota", .number),
+                codeNumber, typeName,
+            ]),
+        .rust: CodeLang(
+            lineComments: slashComments,
+            blocks: [cBlock],
+            quotes: [34],
+            rules: [
+                Rule(#"#!?\[[^\]]*\]"#, .key),
+                Rule(#"\b[a-z_][a-z0-9_]*!"#, .key),
+                words("as async await break const continue crate dyn else enum extern fn for if impl in let loop match mod move mut pub ref return self Self static struct super trait type unsafe use where while", .keyword),
+                words("true false None Some Ok Err", .number),
+                codeNumber, typeName,
+            ]),
+        .java: CodeLang(
+            lineComments: slashComments,
+            blocks: [Block("\"\"\"", "\"\"\"", .string), cBlock],
+            quotes: quotes2,
+            rules: [
+                Rule(#"@\w+"#, .key),
+                words("abstract assert boolean break byte case catch char class const continue default do double else enum extends final finally float for goto if implements import instanceof int interface long native new package private protected public record return short static strictfp super switch synchronized this throw throws transient try var void volatile while yield", .keyword),
+                words("true false null", .number),
+                codeNumber, typeName,
+            ]),
+        .kotlin: CodeLang(
+            lineComments: slashComments,
+            blocks: [Block("\"\"\"", "\"\"\"", .string), cBlock],
+            quotes: quotes2,
+            rules: [
+                Rule(#"@\w+"#, .key),
+                words("abstract actual annotation as break by catch class companion const constructor continue crossinline data delegate do dynamic else enum expect external final finally for fun get if import in infix init inline inner interface internal is lateinit noinline object open operator out override package private protected public reified return sealed set super suspend this throw try typealias typeof val value var vararg when where while", .keyword),
+                words("true false null", .number),
+                codeNumber, typeName,
+            ]),
+        .sql: CodeLang(
+            lineComments: [Array("--".utf16)],
+            blocks: [cBlock],
+            quotes: [39, 34],
+            rules: [
+                icWords("add all alter and as asc begin between by case check column commit constraint create cross database default delete desc distinct drop else end exists foreign from full group having if in index inner insert into is join key left like limit not null offset on or order outer primary references right rollback select set table then top union unique update values view when where with", .keyword),
+                icWords("true false", .number),
+                icWords("int integer bigint smallint varchar char text boolean bool date datetime timestamp decimal numeric float double real blob json", .key),
+                codeNumber,
+            ]),
+        .shell: CodeLang(
+            lineComments: [Array("#".utf16)],
+            blocks: [],
+            quotes: quotes2,
+            rules: [
+                Rule(#"\$\{[^}]*\}|\$[A-Za-z_]\w*|\$[0-9@#?$!*]"#, .key),
+                words("if then else elif fi for while until do done case esac in function select time return exit break continue local export readonly declare unset source alias echo cd set shift trap eval exec", .keyword),
+                words("true false", .number),
+                codeNumber,
+            ]),
+        .ruby: CodeLang(
+            lineComments: [Array("#".utf16)],
+            blocks: [],
+            quotes: quotes2,
+            rules: [
+                Rule(#"@{1,2}\w+|\$\w+"#, .key),
+                Rule(#"(?<![:\w]):[A-Za-z_]\w*[?!]?"#, .number),
+                words("alias and begin break case class def defined do else elsif end ensure for if in module next nil not or redo rescue retry return self super then undef unless until when while yield require require_relative include extend attr_accessor attr_reader attr_writer private protected public", .keyword),
+                words("true false nil", .number),
                 codeNumber, typeName,
             ]),
     ]

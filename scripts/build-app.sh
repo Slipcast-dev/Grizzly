@@ -10,7 +10,7 @@ APP="${OUT:-build}/Grizzly.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 swiftc -O -parse-as-library -target "$ARCH-apple-macos13.0" \
-    -o "$APP/Contents/MacOS/Grizzly" $(find Sources -name '*.swift')
+    -o "$APP/Contents/MacOS/Grizzly" $(find Sources -name '*.swift') QuickLook/HTMLRenderer.swift
 
 # Icon and translations (resources/en.lproj, resources/ru.lproj).
 cp resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"

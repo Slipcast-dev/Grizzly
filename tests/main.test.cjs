@@ -11,7 +11,7 @@ const app = {
   getPath: () => require('node:os').tmpdir(), getLocale: () => 'en', requestSingleInstanceLock: () => true,
   on() {}, quit() {}, whenReady: () => ({ then() {} }), setPath() {}, getVersion: () => '0',
 };
-const sandboxRequire = (name) => (name === 'fs' || name === 'path' ? require(name) : (name === './strings-en.json' ? {} : { app, BrowserWindow: stub, Menu: stub, dialog: stub, ipcMain: { handle() {}, on() {} }, shell: stub, nativeTheme: stub }));
+const sandboxRequire = (name) => (name === 'fs' || name === 'path' || name === 'crypto' ? require(name) : name === './fileio' ? require('../electron/fileio') : (name === './strings-en.json' ? {} : { app, BrowserWindow: stub, Menu: stub, dialog: stub, ipcMain: { handle() {}, on() {} }, shell: stub, nativeTheme: stub }));
 const ctx = { require: sandboxRequire, process, console, Buffer, TextDecoder, __dirname: path.join(__dirname, '..', 'electron') };
 vm.createContext(ctx);
 let api;

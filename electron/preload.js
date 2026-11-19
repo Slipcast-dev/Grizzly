@@ -29,5 +29,9 @@ contextBridge.exposeInMainWorld('api', {
   onOpenFiles: (cb) => ipcRenderer.on('open-files', (_e, paths) => cb(paths)),
   saveSession: (session) => ipcRenderer.invoke('session:save', session),
   takeSession: () => ipcRenderer.invoke('session:take'),
+  saveRecovery: (file, text) => ipcRenderer.invoke('recovery:save', file, text),
+  removeRecovery: (file) => ipcRenderer.invoke('recovery:remove', file),
+  listRecovery: () => ipcRenderer.invoke('recovery:list'),
+  exportDocument: (name, kind, html) => ipcRenderer.invoke('export:save', name, kind, html),
   ready: () => ipcRenderer.send('renderer:ready'),
 });

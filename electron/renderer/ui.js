@@ -246,6 +246,10 @@ function renderToolbar() {
     h('div', { class: 'tb-right' },
       btn(App.isSplit ? 'rightPane' : 'split', t('Два файла рядом (⌘\\)'), () => App.toggleSplit(), { disabled: noDocs, class: 'tb' + (App.isSplit ? ' active' : '') }),
       btn('search', t('Найти (⌘F)'), () => App.showFind(), { disabled: noDocs }),
+      h('button', {
+        class: 'tb', title: t('Оглавление'), disabled: !App.current || !Outline.items(App.textFor(App.current), App.current.type).length,
+        'data-popover-anchor': '1', onclick: (e) => toggleOutlinePopover(e.currentTarget),
+      }, icon('list', 17)),
       bmBtn,
       h('button', { class: 'tb text', title: t('Уменьшить текст'), onclick: () => Prefs.resizeFont(-1) }, 'A−'),
       h('button', { class: 'tb text big', title: t('Увеличить текст'), onclick: () => Prefs.resizeFont(1) }, 'A+'),
@@ -257,6 +261,21 @@ function renderToolbar() {
       }, '😀')),
   );
   if ($('side-actions')) renderSideActions();
+}
+
+/** Headings of the open document (declarations for code); a click scrolls to the line. */
+function toggleOutlinePopover(anchor) {
+  if (Popover.el) { Popover.close(); return; }
+  const doc = App.current;
+  if (!doc) return;
+  const list = h('div', { class: 'bm-list' });
+  for (const item of Outline.items(App.textFor(doc), doc.type)) {
+    const row = h('button', { class: 'bm-go', onclick: () => { Popover.close(); App.goToLine(item.line); } },
+      h('span', { class: 'bm-text' }, item.title));
+    row.style.paddingLeft = (item.level - 1) * 12 + 'px';
+    list.append(h('div', { class: 'bm-row' }, row));
+  }
+  Popover.show(anchor, h('div', { class: 'bookmarks' }, h('div', { class: 'pop-title' }, t('Оглавление')), list));
 }
 
 function toggleBookmarksPopover(anchor) {
@@ -812,12 +831,32 @@ function buildMainFrame() {
       else if (e.key === 'Escape') App.hideFind();
     },
   });
+  const replaceInput = h('input', {
+    id: 'replace-input', type: 'text', placeholder: t('Заменить на'), spellcheck: false,
+    oninput: (e) => { App.replaceText = e.target.value; },
+    onkeydown: (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); App.replaceText = e.target.value; App.replaceCurrent(); }
+      else if (e.key === 'Escape') App.hideFind();
+    },
+  });
+  const optionButton = (name, label, title) => h('button', {
+    class: 'plain opt', id: 'opt-' + name, title: t(title), onclick: () => App.setFindOption(name, !App.findOptions[name]),
+  }, label);
   findBarEl = h('div', { id: 'findbar', hidden: true },
-    icon('search', 15), input,
-    h('span', { id: 'find-count' }),
-    h('button', { class: 'plain', title: t('Предыдущее совпадение (⌘⇧G)'), onclick: () => App.stepMatch(-1) }, icon('up', 16)),
-    h('button', { class: 'plain', title: t('Следующее совпадение (⌘G)'), onclick: () => App.stepMatch(1) }, icon('down', 16)),
-    h('button', { class: 'plain link', onclick: () => App.hideFind() }, t('Готово')));
+    h('div', { class: 'fb-row' },
+      h('button', { class: 'plain', id: 'replace-toggle', title: t('Заменить'), onclick: () => { App.isReplaceVisible = !App.isReplaceVisible; App.render(['main']); } }, icon('down', 14)),
+      icon('search', 15), input,
+      optionButton('caseSensitive', 'Aa', 'Учитывать регистр'),
+      optionButton('wholeWord', 'W', 'Слово целиком'),
+      optionButton('regex', '.*', 'Регулярное выражение'),
+      h('span', { id: 'find-count' }),
+      h('button', { class: 'plain', title: t('Предыдущее совпадение (⌘⇧G)'), onclick: () => App.stepMatch(-1) }, icon('up', 16)),
+      h('button', { class: 'plain', title: t('Следующее совпадение (⌘G)'), onclick: () => App.stepMatch(1) }, icon('down', 16)),
+      h('button', { class: 'plain link', onclick: () => App.hideFind() }, t('Готово'))),
+    h('div', { class: 'fb-row', id: 'replace-row', hidden: true },
+      icon('refresh', 15), replaceInput,
+      h('button', { class: 'btn sm', id: 'replace-one', onclick: () => App.replaceCurrent() }, t('Заменить')),
+      h('button', { class: 'btn sm', id: 'replace-all', onclick: () => App.replaceAll() }, t('Заменить все'))));
 
   $('main').replaceChildren(
     h('div', { id: 'empty', hidden: true }),
@@ -868,7 +907,16 @@ function renderFind() {
   const input = $('find-input');
   if (document.activeElement !== input && input.value !== App.findQuery) input.value = App.findQuery;
   const count = $('find-count');
+  const invalid = !TextSearch.isValid(App.findQuery, App.findOptions);
+  count.classList.toggle('bad', invalid);
+  input.classList.toggle('bad', invalid);
+  for (const name of ['caseSensitive', 'wholeWord', 'regex']) $('opt-' + name).classList.toggle('on', !!App.findOptions[name]);
+  $('replace-row').hidden = !App.isReplaceVisible;
+  if (document.activeElement !== $('replace-input') && $('replace-input').value !== App.replaceText) $('replace-input').value = App.replaceText;
+  $('replace-one').disabled = !App.currentMatch;
+  $('replace-all').disabled = !App.matches.length;
   if (!App.findQuery) count.textContent = '';
+  else if (invalid) count.textContent = t('Неверное выражение');
   else if (!App.matches.length) count.textContent = t('Нет совпадений');
   else count.textContent = t('%d из %d', App.matchIndex + 1, App.matches.length);
   if (App.findFocusToken !== lastFindFocusToken) {
@@ -984,6 +1032,7 @@ function paneHeader(pane, doc) {
 function changedBanner(doc) {
   return h('div', { class: 'banner' },
     icon('refresh', 16), h('span', { class: 'grow' }, t('Файл изменён на диске.')),
+    App.isDirty(doc) ? h('button', { class: 'plain link', onclick: () => App.compareWithDisk(doc.id) }, t('Сравнить…')) : null,
     h('button', { class: 'plain link', onclick: () => App.refresh(doc.id) }, t('Обновить  ⌘R')),
     h('button', { class: 'plain link', onclick: () => App.ignoreChange(doc.id) }, t('Не сейчас')));
 }
@@ -1367,6 +1416,135 @@ function markdownView(blocks, size, hl) {
     box.append(wrap);
   });
   return box;
+}
+
+// ---- Conflict with the disk ---------------------------------------------------
+
+function openMergeDialog(model) {
+  const close = () => back.remove();
+  const rows = h('div', { class: 'diff' });
+  const mark = { insert: '+ ', delete: '− ', equal: '  ' };
+  // The diff runs from my text to the disk copy: an "insert" is a line only the disk has.
+  const klass = { insert: 'only-disk', delete: 'only-mine', equal: '' };
+  const showAll = model.rows.length < 400;
+  for (const row of model.rows) {
+    if (row.op === 'equal' && !showAll) continue;
+    rows.append(h('div', { class: 'diff-row ' + klass[row.op] }, mark[row.op] + row.text));
+  }
+  const back = h('div', { class: 'modal-back modal-merge' },
+    h('div', { class: 'dialog merge' },
+      h('div', { class: 'dialog-title' }, t('Файл «%@» изменён на диске', model.name)),
+      h('div', { class: 'muted small' }, t('Красным — строки, которые есть только на диске; зелёным — только в вашем тексте.')),
+      rows,
+      model.merged.conflicts ? h('div', { class: 'warn small' }, t('При объединении будет конфликтов: %d. Они отмечаются как <<<<<<< / ======= / >>>>>>>.', model.merged.conflicts)) : null,
+      h('div', { class: 'dialog-actions btn-row' },
+        h('button', { class: 'btn', onclick: () => { close(); App.reload(model.id); } }, t('Взять с диска')),
+        h('button', { class: 'btn', onclick: () => { close(); App.ignoreChange(model.id); } }, t('Оставить мой текст')),
+        h('span', { class: 'grow' }),
+        h('button', { class: 'btn', onclick: close }, t('Отмена')),
+        h('button', { class: 'btn primary', onclick: () => { close(); App.applyMerge(model); } }, t('Объединить')))));
+  $('overlay-root').append(back);
+}
+
+// ---- Export ------------------------------------------------------------------
+
+const EXPORT_CSS = `body{font:15px/1.55 "Segoe UI",system-ui,sans-serif;margin:28px 36px;color:#1b1b1f;background:#fff}
+h1,h2,h3,h4,h5,h6{line-height:1.25}pre,code{font:13px/1.5 Consolas,monospace}
+pre{background:#f1f1f3;padding:12px 14px;border-radius:8px;white-space:pre-wrap;word-break:break-word}code{background:#ececf0;padding:1px 4px;border-radius:4px}pre code{background:none;padding:0}
+.md .blk{margin:.4em 0}.md .heading{font-weight:700}.md .li{display:flex;gap:.6em}.md .marker{min-width:1.4em;text-align:right}
+.md .quote{display:flex;gap:.8em;opacity:.85}.md .quote .bar{width:3px;background:#999;border-radius:2px}
+table{border-collapse:collapse;margin:.8em 0}th,td{border:1px solid #c9c9d0;padding:4px 10px;text-align:left;vertical-align:top}th{background:#ececf0}
+hr{border:0;border-top:1px solid #c9c9d0}.hashtag{color:#2563eb}`;
+
+const escapeHtml = (x) => String(x).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/** Self-contained, light-themed HTML of a document: the page the PDF is printed from. */
+function buildExportHtml(doc, text) {
+  const lines = text.split('\n');
+  let body;
+  if (doc.type === 'markdown') {
+    const view = markdownView(MarkdownParser.parse(lines), 15, null);
+    view.querySelectorAll('a[data-url]').forEach((a) => {
+      const url = a.dataset.url;
+      if (/^(https?:|mailto:)/i.test(url)) a.setAttribute('href', url);
+      a.removeAttribute('data-url');
+    });
+    body = view.outerHTML;
+  } else if (doc.type === 'csv') {
+    const table = CSV.parse(lines, CSV.detectDelimiter(doc.path, lines));
+    body = '<table>' + table.rows.map((r, i) => '<tr>' + r.cells.map((c) => `<${i ? 'td' : 'th'}>${escapeHtml(c)}</${i ? 'td' : 'th'}>`).join('') + '</tr>').join('') + '</table>';
+  } else {
+    body = '<pre>' + escapeHtml(text) + '</pre>';
+  }
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(doc.name)}</title><style>${EXPORT_CSS}</style></head><body>${body}</body></html>`;
+}
+
+async function exportCurrent(kind) {
+  const doc = App.current;
+  if (!doc) return;
+  const result = await window.api.exportDocument(doc.name, kind, buildExportHtml(doc, App.textFor(doc)));
+  if (result.ok) notify(t('Экспортировано: %@', baseName(result.path)), 'download');
+  else if (result.code !== 'ECANCEL') App.fail(t('Не удалось сохранить «%@».', doc.name));
+}
+
+// ---- Command palette ---------------------------------------------------------
+
+/** Ctrl+Shift+P: one list for commands, open tabs, the headings of the open file and the files of the sidebar. */
+function openPalette() {
+  if (document.querySelector('.modal-palette')) return;
+  const doc = App.current;
+  const items = [];
+  const cmd = (title, run) => items.push({ title, detail: t('Команда'), run });
+  cmd(t('Новый файл…'), () => newFile());
+  cmd(t('Открыть…'), () => openFiles());
+  if (doc) {
+    cmd(t('Сохранить'), () => App.save(doc.id));
+    cmd(t('Сохранить как…'), () => App.saveAs(doc.id));
+    cmd(t('Найти…'), () => App.showFind());
+    cmd(t('Найти и заменить…'), () => { App.isReplaceVisible = true; App.showFind(); });
+    cmd(t('Экспорт в HTML…'), () => exportCurrent('html'));
+    cmd(t('Экспорт в PDF…'), () => exportCurrent('pdf'));
+    cmd(t('Закрыть вкладку'), () => App.close(doc.id));
+    cmd(t('Режим чтения'), () => App.setMode('reading'));
+    cmd(t('Исходник'), () => App.setMode('source'));
+    cmd(t('Правка'), () => App.setMode('edit'));
+    cmd(t('Два файла рядом'), () => App.toggleSplit());
+    if (App.changedOnDisk.has(doc.id)) cmd(t('Сравнить с файлом на диске…'), () => App.compareWithDisk(doc.id));
+    for (const o of Outline.items(App.textFor(doc), doc.type)) {
+      items.push({ title: o.title, detail: t('Перейти · строка %d', o.line + 1), run: () => App.goToLine(o.line) });
+    }
+  }
+  cmd(t('Настройки…'), () => openSettings());
+  for (const d of App.documents) items.push({ title: d.name, detail: t('Открытая вкладка'), run: () => App.selectTab(d.id) });
+  for (const f of Library.data.files) items.push({ title: f.name, detail: f.path, run: () => App.open([f.path]) });
+
+  let selected = 0;
+  let shown = [];
+  const list = h('div', { class: 'pal-list' });
+  const close = () => back.remove();
+  const run = (item) => { close(); setTimeout(item.run, 0); };
+  const paint = () => {
+    const words = input.value.toLowerCase().split(/\s+/).filter(Boolean);
+    shown = items.filter((it) => { const hay = (it.title + ' ' + it.detail).toLowerCase(); return words.every((w) => hay.includes(w)); }).slice(0, 14);
+    selected = Math.min(selected, Math.max(0, shown.length - 1));
+    list.replaceChildren(...shown.map((it, i) => h('div', { class: 'pal-item' + (i === selected ? ' on' : ''), onclick: () => run(it) },
+      h('span', { class: 'pal-title' }, it.title), h('span', { class: 'pal-detail muted' }, it.detail))));
+  };
+  const input = h('input', {
+    class: 'pal-input', type: 'text', spellcheck: false, placeholder: t('Команда, вкладка, заголовок или файл'),
+    oninput: () => { selected = 0; paint(); },
+    onkeydown: (e) => {
+      if (e.key === 'Escape') { e.stopPropagation(); close(); }
+      else if (e.key === 'ArrowDown') { e.preventDefault(); selected = Math.min(selected + 1, shown.length - 1); paint(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); selected = Math.max(selected - 1, 0); paint(); }
+      else if (e.key === 'Enter' && shown[selected]) { e.preventDefault(); run(shown[selected]); }
+    },
+  });
+  const back = h('div', { class: 'modal-back modal-palette', onmousedown: (e) => { if (e.target === e.currentTarget) close(); } },
+    h('div', { class: 'palette' }, input, list));
+  $('overlay-root').append(back);
+  paint();
+  input.focus();
 }
 
 // ---- Dialogs ----------------------------------------------------------------
@@ -1756,6 +1934,10 @@ function runCommand(action) {
     case 'closeWindow': closeWindow(); break;
     case 'settings': openSettings(); break;
     case 'find': App.showFind(); break;
+    case 'replace': if (App.documents.length) { App.isReplaceVisible = true; App.showFind(); } break;
+    case 'exportHtml': exportCurrent('html'); break;
+    case 'exportPdf': exportCurrent('pdf'); break;
+    case 'palette': openPalette(); break;
     case 'findNext': App.stepMatch(1); break;
     case 'findPrev': App.stepMatch(-1); break;
     case 'nextTab': App.cycleTab(1); break;

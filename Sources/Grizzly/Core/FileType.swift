@@ -3,6 +3,7 @@ import Foundation
 enum FileType: String, CaseIterable {
     case markdown, text, json, yaml, csv, log, xml, html, config, tex, rtf
     case python, swift, cpp, csharp, javascript, typescript, css, php
+    case go, rust, java, kotlin, sql, shell, ruby
 
     static let extensions: [String: FileType] = [
         "md": .markdown, "markdown": .markdown, "mdown": .markdown,
@@ -24,6 +25,8 @@ enum FileType: String, CaseIterable {
         "ts": .typescript, "tsx": .typescript,
         "css": .css, "scss": .css,
         "php": .php,
+        "go": .go, "rs": .rust, "java": .java, "kt": .kotlin, "kts": .kotlin, "sql": .sql,
+        "sh": .shell, "bash": .shell, "zsh": .shell, "rb": .ruby,
     ]
 
     /// Language names after the opening ``` of a Markdown code block.
@@ -36,6 +39,8 @@ enum FileType: String, CaseIterable {
         "ts": .typescript, "typescript": .typescript, "tsx": .typescript,
         "css": .css, "scss": .css,
         "php": .php,
+        "go": .go, "golang": .go, "rust": .rust, "rs": .rust, "java": .java, "kotlin": .kotlin, "kt": .kotlin,
+        "sql": .sql, "sh": .shell, "bash": .shell, "shell": .shell, "zsh": .shell, "ruby": .ruby, "rb": .ruby,
         "json": .json, "yaml": .yaml, "yml": .yaml, "xml": .xml, "html": .html, "htm": .html,
         "ini": .config, "toml": .config, "tex": .tex, "latex": .tex, "log": .log,
     ]
@@ -62,6 +67,11 @@ enum FileType: String, CaseIterable {
         case "js", "mjs", "cjs", "jsx": return "'use strict';\n\n"
         case "css", "scss": return "body {\n}\n"
         case "php": return "<?php\n\n"
+        case "go": return "package main\n\nfunc main() {\n}\n"
+        case "rs": return "fn main() {\n}\n"
+        case "java": return "public class Main {\n}\n"
+        case "sh", "bash", "zsh": return "#!/bin/sh\n\n"
+        case "rb": return "# frozen_string_literal: true\n\n"
         default: return ""
         }
     }
@@ -93,6 +103,13 @@ enum FileType: String, CaseIterable {
         case .typescript: return "TypeScript"
         case .css: return "CSS"
         case .php: return "PHP"
+        case .go: return "Go"
+        case .rust: return "Rust"
+        case .java: return "Java"
+        case .kotlin: return "Kotlin"
+        case .sql: return "SQL"
+        case .shell: return "Shell"
+        case .ruby: return "Ruby"
         }
     }
 
@@ -104,7 +121,7 @@ enum FileType: String, CaseIterable {
         case .csv: return "tablecells"
         case .log: return "list.bullet.rectangle"
         case .text: return "doc.plaintext"
-        case .python, .swift, .cpp, .csharp, .javascript, .typescript, .css, .php:
+        case .python, .swift, .cpp, .csharp, .javascript, .typescript, .css, .php, .go, .rust, .java, .kotlin, .sql, .shell, .ruby:
             return "chevron.left.forwardslash.chevron.right"
         }
     }

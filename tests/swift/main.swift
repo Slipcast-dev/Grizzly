@@ -424,5 +424,99 @@ check(TextSearch.replaceAll("hello", with: "bye", in: hello).text == "bye bye by
 check(TextSearch.replaceAll("(\\w+) (\\w+)", with: "$2 $1", in: "ab cd", options: SearchOptions(regex: true)).text == "cd ab", "regex replace with groups")
 check(TextSearch.replaceOne("hello", with: "X", in: hello, index: 1) == "Hello X HELLO world", "replace one")
 
+// Line endings: mixed endings survive an open and save
+for raw in ["a\r\nb\nc\rd", "a\r\nb\r\n", "a\nb\n", "a\rb\r", "\r\n\r\n", "no break", "a\n\rb"] {
+    let parsed = LineEndings.parse(raw)
+    check(!parsed.normalized.contains("\r") && parsed.endings.apply(to: parsed.normalized) == raw, "line endings round trip: \(raw.debugDescription)")
+}
+check(LineEndings.parse("a\r\nb\r\nc\n").endings.apply(to: "a\nb\nc\nNEW\n") == "a\r\nb\r\nc\nNEW\r\n", "added lines take the dominant ending after the recorded ones")
+
+// Multi-line search and replace
+let multi = "one\ntwo\nthree\ntwo"
+let hits = TextSearch.locate("two", in: multi)
+check(hits.map(\.unit) == [1, 3] && hits.allSatisfy { $0.occurrence == 0 }, "hits know their line")
+check(TextSearch.locate("one\\ntwo", in: multi, options: SearchOptions(regex: true)).count == 1, "a regular expression can match across lines")
+check(TextSearch.replaceAll("one\\ntwo", with: "X", in: multi, options: SearchOptions(regex: true)).text == "X\nthree\ntwo", "multi-line replace")
+check(TextSearch.locate("^t", in: multi, options: SearchOptions(regex: true)).count == 3, "^ matches at every line start")
+check(TextSearch.apply(TextSearch.edits("two", with: "2", in: multi), to: multi) == "one\n2\nthree\n2", "edits apply back to front")
+
+// Outline
+func titles(_ text: String, _ type: FileType) -> [String] { Outline.items(text, type: type).map(\.title) }
+check(titles("# A\n```\n# no\n```\n## B", .markdown) == ["A", "B"], "markdown outline skips code fences")
+check(titles("class A:\n    def f(self):\n        pass\ndef g(): pass", .python) == ["class A", "def f", "def g"], "python outline")
+check(titles("struct S {\n  func go() {}\n}", .swift) == ["struct S", "func go"], "swift outline")
+check(titles("function a() {}\nconst b = (x) => 1", .javascript) == ["function a", "b()"], "javascript outline")
+check(titles("[main]\nk=v\n[other]", .config) == ["main", "other"], "ini outline")
+check(titles("\\section{Intro}\n\\subsection{More}", .tex) == ["Intro", "More"], "tex outline")
+check(titles("func main() {}\ntype T struct{}", .go) == ["func main", "type T"], "go outline")
+check(titles("a: 1\nb:\n  c: 2", .yaml) == ["a", "b"], "yaml outline lists top-level keys")
+check(titles("int main(int argc) {\n  if (x) {}\n}", .cpp) == ["main()"], "c outline ignores control flow")
+
+// Diff and three-way merge
+let mergeBase = ["a", "b", "c", "d"]
+check(LineDiff.merge(base: mergeBase, mine: ["a", "B", "c", "d"], theirs: ["a", "b", "c", "D"]).lines == ["a", "B", "c", "D"], "merge combines changes in different places")
+let clash = LineDiff.merge(base: mergeBase, mine: ["a", "mine", "c", "d"], theirs: ["a", "disk", "c", "d"])
+check(clash.conflicts == 1 && clash.lines.contains("<<<<<<< mine") && clash.lines.contains(">>>>>>> disk"), "merge marks a real conflict")
+check(LineDiff.merge(base: mergeBase, mine: ["a", "x", "c", "d"], theirs: ["a", "x", "c", "d"]).conflicts == 0, "identical changes are not a conflict")
+check(LineDiff.merge(base: mergeBase, mine: mergeBase, theirs: ["z"]).lines == ["z"], "no local edits: the disk wins")
+check(LineDiff.diff(["a", "b"], ["a", "c", "b"]).map(\.op) == [.equal, .insert, .equal], "diff finds an inserted line")
+check(LineDiff.diff([], []).isEmpty, "diff of nothing")
+
+// New languages
+check(FileType(url: URL(fileURLWithPath: "/x/main.go")) == .go && FileType(url: URL(fileURLWithPath: "/x/a.rs")) == .rust
+      && FileType(url: URL(fileURLWithPath: "/x/a.sh")) == .shell && FileType(url: URL(fileURLWithPath: "/x/a.kts")) == .kotlin, "new language extensions")
+func hasRole(_ line: String, _ type: FileType, _ word: String, _ role: SyntaxRole) -> Bool {
+    SyntaxEngine.spans(line, type: type).spans.contains { span in
+        (line as NSString).substring(with: span.range) == word && span.role == role
+    }
+}
+check(hasRole("func main() {}", .go, "func", .keyword), "go keyword")
+check(hasRole("let x = 1; // c", .rust, "// c", .comment) && hasRole("println!(\"a\");", .rust, "println!", .key), "rust comment and macro")
+check(hasRole("select * from t", .sql, "select", .keyword) && hasRole("SELECT 1 -- c", .sql, "-- c", .comment), "sql is case-insensitive")
+check(hasRole("echo $HOME # c", .shell, "$HOME", .key) && hasRole("echo $HOME # c", .shell, "# c", .comment), "shell variable and comment")
+check(hasRole("def f; end", .ruby, "def", .keyword) && hasRole("@a = :b", .ruby, "@a", .key), "ruby")
+check(hasRole("public class A {}", .java, "class", .keyword) && hasRole("fun f() = null", .kotlin, "fun", .keyword), "java and kotlin")
+
+// Fuzzing: random and hostile input must neither crash nor stall the parsers
+var rng = SystemRandomNumberGenerator()
+let alphabet = Array("#*_`[]()<>!|-+=~\\/\"' \n\t\r0123456789abcXYZ{};:.,$@%&?áю😀")
+func randomText(_ n: Int) -> String { String((0..<n).map { _ in alphabet.randomElement(using: &rng)! }) }
+let fuzzStart = Date()
+var fuzzRuns = 0
+for _ in 0..<400 {
+    let text = randomText(Int.random(in: 0...600, using: &rng))
+    let lines = text.components(separatedBy: "\n")
+    _ = MarkdownParser.parse(lines)
+    _ = HTMLRenderer.markdown(lines)
+    _ = CSVTable(lines: lines, delimiter: [",", ";", "\t"].randomElement(using: &rng)!)
+    _ = Outline.items(text, type: FileType.allCases.randomElement(using: &rng)!)
+    for t in FileType.allCases { _ = SyntaxEngine.states(lines, type: t); for l in lines.prefix(3) { _ = SyntaxEngine.spans(l, type: t) } }
+    let parsed = LineEndings.parse(text)
+    if parsed.endings.apply(to: parsed.normalized) != text { check(false, "fuzz: line endings lost data in \(text.debugDescription)") }
+    fuzzRuns += 1
+}
+check(fuzzRuns == 400, "fuzz: parsers survive random input")
+// Patterns that make a careless regex take exponential time
+let evilLines = [String(repeating: "*", count: 5000), String(repeating: "[", count: 3000), String(repeating: "`a", count: 3000),
+                 String(repeating: "a", count: 100_000), String(repeating: "<!--", count: 2000), "| " + String(repeating: "x | ", count: 2000)]
+for line in evilLines {
+    _ = MarkdownParser.parse([line]); _ = HTMLRenderer.markdown([line])
+    for t in FileType.allCases { _ = SyntaxEngine.spans(line, type: t) }
+}
+check(Date().timeIntervalSince(fuzzStart) < 60, "fuzz: hostile lines are handled in bounded time")
+
+// Archive listings: hostile paths and absurd depth
+let deepPath = (0..<500).map { "d\($0)" }.joined(separator: "/") + "/f"
+let hostile = ContentsLister.tree(from: [
+    ContentsLister.Item(path: "../../etc/passwd", isDirectory: false, size: 5),
+    ContentsLister.Item(path: "/abs/./x", isDirectory: false, size: Int64.max),
+    ContentsLister.Item(path: "big", isDirectory: false, size: Int64.max),
+    ContentsLister.Item(path: deepPath, isDirectory: false, size: 1),
+    ContentsLister.Item(path: String(repeating: "n", count: 5000), isDirectory: false, size: 1),
+])
+check(hostile.truncated, "too-deep paths mark the listing as truncated")
+check(!hostile.entries.contains { $0.name == ".." } && hostile.entries.contains { $0.name == "etc" }, "'..' never becomes a folder")
+check(hostile.entries.allSatisfy { $0.name.count <= ContentsLister.nameLimit }, "long names are shortened")
+
 try? FileManager.default.removeItem(at: dir)
 exit(failures == 0 ? 0 : 1)

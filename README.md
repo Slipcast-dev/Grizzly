@@ -18,7 +18,7 @@
 ---
 
 **Grizzly** is a small reader and editor for Markdown, plain-text and source-code files (with syntax highlighting for Python, Swift,
-C/C++, C#, JavaScript, TypeScript, CSS and PHP). It opens a document, shows it the way you
+C/C++, C#, JavaScript, TypeScript, CSS, PHP, Go, Rust, Java, Kotlin, SQL, Shell and Ruby). It opens a document, shows it the way you
 would like to read it, lets you format it without seeing a line of markup, and gets out of the way. The macOS app is native
 (SwiftUI); the Windows app is a portable Electron port (see the [changelog](CHANGELOG.md) for what is macOS-only).
 
@@ -47,7 +47,7 @@ Get the files from the **[latest release](https://github.com/Slipcast-dev/Grizzl
 
 ## Features
 
-- **User and Developer modes** (macOS) — *User* edits the text with the formatting code hidden: it looks the way it reads (headings, bold, lists with real markers, clickable check boxes, quotes, dividers, bordered tables, folding sections). *Developer* shows the file exactly as it is: all the markup, line numbers, clickable line **bookmarks** (kept between sessions) and syntax colors for **Python, Swift, C/C++, C#, JavaScript, TypeScript, CSS and PHP** (also inside fenced Markdown blocks) as well as JSON, YAML, INI/TOML, XML/HTML, TeX and logs. In split view each pane has its own mode, and the divider between the panes can be dragged. (Windows: Reading / Source / Edit.)
+- **User and Developer modes** (macOS) — *User* edits the text with the formatting code hidden: it looks the way it reads (headings, bold, lists with real markers, clickable check boxes, quotes, dividers, bordered tables, folding sections). *Developer* shows the file exactly as it is: all the markup, line numbers, clickable line **bookmarks** (kept between sessions) and syntax colors for **Python, Swift, C/C++, C#, JavaScript, TypeScript, CSS, PHP, Go, Rust, Java, Kotlin, SQL, Shell and Ruby** (also inside fenced Markdown blocks) as well as JSON, YAML, INI/TOML, XML/HTML, TeX and logs. In split view each pane has its own mode, and the divider between the panes can be dragged. (Windows: Reading / Source / Edit.)
 - **Formatting** (macOS, Markdown) — a bar, a *Format* menu and the right-click menu: Title / Heading / Subheading / Body / Monospaced, bold, italic, underline, strikethrough, five soft highlight colors, alignment, bulleted / dashed / numbered lists, check lists, quotes, dividers and tables. The file stays plain Markdown.
 - **Attachments** (macOS) — photos, videos, PDF files, any files and links to web pages: from the paperclip, by drag and drop or by pasting a picture. Files are copied next to the document into `<name>.assets`.
 - **New file** — `⌘N` / `Ctrl+N`: pick a name, folder and format; the file is created with a small template and opens for editing.
@@ -55,7 +55,9 @@ Get the files from the **[latest release](https://github.com/Slipcast-dev/Grizzl
   ISO-8859-1) is preserved (a file that cannot hold emoji is offered UTF-8). *Undo* steps back one word at a time; spelling and grammar are checked in Russian and English (Markdown, TXT, RTF, TeX).
 - **CSV / TSV tables** with automatic delimiter detection.
 - **Save As…** — save a copy in any supported format and location, without touching the original.
-- **Find** with live highlighting, next / previous match.
+- **Find and replace** with live highlighting, match case, whole word and regular expressions; an **outline** of headings and declarations; a **command palette** (`⌘⇧P`).
+- **Export** to HTML and PDF, and **crash recovery** of unsaved text.
+- **Conflicts with the disk** — compare and three-way merge when a file changes under your unsaved edits.
 - **Search files** by the beginning of a name or of any word in it (files and folders).
 - **Tags like in Apple Notes** — `#hashtags` (emoji allowed) written in a file are its tags: colored in the text, suggested while typing, listed in the sidebar; click one or several to list the files that carry them; rename or delete a tag everywhere.
 - **Notifications** for saving, copying, tags and other actions; an emoji picker button.

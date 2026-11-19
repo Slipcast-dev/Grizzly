@@ -93,7 +93,7 @@ final class AppState: ObservableObject {
                 recovery.remove(path: entry.path)
                 continue
             }
-            if current.replacingOccurrences(of: "\r\n", with: "\n") == entry.text { recovery.remove(path: entry.path); continue }
+            if LineEndings.parse(current).normalized == entry.text { recovery.remove(path: entry.path); continue }
             pending.append(entry)
         }
         guard !pending.isEmpty else { return }
@@ -131,6 +131,7 @@ final class AppState: ObservableObject {
     @Published var findOptions = SearchOptions() {
         didSet { Searcher.options = findOptions; recomputeMatches(reset: true) }
     }
+    @Published var paletteVisible = false
     @Published var replaceText = ""
     @Published var isReplaceVisible = false
     @Published private(set) var matches: [SearchMatch] = []
@@ -591,6 +592,40 @@ final class AppState: ObservableObject {
         }
     }
 
+    // MARK: Conflict with the disk
+
+    struct MergeModel: Identifiable {
+        let id: UUID           // the document
+        let name: String
+        let rows: [LineDiff.Row]
+        let merged: LineDiff.Merge
+        let theirs: String
+    }
+    @Published var merge: MergeModel?
+
+    /// Opens the comparison of the unsaved text with the file as it is on disk now.
+    func compareWithDisk(_ id: UUID) {
+        guard let doc = documents.first(where: { $0.id == id }), let mine = drafts[id] else { reload(id); return }
+        guard let loaded = try? FileLoader.read(doc.url) else { errorMessage = L("Не удалось обновить «%@».", doc.name); return }
+        let theirs = LineEndings.parse(loaded.text).normalized
+        func lines(_ t: String) -> [String] { t.components(separatedBy: "\n") }
+        merge = MergeModel(
+            id: id, name: doc.name,
+            rows: LineDiff.diff(lines(mine), lines(theirs)),
+            merged: LineDiff.merge(base: lines(doc.normalized), mine: lines(mine), theirs: lines(theirs)),
+            theirs: theirs)
+    }
+
+    /// Takes the disk version as the new base and keeps the merged text as an unsaved edit.
+    func applyMerge(_ model: MergeModel) {
+        let text = model.merged.text
+        reload(model.id)
+        if let doc = documents.first(where: { $0.id == model.id }) { setDraft(text, for: doc) }
+        merge = nil
+        notify(model.merged.conflicts == 0 ? L("Изменения объединены.") : L("Объединено; конфликтов: %d. Найдите «<<<<<<<».", model.merged.conflicts),
+               symbol: "arrow.triangle.merge")
+    }
+
     /// Hides the banner until the file changes again.
     func ignoreChange(_ id: UUID) {
         guard let i = documents.firstIndex(where: { $0.id == id }) else { return }
@@ -620,7 +655,7 @@ final class AppState: ObservableObject {
     @discardableResult
     func save(_ id: UUID) -> Bool {
         guard let doc = documents.first(where: { $0.id == id }), let draft = drafts[id] else { return true }
-        let text = doc.text.contains("\r\n") ? draft.replacingOccurrences(of: "\n", with: "\r\n") : draft
+        let text = doc.lineEndings.apply(to: draft)
         do {
             do {
                 try FileLoader.write(text, to: doc.url, encoding: doc.encoding)
@@ -734,8 +769,7 @@ final class AppState: ObservableObject {
     }
 
     private func export(_ doc: Document, to url: URL) {
-        var body = text(for: doc)
-        if doc.text.contains("\r\n") { body = body.replacingOccurrences(of: "\n", with: "\r\n") }
+        let body = doc.lineEndings.apply(to: text(for: doc))
         let toRTF = url.pathExtension.lowercased() == "rtf"
         // Keep the source encoding for text formats; RTF is its own container, and RTF sources become UTF-8.
         var encoding = toRTF ? "RTF" : (doc.encoding == "RTF" ? "UTF-8" : doc.encoding)
@@ -793,32 +827,43 @@ final class AppState: ObservableObject {
 
     /// Replaces the current hit with the replacement text, then moves to the next one.
     func replaceCurrent() {
-        guard let doc = current, let m = currentMatch else { return }
-        var lines = text(for: doc).components(separatedBy: "\n")
-        guard lines.indices.contains(m.unit),
-              let line = TextSearch.replaceOne(findQuery, with: replaceText, in: lines[m.unit], index: m.occurrence, options: findOptions)
-        else { return }
-        lines[m.unit] = line
-        let index = matchIndex
-        setDraft(lines.joined(separator: "\n"), for: doc)
-        recomputeMatches(reset: false, reveal: false)
-        matchIndex = min(index, max(0, matches.count - 1))
-        revealCurrentMatch()
+        guard let doc = current, currentMatch != nil else { return }
+        applyEdits(TextSearch.edits(findQuery, with: replaceText, in: text(for: doc), only: matchIndex, options: findOptions), to: doc)
     }
 
-    /// Replaces every hit in the focused document (one undo-less step: the draft is replaced as a whole).
+    /// Replaces every hit in the focused document. It is one step for Undo.
     func replaceAll() {
         guard let doc = current, !findQuery.isEmpty else { return }
-        var total = 0
-        let lines = text(for: doc).components(separatedBy: "\n").map { line -> String in
-            let r = TextSearch.replaceAll(findQuery, with: replaceText, in: line, options: findOptions)
-            total += r.count
-            return r.text
+        let edits = TextSearch.edits(findQuery, with: replaceText, in: text(for: doc), options: findOptions)
+        guard !edits.isEmpty else { return }
+        applyEdits(edits, to: doc)
+        notify(L("Заменено: %d", edits.count), symbol: "arrow.left.arrow.right")
+    }
+
+    /// An edit that the editor of the document applies through its undo manager, so ⌘Z takes it back.
+    struct EditRequest: Equatable {
+        let id = UUID()
+        let documentURL: URL
+        let base: String
+        let edits: [TextSearch.Edit]
+    }
+    @Published private(set) var editRequest: EditRequest?
+    /// Set by the editor that carried out the request; if none did (no editor on screen) the text is replaced directly.
+    var editAcknowledged = false
+
+    func applyEdits(_ edits: [TextSearch.Edit], to doc: Document) {
+        guard !edits.isEmpty else { return }
+        let base = text(for: doc)
+        let index = matchIndex
+        editAcknowledged = false
+        editRequest = EditRequest(documentURL: doc.url, base: base, edits: edits)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            guard let self else { return }
+            if !self.editAcknowledged { self.setDraft(TextSearch.apply(edits, to: base), for: doc) }
+            self.recomputeMatches(reset: false, reveal: false)
+            self.matchIndex = min(index, max(0, self.matches.count - 1))
+            self.revealCurrentMatch()
         }
-        guard total > 0 else { return }
-        setDraft(lines.joined(separator: "\n"), for: doc)
-        recomputeMatches(reset: true, reveal: false)
-        notify(L("Заменено: %d", total), symbol: "arrow.left.arrow.right")
     }
 
     func hideFind() {
@@ -835,7 +880,7 @@ final class AppState: ObservableObject {
             return
         }
         // The editor is searched as it is right now, unsaved changes included.
-        matches = Searcher.matches(query: findQuery, inLines: text(for: doc).components(separatedBy: "\n"))
+        matches = Searcher.matches(query: findQuery, in: text(for: doc))
         matchIndex = reset ? 0 : min(matchIndex, max(0, matches.count - 1))
         if reveal { revealCurrentMatch() }
     }

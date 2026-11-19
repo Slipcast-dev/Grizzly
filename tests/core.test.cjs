@@ -9,7 +9,7 @@ const src = fs.readFileSync(path.join(__dirname, '..', 'electron', 'renderer', '
 const ctx = { crypto: { randomUUID: () => 'id' }, console };
 vm.createContext(ctx);
 // Top-level const/function declarations are exposed through a trailing expression.
-const api = vm.runInContext(`${src}\n({ fileTypeOf, baseName, MarkdownParser, CSV, makeDocument, plain, Syntax, fenceType, Searcher })`, ctx);
+const api = vm.runInContext(`${src}\n({ fileTypeOf, baseName, MarkdownParser, CSV, makeDocument, plain, Syntax, fenceType, Searcher, LineEndings, TextSearch, Outline, LineDiff })`, ctx);
 
 test('file types by extension', () => {
   assert.strictEqual(api.fileTypeOf('a/b/Notes.MD'), 'markdown');
@@ -108,7 +108,7 @@ test('file search matches the beginning of the name or of any word', () => {
 });
 
 test('find in edited text counts hits per line', () => {
-  const hits = api.Searcher.matchesInLines('ab', ['ab AB', 'x', 'cab']);
+  const hits = api.Searcher.matchesInText('ab', 'ab AB\nx\ncab');
   assert.deepStrictEqual(JSON.parse(JSON.stringify(hits)), [{ unit: 0, occurrence: 0 }, { unit: 0, occurrence: 1 }, { unit: 2, occurrence: 0 }]);
 });
 
@@ -145,4 +145,106 @@ test('tags: create, assign, rename, delete', () => {
   lib.deleteTag('Дом');
   assert.strictEqual(lib.allTags.length, 0);
   assert.strictEqual(lib.filesWithTag('Дом').length, 0);
+});
+
+// Arrays made inside the vm context have another prototype: compare by value.
+const same = (a, b) => assert.strictEqual(JSON.stringify(a), JSON.stringify(b));
+
+test('line endings: mixed endings survive an open and save', () => {
+  for (const raw of ['a\r\nb\nc\rd', 'a\r\nb\r\n', 'a\nb\n', 'a\rb\r', '\r\n\r\n', 'no break', 'a\n\rb']) {
+    const p = api.LineEndings.parse(raw);
+    assert.ok(!p.normalized.includes('\r'), JSON.stringify(raw));
+    assert.strictEqual(api.LineEndings.apply(p.normalized, p.endings), raw, JSON.stringify(raw));
+  }
+  const p = api.LineEndings.parse('a\r\nb\r\nc\n');
+  assert.strictEqual(api.LineEndings.apply('a\nb\nc\nNEW\n', p.endings), 'a\r\nb\r\nc\nNEW\r\n');
+});
+
+test('document records its line endings', () => {
+  const doc = api.makeDocument('/tmp/a.txt', { text: 'a\r\nb\r\n', encoding: 'UTF-8', mtimeMs: 1 });
+  same(Array.from(doc.lines), ['a', 'b', '']);
+  assert.strictEqual(api.LineEndings.apply(doc.lines.join('\n'), doc.endings), 'a\r\nb\r\n');
+});
+
+test('search options, regular expressions and multi-line hits', () => {
+  const T = api.TextSearch;
+  const hello = 'Hello hello HELLO world';
+  const o = (x) => Object.assign({ caseSensitive: false, wholeWord: false, regex: false }, x);
+  assert.strictEqual(T.matches('hello', hello, o()).length, 3);
+  assert.strictEqual(T.matches('hello', hello, o({ caseSensitive: true })).length, 1);
+  assert.strictEqual(T.matches('wor', hello, o({ wholeWord: true })).length, 0);
+  assert.strictEqual(T.matches('world', hello, o({ wholeWord: true })).length, 1);
+  assert.strictEqual(T.matches('h.llo', hello, o({ regex: true })).length, 3);
+  assert.ok(!T.isValid('(', o({ regex: true })) && T.isValid('(', o()));
+  assert.strictEqual(T.matches('x*', 'abc', o({ regex: true })).length, 0);
+  const multi = 'one\ntwo\nthree\ntwo';
+  same(T.locate('two', multi, o()).map((h) => h.unit), [1, 3]);
+  assert.strictEqual(T.locate('one\\ntwo', multi, o({ regex: true })).length, 1);
+  assert.strictEqual(T.locate('^t', multi, o({ regex: true })).length, 3);
+  assert.strictEqual(T.apply(T.edits('one\\ntwo', 'X', multi, o({ regex: true })), multi), 'X\nthree\ntwo');
+  assert.strictEqual(T.apply(T.edits('(\\w+) (\\w+)', '$2 $1', 'ab cd', o({ regex: true })), 'ab cd'), 'cd ab');
+  assert.strictEqual(T.apply(T.edits('hello', 'X', hello, o(), 1), hello), 'Hello X HELLO world');
+});
+
+test('outline of different file types', () => {
+  const t = (text, type) => api.Outline.items(text, type).map((i) => i.title);
+  same(t('# A\n```\n# no\n```\n## B', 'markdown'), ['A', 'B']);
+  same(t('class A:\n    def f(self):\n        pass\ndef g(): pass', 'python'), ['class A', 'def f', 'def g']);
+  same(t('struct S {\n  func go() {}\n}', 'swift'), ['struct S', 'func go']);
+  same(t('function a() {}\nconst b = (x) => 1', 'javascript'), ['function a', 'b()']);
+  same(t('[main]\nk=v\n[other]', 'config'), ['main', 'other']);
+  same(t('\\section{Intro}\n\\subsection{More}', 'tex'), ['Intro', 'More']);
+  same(t('func main() {}\ntype T struct{}', 'go'), ['func main', 'type T']);
+  same(t('a: 1\nb:\n  c: 2', 'yaml'), ['a', 'b']);
+  same(t('int main(int argc) {\n  if (x) {}\n}', 'cpp'), ['main()']);
+});
+
+test('diff and three-way merge', () => {
+  const D = api.LineDiff;
+  const base = ['a', 'b', 'c', 'd'];
+  same(D.merge(base, ['a', 'B', 'c', 'd'], ['a', 'b', 'c', 'D']).lines, ['a', 'B', 'c', 'D']);
+  const clash = D.merge(base, ['a', 'mine', 'c', 'd'], ['a', 'disk', 'c', 'd']);
+  assert.strictEqual(clash.conflicts, 1);
+  assert.ok(clash.lines.includes('<<<<<<< mine') && clash.lines.includes('>>>>>>> disk'));
+  assert.strictEqual(D.merge(base, ['a', 'x', 'c', 'd'], ['a', 'x', 'c', 'd']).conflicts, 0);
+  same(D.merge(base, base, ['z']).lines, ['z']);
+  same(D.diff(['a', 'b'], ['a', 'c', 'b']).map((r) => r.op), ['equal', 'insert', 'equal']);
+  same(D.diff([], []), []);
+});
+
+test('new languages: extensions and coloring', () => {
+  assert.strictEqual(api.fileTypeOf('main.go'), 'go');
+  assert.strictEqual(api.fileTypeOf('a.rs'), 'rust');
+  assert.strictEqual(api.fileTypeOf('a.sh'), 'shell');
+  assert.strictEqual(api.fileTypeOf('a.kts'), 'kotlin');
+  const has = (line, type, word, role) => api.Syntax.spans(line, type).some((s) => line.slice(s.start, s.end) === word && s.role === role);
+  assert.ok(has('func main() {}', 'go', 'func', 'keyword'));
+  assert.ok(has('let x = 1; // c', 'rust', '// c', 'comment') && has('println!("a");', 'rust', 'println!', 'key'));
+  assert.ok(has('select * from t', 'sql', 'select', 'keyword') && has('SELECT 1 -- c', 'sql', '-- c', 'comment'));
+  assert.ok(has('echo $HOME # c', 'shell', '$HOME', 'key') && has('echo $HOME # c', 'shell', '# c', 'comment'));
+  assert.ok(has('def f; end', 'ruby', 'def', 'keyword') && has('@a = :b', 'ruby', '@a', 'key'));
+  assert.ok(has('public class A {}', 'java', 'class', 'keyword') && has('fun f() = null', 'kotlin', 'fun', 'keyword'));
+});
+
+test('fuzzing: parsers survive random and hostile input', () => {
+  const alphabet = [...'#*_`[]()<>!|-+=~\\/"\' \n\t\r0123456789abcXYZ{};:.,$@%&?áю😀'];
+  const rnd = (n) => Math.floor(Math.random() * n);
+  const started = Date.now();
+  const types = ['markdown', 'text', 'json', 'yaml', 'csv', 'log', 'xml', 'html', 'config', 'tex', 'python', 'swift', 'cpp', 'csharp', 'javascript', 'typescript', 'css', 'php', 'go', 'rust', 'java', 'kotlin', 'sql', 'shell', 'ruby'];
+  for (let k = 0; k < 400; k++) {
+    const text = Array.from({ length: rnd(600) }, () => alphabet[rnd(alphabet.length)]).join('');
+    const lines = text.split('\n');
+    api.MarkdownParser.parse(lines);
+    api.CSV.parse(lines, ',');
+    api.Outline.items(text, types[rnd(types.length)]);
+    for (const type of types) { api.Syntax.states(lines, type); for (const l of lines.slice(0, 3)) api.Syntax.spans(l, type); }
+    const p = api.LineEndings.parse(text);
+    assert.strictEqual(api.LineEndings.apply(p.normalized, p.endings), text);
+  }
+  const evil = ['*'.repeat(5000), '['.repeat(3000), '`a'.repeat(3000), 'a'.repeat(100000), '<!--'.repeat(2000), '| ' + 'x | '.repeat(2000)];
+  for (const line of evil) {
+    api.MarkdownParser.parse([line]);
+    for (const type of types) api.Syntax.spans(line, type);
+  }
+  assert.ok(Date.now() - started < 60000, 'bounded time');
 });

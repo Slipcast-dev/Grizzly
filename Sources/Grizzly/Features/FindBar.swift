@@ -161,19 +161,8 @@ struct OutlineButton: View {
     @State private var shown = false
 
     private var headings: [(line: Int, level: Int, title: String)] {
-        guard let doc = state.current, doc.type == .markdown else { return [] }
-        var inFence = false
-        var result: [(Int, Int, String)] = []
-        for (i, raw) in state.text(for: doc).components(separatedBy: "\n").enumerated() {
-            let line = raw.trimmingCharacters(in: .whitespaces)
-            if line.hasPrefix("```") || line.hasPrefix("~~~") { inFence.toggle(); continue }
-            guard !inFence, line.hasPrefix("#") else { continue }
-            let level = line.prefix { $0 == "#" }.count
-            guard level <= 6, line.dropFirst(level).first == " " else { continue }
-            let title = line.dropFirst(level).trimmingCharacters(in: .whitespaces)
-            if !title.isEmpty { result.append((i, level, title)) }
-        }
-        return result
+        guard let doc = state.current else { return [] }
+        return Outline.items(state.text(for: doc), type: doc.type).map { ($0.line, $0.level, $0.title) }
     }
 
     var body: some View {

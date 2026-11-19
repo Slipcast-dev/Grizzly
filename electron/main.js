@@ -4,10 +4,12 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const updater = require('./updater');
+const fileio = require('./fileio');
 
 const EXTENSIONS = ['md', 'markdown', 'mdown', 'txt', 'text', 'json', 'yaml', 'yml', 'csv', 'tsv', 'log',
   'xml', 'html', 'htm', 'ini', 'conf', 'toml', 'tex', 'rtf',
-  'py', 'pyw', 'swift', 'c', 'h', 'cpp', 'cc', 'cxx', 'hpp', 'hh', 'hxx', 'cs', 'js', 'mjs', 'cjs', 'jsx', 'ts', 'tsx', 'css', 'scss', 'php'];
+  'py', 'pyw', 'swift', 'c', 'h', 'cpp', 'cc', 'cxx', 'hpp', 'hh', 'hxx', 'cs', 'js', 'mjs', 'cjs', 'jsx', 'ts', 'tsx', 'css', 'scss', 'php',
+  'go', 'rs', 'java', 'kt', 'kts', 'sql', 'sh', 'bash', 'zsh', 'rb'];
 
 // Portable build: keep settings and the library next to the .exe when that folder is writable.
 // The app used to be called MD Reader: its data folders are renamed once so settings and the library carry over.
@@ -190,6 +192,10 @@ function buildMenu() {
         item('Сохранить как…', 'saveAs', 'CmdOrCtrl+Shift+S'),
         item('Закрыть вкладку', 'closeTab', 'CmdOrCtrl+W'),
         { type: 'separator' },
+        item('Экспорт в HTML…', 'exportHtml'),
+        item('Экспорт в PDF…', 'exportPdf'),
+        { type: 'separator' },
+        item('Палитра команд…', 'palette', 'CmdOrCtrl+Shift+P'),
         item('Настройки…', 'settings', 'CmdOrCtrl+,'),
         { type: 'separator' },
         { label: T('Выход'), role: 'quit' },
@@ -206,6 +212,7 @@ function buildMenu() {
       label: T('Поиск'),
       submenu: [
         item('Найти…', 'find', 'CmdOrCtrl+F'),
+        item('Найти и заменить…', 'replace', 'CmdOrCtrl+H'),
         item('Найти далее', 'findNext', 'CmdOrCtrl+G'),
         item('Найти ранее', 'findPrev', 'CmdOrCtrl+Shift+G'),
         alias('findNext', 'F3'),
@@ -321,7 +328,8 @@ function rtfToText(src) {
   return out.replace(/\n{3,}/g, '\n\n').trim() + '\n';
 }
 
-/** Reads a file and decodes it: UTF-8 (BOM), UTF-16 (BOM), UTF-8, then Windows-1251. */
+/** Reads a file and decodes it: UTF-8 (BOM), UTF-16 (BOM), UTF-8, then the 8-bit reading that looks most like Russian
+ *  (Windows-1251, KOI8-R, CP866), then ISO-8859-1. */
 function readText(file) {
   if (fs.statSync(file).size > MAX_READ) throw Object.assign(new Error('file too large'), { code: 'EFBIG' });
   const buf = fs.readFileSync(file);
@@ -336,7 +344,7 @@ function readText(file) {
   try {
     return { text: new TextDecoder('utf-8', { fatal: true }).decode(buf), encoding: 'UTF-8' };
   } catch { /* not UTF-8 */ }
-  return { text: decode(buf, 'windows-1251'), encoding: 'Windows-1251' };
+  return fileio.detectCyrillic(buf) || { text: buf.toString('latin1'), encoding: 'ISO-8859-1' };
 }
 
 /** IPC hardening: only our own page may call, and only with absolute paths to supported file types. */
@@ -352,7 +360,7 @@ const refuse = { ok: false, code: 'EACCES' };
 // Files the user brought in (dialogs, command line, folder scan, a successful read). Writes are limited to these.
 const approved = new Set();
 const approve = (list) => { for (const p of list) if (typeof p === 'string') approved.add(path.resolve(p)); };
-const MAX_READ = 100 * 1024 * 1024;
+const MAX_READ = 200 * 1024 * 1024;
 
 ipcMain.handle('app:info', () => ({
   platform: process.platform,
@@ -440,28 +448,12 @@ function textToRtf(text) {
   return out + '}';
 }
 
-let cp1251 = null;
-function encodeCp1251(text) {
-  if (!cp1251) {
-    cp1251 = new Map();
-    const dec = new TextDecoder('windows-1251');
-    for (let b = 0x80; b < 256; b++) cp1251.set(dec.decode(Uint8Array.of(b)), b);
-  }
-  const out = [];
-  for (const ch of text) {
-    const code = ch.codePointAt(0);
-    const byte = code < 0x80 ? code : cp1251.get(ch);
-    if (byte === undefined) throw Object.assign(new Error('unmappable character'), { code: 'EENCODE' });
-    out.push(byte);
-  }
-  return Buffer.from(out);
-}
-
 /** Inverse of readText: writes the text back in the encoding the file was read with (a UTF-8 BOM is kept). */
 function encodeText(text, encoding, file) {
   switch (encoding) {
     case 'UTF-16': return Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(text, 'utf16le')]);
-    case 'Windows-1251': return encodeCp1251(text);
+    case 'Windows-1251': case 'KOI8-R': case 'CP866': return fileio.encode8(text, encoding);
+    case 'ISO-8859-1': return fileio.encodeLatin1(text);
     case 'RTF': return Buffer.from(textToRtf(text), 'latin1');
     case 'UTF-8': {
       let bom = false;
@@ -479,7 +471,7 @@ function encodeText(text, encoding, file) {
 ipcMain.handle('file:write', (e, file, text, encoding) => {
   if (!trusted(e) || !validPath(file) || !approved.has(path.resolve(file))) return refuse;
   try {
-    fs.writeFileSync(file, encodeText(String(text), encoding, file));
+    fileio.replaceFile(file, encodeText(String(text), encoding, file));
     return { ok: true, mtimeMs: fs.statSync(file).mtimeMs };
   } catch (err) {
     return { ok: false, code: err.code || 'EWRITE' };
@@ -492,6 +484,7 @@ const FORMATS = [
   ['Config', ['ini', 'conf', 'toml']], ['TeX', ['tex']], ['RTF', ['rtf']],
   ['Python', ['py', 'pyw']], ['Swift', ['swift']], ['C / C++', ['cpp', 'c', 'cc', 'cxx', 'h', 'hpp', 'hh', 'hxx']], ['C#', ['cs']],
   ['JavaScript', ['js', 'mjs', 'cjs', 'jsx']], ['TypeScript', ['ts', 'tsx']], ['CSS', ['css', 'scss']], ['PHP', ['php']],
+  ['Go', ['go']], ['Rust', ['rs']], ['Java', ['java']], ['Kotlin', ['kt', 'kts']], ['SQL', ['sql']], ['Shell', ['sh', 'bash', 'zsh']], ['Ruby', ['rb']],
 ];
 
 /** Starter content for a newly created file. */
@@ -512,6 +505,11 @@ function templateFor(ext) {
     case 'js': case 'mjs': case 'cjs': case 'jsx': return "'use strict';\n\n";
     case 'css': case 'scss': return 'body {\n}\n';
     case 'php': return '<?php\n\n';
+    case 'go': return 'package main\n\nfunc main() {\n}\n';
+    case 'rs': return 'fn main() {\n}\n';
+    case 'java': return 'public class Main {\n}\n';
+    case 'sh': case 'bash': case 'zsh': return '#!/bin/sh\n\n';
+    case 'rb': return '# frozen_string_literal: true\n\n';
     default: return '';
   }
 }
@@ -705,6 +703,51 @@ ipcMain.handle('session:take', (e) => {
     fs.rmSync(sessionPath(), { force: true });
     return Date.now() - session.date < 10 * 60 * 1000 ? session : null;
   } catch { return null; }
+});
+
+// Crash recovery: unsaved text, mirrored to disk by the page and offered back at the next launch.
+const recovery = () => new fileio.RecoveryStore(path.join(app.getPath('userData'), 'Recovery'));
+
+ipcMain.handle('recovery:save', (e, file, text) => {
+  if (!trusted(e) || !validPath(file) || typeof text !== 'string' || text.length > MAX_READ) return false;
+  try { recovery().save(path.resolve(file), text); return true; } catch { return false; }
+});
+ipcMain.handle('recovery:remove', (e, file) => {
+  if (!trusted(e) || !validPath(file)) return false;
+  recovery().remove(path.resolve(file));
+  return true;
+});
+ipcMain.handle('recovery:list', (e) => (trusted(e) ? recovery().list() : []));
+
+// Export of the open document to HTML or PDF. The page sends finished HTML; the PDF is printed by a hidden window
+// that runs no scripts.
+ipcMain.handle('export:save', async (e, name, kind, html) => {
+  if (!trusted(e) || typeof name !== 'string' || typeof html !== 'string' || html.length > 64 * 1024 * 1024
+      || (kind !== 'html' && kind !== 'pdf')) return refuse;
+  const result = await dialog.showSaveDialog(win, {
+    title: T(kind === 'pdf' ? 'Экспорт в PDF…' : 'Экспорт в HTML…'),
+    defaultPath: path.join(app.getPath('documents'), path.basename(name, path.extname(name)) + '.' + kind),
+    filters: [{ name: kind.toUpperCase(), extensions: [kind] }],
+  });
+  if (result.canceled || !result.filePath) return { ok: false, code: 'ECANCEL' };
+  const file = /\.[^.\\/]+$/.test(result.filePath) ? result.filePath : result.filePath + '.' + kind;
+  try {
+    if (kind === 'html') { fs.writeFileSync(file, html); return { ok: true, path: file }; }
+    const temp = path.join(os.tmpdir(), `grizzly-export-${process.pid}-${Date.now()}.html`);
+    fs.writeFileSync(temp, html);
+    const printer = new BrowserWindow({ show: false, webPreferences: { sandbox: true, javascript: false, contextIsolation: true } });
+    try {
+      await printer.loadFile(temp);
+      const data = await printer.webContents.printToPDF({ pageSize: 'A4', printBackground: true });
+      fs.writeFileSync(file, data);
+    } finally {
+      printer.destroy();
+      fs.rmSync(temp, { force: true });
+    }
+    return { ok: true, path: file };
+  } catch (err) {
+    return { ok: false, code: err.code || 'EWRITE' };
+  }
 });
 
 const libraryPath = () => path.join(app.getPath('userData'), 'library.json');

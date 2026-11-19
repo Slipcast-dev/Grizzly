@@ -76,6 +76,14 @@ struct GrizzlyApp: App {
                 Button("Сохранить как…") { state.presentSaveAsPanel() }
                     .keyboardShortcut("s", modifiers: [.command, .shift])
                     .disabled(state.current == nil)
+                Divider()
+                Button("Экспорт в HTML…") { state.exportHTML() }
+                    .disabled(state.current == nil)
+                Button("Экспорт в PDF…") { state.exportPDF() }
+                    .disabled(state.current == nil)
+                Divider()
+                Button("Палитра команд…") { state.paletteVisible.toggle() }
+                    .keyboardShortcut("p", modifiers: [.command, .shift])
                 Button("Закрыть вкладку") {
                     if let id = state.current?.id { state.close(id) }
                 }

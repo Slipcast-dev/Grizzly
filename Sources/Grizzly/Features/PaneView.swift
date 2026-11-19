@@ -86,6 +86,10 @@ struct PaneView: View {
             Image(systemName: "arrow.triangle.2.circlepath").foregroundColor(theme.warning)
             Text("Файл изменён на диске.")
             Spacer()
+            if state.isDirty(doc.id) {
+                Button("Сравнить…") { state.compareWithDisk(doc.id) }
+                    .buttonStyle(.hoverFilled)
+            }
             Button("Обновить  ⌘R") { state.refresh(doc.id) }
                 .buttonStyle(.hoverFilled)
             Button("Не сейчас") { state.ignoreChange(doc.id) }

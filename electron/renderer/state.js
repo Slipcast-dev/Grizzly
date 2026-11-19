@@ -306,6 +306,9 @@ const App = {
   matches: [],
   matchIndex: 0,
   findFocusToken: 0,
+  get findOptions() { return TextSearch.options; }, // case, whole word, regular expression: shared with Searcher
+  replaceText: '',
+  isReplaceVisible: false,
   scrollTarget: null, // {unit, token}: asks the target pane to scroll a row into view
 
   ui: {
@@ -503,6 +506,85 @@ const App = {
   syncDirty() {
     window.api.setDirty(this.drafts.size > 0);
     this.render(['tabs']);
+    this.syncRecovery();
+  },
+
+  // Crash recovery
+
+  recoveryWritten: new Map(), // path -> the text last copied to the recovery folder
+  recoveryTimer: null,
+
+  /** Copies unsaved text to the recovery folder two seconds after the last change; a saved or discarded draft is
+   *  removed at once, so a clean exit leaves nothing behind. */
+  syncRecovery() {
+    const live = new Set(this.documents.filter((d) => this.drafts.has(d.id)).map((d) => d.path));
+    for (const path of [...this.recoveryWritten.keys()]) {
+      if (live.has(path)) continue;
+      window.api.removeRecovery(path);
+      this.recoveryWritten.delete(path);
+    }
+    clearTimeout(this.recoveryTimer);
+    if (!live.size) return;
+    this.recoveryTimer = setTimeout(() => {
+      for (const doc of this.documents) {
+        const text = this.drafts.get(doc.id);
+        if (text === undefined || this.recoveryWritten.get(doc.path) === text) continue;
+        window.api.saveRecovery(doc.path, text);
+        this.recoveryWritten.set(doc.path, text);
+      }
+    }, 2000);
+  },
+
+  /** At launch: offers the text that was being edited when the app ended without saving. */
+  async offerRecovery() {
+    const pending = [];
+    for (const entry of await window.api.listRecovery()) {
+      const loaded = await window.api.readFile(entry.path);
+      if (!loaded.ok || LineEndings.parse(loaded.text).normalized === entry.text) { await window.api.removeRecovery(entry.path); continue; }
+      pending.push(entry);
+    }
+    if (!pending.length) return;
+    const names = pending.map((e) => baseName(e.path)).join(', ');
+    if (await askConfirm(t('Найдены несохранённые правки (файлов: %d).', pending.length),
+      t('Приложение закрылось, не сохранив их. Восстановить?') + ' ' + names, t('Восстановить'))) {
+      for (const entry of pending) {
+        await this.open([entry.path]);
+        const doc = this.documents.find((d) => d.path === entry.path);
+        if (doc) this.setDraft(doc, entry.text);
+      }
+      this.render(['main']);
+    } else {
+      for (const entry of pending) await window.api.removeRecovery(entry.path);
+    }
+  },
+
+  // Conflict with the disk
+
+  /** Opens the comparison of the unsaved text with the file as it is on disk now. */
+  async compareWithDisk(id) {
+    const doc = this.documents.find((d) => d.id === id);
+    if (!doc) return;
+    const mine = this.drafts.get(id);
+    if (mine === undefined) { await this.refresh(id); return; }
+    const loaded = await window.api.readFile(doc.path);
+    if (!loaded.ok) { this.fail(t('Не удалось обновить «%@».', doc.name)); return; }
+    const split = (text) => text.split('\n');
+    const theirs = LineEndings.parse(loaded.text).normalized;
+    openMergeDialog({
+      id, name: doc.name,
+      rows: LineDiff.diff(split(mine), split(theirs)),
+      merged: LineDiff.merge(split(this.baseText(doc)), split(mine), split(theirs)),
+    });
+  },
+
+  /** Takes the disk version as the new base and keeps the merged text as an unsaved edit. */
+  async applyMerge(model) {
+    await this.reload(model.id);
+    const doc = this.documents.find((d) => d.id === model.id);
+    if (doc) this.setDraft(doc, model.merged.text);
+    this.render(['main']);
+    this.notify(model.merged.conflicts === 0 ? t('Изменения объединены.')
+      : t('Объединено; конфликтов: %d. Найдите «<<<<<<<».', model.merged.conflicts), 'refresh');
   },
 
   /** Writes the edited text to the file in its original encoding, then re-reads it. */
@@ -512,7 +594,7 @@ const App = {
     this.saving.add(id);
     try {
       let text = this.drafts.get(id);
-      if (doc.text.includes('\r\n')) text = text.replace(/\n/g, '\r\n');
+      text = LineEndings.apply(text, doc.endings);
       let result = await window.api.writeFile(doc.path, text, doc.encoding);
       if (!result.ok && result.code === 'EENCODE' && doc.encoding !== 'UTF-8') {
         // Emoji and other characters outside an 8-bit encoding: offer UTF-8 instead of losing them.
@@ -540,7 +622,7 @@ const App = {
     const doc = this.documents.find((d) => d.id === id);
     if (!doc) return;
     let text = this.textFor(doc);
-    if (doc.text.includes('\r\n')) text = text.replace(/\n/g, '\r\n');
+    text = LineEndings.apply(text, doc.endings);
     const dir = doc.path.replace(/[\\/][^\\/]*$/, '');
     const result = await window.api.saveAs(doc.name, text, doc.encoding, dir);
     if (!result.ok && result.code !== 'ECANCEL') this.fail(t('Не удалось сохранить «%@».', doc.name));
@@ -576,6 +658,51 @@ const App = {
     this.render(['main']);
   },
 
+  setFindOption(name, value) {
+    this.findOptions[name] = value;
+    this.recomputeMatches(true);
+    this.render(['main']);
+  },
+
+  /** Replaces the current hit with the replacement text, then moves to the next one. */
+  replaceCurrent() {
+    // Hits are counted differently in the reading view (rendered text), so replace in the editor's own count.
+    if (this.mode !== 'edit') this.setMode('edit');
+    const doc = this.current;
+    if (!doc || !this.currentMatch) return;
+    this.applyEdits(TextSearch.edits(this.findQuery, this.replaceText, this.textFor(doc), this.findOptions, this.matchIndex), doc);
+  },
+
+  /** Replaces every hit in the focused document. It is one step for Undo. */
+  replaceAll() {
+    if (this.mode !== 'edit') this.setMode('edit');
+    const doc = this.current;
+    if (!doc || !this.findQuery) return;
+    const list = TextSearch.edits(this.findQuery, this.replaceText, this.textFor(doc), this.findOptions);
+    if (!list.length) return;
+    this.applyEdits(list, doc);
+    this.notify(t('Заменено: %d', list.length), 'refresh');
+  },
+
+  /** Replacing needs the editor: the text goes through the textarea, so its own Undo takes the change back. */
+  applyEdits(list, doc) {
+    if (!list.length) return;
+    const index = this.matchIndex;
+    const next = TextSearch.apply(list, this.textFor(doc));
+    const area = document.querySelector(`textarea.editor-text[data-doc="${doc.id}"]`);
+    if (area) {
+      area.value = next;
+      area.setSelectionRange(list[0].start, list[0].start + list[0].text.length);
+      area.dispatchEvent(new Event('input', { bubbles: true }));
+    } else {
+      this.setDraft(doc, next);
+    }
+    this.recomputeMatches(false, false);
+    this.matchIndex = Math.min(index, Math.max(0, this.matches.length - 1));
+    this.revealCurrentMatch();
+    this.render(['main']);
+  },
+
   setQuery(query) {
     this.findQuery = query;
     this.recomputeMatches(true);
@@ -592,7 +719,7 @@ const App = {
     }
     // The editor is searched as it is right now, unsaved changes included.
     this.matches = this.mode === 'edit'
-      ? Searcher.matchesInLines(this.findQuery, this.textFor(doc).split('\n'))
+      ? Searcher.matchesInText(this.findQuery, this.textFor(doc))
       : Searcher.matches(this.findQuery, doc, this.mode);
     this.matchIndex = reset ? 0 : Math.min(this.matchIndex, Math.max(0, this.matches.length - 1));
     if (reveal) this.revealCurrentMatch();

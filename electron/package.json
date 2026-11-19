@@ -24,6 +24,7 @@
       "main.js",
       "preload.js",
       "updater.js",
+      "fileio.js",
       "strings-en.json",
       "renderer/**/*",
       "assets/icon.png"

@@ -26,14 +26,9 @@ enum Searcher {
         TextSearch.ranges(of: query, in: text, options: options)
     }
 
-    /// Hits in plain lines (the text being edited), one unit per line.
-    static func matches(query: String, inLines lines: [String]) -> [SearchMatch] {
-        guard !query.isEmpty else { return [] }
-        var result: [SearchMatch] = []
-        for (i, line) in lines.enumerated() {
-            for k in ranges(of: query, in: line).indices { result.append(SearchMatch(unit: i, occurrence: k)) }
-        }
-        return result
+    /// Hits in the text being edited: one unit per line (a hit that spans lines belongs to the line it starts in).
+    static func matches(query: String, in text: String) -> [SearchMatch] {
+        TextSearch.locate(query, in: text, options: options).map { SearchMatch(unit: $0.unit, occurrence: $0.occurrence) }
     }
 
     /// File and folder names: every word typed has to be the beginning of the name or of one of its words,

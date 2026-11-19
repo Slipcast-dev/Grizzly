@@ -5,15 +5,23 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> Everything below is in both apps: macOS and Windows.
+
 ### Added
-- **Find and replace** (macOS): *Replace* and *Replace All*, *Match case*, *Whole word* and *Regular expression* (with `$1` groups in the replacement); an invalid pattern is shown in red.
-- **Outline** (macOS): a button with the headings of the open Markdown file; a click scrolls to the heading.
-- **Crash recovery** (macOS): unsaved text is copied to `~/Library/Application Support/Grizzly/Recovery` and offered back at the next launch.
+- **Find and replace**: *Replace* and *Replace All*, *Match case*, *Whole word* and *Regular expression* (with `$1` groups in the replacement; a pattern may match across lines). An invalid pattern is shown in red. *Replace All* is a single step of Undo.
+- **Outline**: a button with the headings of the open file: Markdown, TeX, INI, YAML and HTML headings, and the classes and functions of source code. A click scrolls to the line.
+- **Compare with the file on disk**: when a file changes on disk while it has unsaved edits, the banner offers *Compare…* with a line diff and a three-way merge (your edits and the disk's changes are combined; real conflicts are marked `<<<<<<<` / `=======` / `>>>>>>>`), or keep your text, or take the disk version.
+- **Export to HTML and PDF** (*File* menu): the open document as a self-contained page, or as a paginated PDF.
+- **Command palette** (`⌘⇧P` / `Ctrl+Shift+P`): commands, open tabs, the headings of the open file and the files of the sidebar in one list.
+- **Crash recovery**: unsaved text is copied to the app's data folder and offered back at the next launch.
+- **New highlighted languages**: Go, Rust, Java, Kotlin, SQL, Shell and Ruby (also inside fenced Markdown blocks).
 - **Encodings**: KOI8-R and CP866 are detected next to Windows-1251 (the reading that looks most like Russian wins) and written back unchanged.
 
 ### Changed
-- Saving keeps symbolic links, permissions and Finder tags of the file (the file is replaced safely instead of re-created).
+- **Line endings are kept as they are**: a file with mixed `\r\n`, `\n` and `\r` endings is saved with them again; lines added by editing use the file's usual ending.
+- Saving keeps symbolic links and permissions (macOS: also Finder tags): the file is replaced safely instead of re-created.
 - Files over 2 MB open without syntax colors; files over 200 MB are refused with a message instead of freezing the app.
+- Listing archives and disk images (macOS) is limited in depth and name length, ignores `..` in paths and caps the amount of output read.
 
 ## [2.0.0] - 2026-11-09
 

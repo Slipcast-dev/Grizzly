@@ -39,6 +39,10 @@ enum ContentsLister {
 
     static let archiveLimit = 20_000
     static let folderLimit = 10_000
+    /// Deeper paths are not listed: a hostile archive can nest folders far enough to overflow the stack of the recursive walk.
+    static let depthLimit = 64
+    /// Names longer than this are shortened for display.
+    static let nameLimit = 255
 
     /// What a path is, judged by its name: nil for an ordinary file.
     static func kind(of url: URL) -> Kind? {
@@ -87,7 +91,7 @@ enum ContentsLister {
             }
         }
         var listing = tree(from: items)
-        listing.truncated = truncated
+        listing.truncated = listing.truncated || truncated
         return listing
     }
 
@@ -100,7 +104,7 @@ enum ContentsLister {
             if result.status != 0 { throw ContentsError(result.err.isEmpty ? "The archive could not be read." : result.err) }
         }
         var listing = tree(from: Array(items.prefix(limit)))
-        listing.truncated = result.cut || items.count > limit
+        listing.truncated = listing.truncated || result.cut || items.count > limit
         return listing
     }
 
@@ -184,9 +188,14 @@ enum ContentsLister {
     /// for their folders) is created on the way.
     static func tree(from items: [Item]) -> ContentsListing {
         let root = Node(name: "", isDirectory: true)
+        var skipped = false
         for item in items {
-            let parts = item.path.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+            // "." and ".." never name a place inside the container, and names are only labels: cut absurd ones.
+            let parts = item.path.split(separator: "/", omittingEmptySubsequences: true)
+                .filter { $0 != "." && $0 != ".." }
+                .map { String($0.prefix(nameLimit)) }
             guard !parts.isEmpty else { continue }
+            if parts.count > depthLimit { skipped = true; continue }
             var node = root
             for (i, part) in parts.enumerated() {
                 let last = i == parts.count - 1
@@ -201,15 +210,16 @@ enum ContentsLister {
             }
         }
         var listing = ContentsListing()
+        listing.truncated = skipped
         func convert(_ node: Node, path: String) -> ContentEntry {
             if !node.isDirectory {
                 listing.files += 1
-                listing.size += node.size ?? 0
+                listing.size = listing.size &+ max(0, node.size ?? 0)
                 return ContentEntry(id: path, name: node.name, isDirectory: false, size: node.size, children: nil)
             }
             listing.folders += 1
             let kids = sorted(node.children.values.map { convert($0, path: path + "/" + $0.name) })
-            let total = kids.reduce(Int64(0)) { $0 + ($1.size ?? 0) }
+            let total = kids.reduce(Int64(0)) { $0 &+ max(0, $1.size ?? 0) }
             return ContentEntry(id: path, name: node.name, isDirectory: true, size: total, children: kids)
         }
         listing.entries = sorted(root.children.values.map { convert($0, path: $0.name) })
@@ -230,7 +240,7 @@ enum ContentsLister {
 
     /// Runs a system tool with its input closed and a time limit. Output is read as it comes; with `lineLimit` the tool
     /// is stopped once that many lines arrived (a huge archive is listed in part rather than waited for).
-    static func run(_ path: String, _ args: [String], timeout: TimeInterval, lineLimit: Int? = nil, byteLimit: Int = 64_000_000) throws -> RunResult {
+    static func run(_ path: String, _ args: [String], timeout: TimeInterval, lineLimit: Int? = nil, byteLimit: Int = 16_000_000) throws -> RunResult {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: path)
         p.arguments = args

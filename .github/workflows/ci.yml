@@ -33,7 +33,7 @@ jobs:
       - run: npm ci
       - name: Syntax check
         run: |
-          for f in main.js preload.js renderer/*.js scripts/*.js; do node --check "$f"; done
+          for f in main.js preload.js fileio.js updater.js renderer/*.js scripts/*.js; do node --check "$f"; done
       - name: Unit tests
         working-directory: .
         run: node --test tests/*.test.cjs

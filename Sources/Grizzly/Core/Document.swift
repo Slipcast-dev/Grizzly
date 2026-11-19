@@ -9,6 +9,8 @@ struct Document: Identifiable, Hashable {
     let text: String
     /// `text` with \n line endings: what the editor shows.
     let normalized: String
+    /// How the file ended its lines; `LineEndings.apply` restores it when the text is saved.
+    let lineEndings: LineEndings
     let lines: [String]
     let csv: CSVTable?
     /// Syntax scanner state at the start of each line (open block comment or multi-line string); empty if unused.
@@ -28,7 +30,9 @@ struct Document: Identifiable, Hashable {
         self.type = FileType(url: url)
         self.encoding = loaded.encoding
         self.text = loaded.text
-        self.normalized = loaded.text.replacingOccurrences(of: "\r\n", with: "\n")
+        let parsed = LineEndings.parse(loaded.text)
+        self.normalized = parsed.normalized
+        self.lineEndings = parsed.endings
         self.lines = normalized.components(separatedBy: "\n")
         self.modified = Document.modificationDate(url)
         let lines = self.lines

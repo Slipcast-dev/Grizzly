@@ -212,7 +212,7 @@ struct SettingsView: View {
         }
     }
 
-    static let programming: [FileType] = [.python, .swift, .cpp, .csharp, .javascript, .typescript, .css, .php]
+    static let programming: [FileType] = [.python, .swift, .cpp, .csharp, .javascript, .typescript, .css, .php, .go, .rust, .java, .kotlin, .sql, .shell, .ruby]
     static let markup: [FileType] = [.json, .yaml, .config, .xml, .html, .tex, .log]
 
     private func languageToggles(_ types: [FileType]) -> some View {

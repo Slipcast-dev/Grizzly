@@ -121,7 +121,7 @@ input.inline-name { flex: 1; min-width: 0; background: var(--bg); border: 1px so
 .tab:hover .tab-close, .tab.focused .tab-close { opacity: 1; }
 
 /* Find bar */
-#findbar { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: color-mix(in srgb, var(--codebg) 60%, transparent); border-bottom: 1px solid var(--line); color: var(--secondary); }
+#findbar { flex: none; display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: 6px 12px; background: color-mix(in srgb, var(--codebg) 60%, transparent); border-bottom: 1px solid var(--line); color: var(--secondary); }
 #find-input { flex: 1; min-width: 0; border: 0; background: none; outline: 0; color: var(--text); user-select: text; }
 #find-count { font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
@@ -350,3 +350,28 @@ button.chip.on, button.chip.on:hover:not(:disabled) { background: var(--accent);
 .toast .ico { color: var(--accent); }
 .toast.out { opacity: 0; transition: opacity .25s; }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 10px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+/* Find and replace */
+.fb-row { display: flex; align-items: center; gap: 8px; }
+.fb-row input { flex: 1; min-width: 0; }
+#findbar .opt { font: 600 12px/1 var(--mono, monospace); padding: 3px 5px; border-radius: 4px; }
+#findbar .opt.on { background: var(--match, rgba(255, 200, 0, .45)); color: inherit; }
+#findbar .bad { color: #e5484d; }
+
+/* Conflict with the disk */
+.dialog.merge { width: min(760px, 92vw); display: flex; flex-direction: column; gap: 10px; }
+.diff { max-height: 52vh; overflow: auto; background: color-mix(in srgb, var(--codebg) 60%, transparent); border-radius: 6px; font: 12.5px/1.5 var(--mono, monospace); }
+.diff-row { white-space: pre; padding: 0 8px; }
+.diff-row.only-disk { background: rgba(229, 72, 77, .18); }
+.diff-row.only-mine { background: rgba(48, 164, 108, .2); }
+.warn { color: var(--warning); }
+
+/* Command palette */
+.modal-palette { align-items: flex-start; padding-top: 12vh; }
+.palette { width: min(560px, 92vw); background: var(--bg); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 16px 48px rgba(0, 0, 0, .4); overflow: hidden; }
+.pal-input { width: 100%; box-sizing: border-box; padding: 12px 14px; font-size: 16px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: inherit; outline: none; }
+.pal-list { max-height: 340px; overflow: auto; }
+.pal-item { display: flex; justify-content: space-between; gap: 12px; padding: 6px 14px; cursor: pointer; }
+.pal-item.on { background: color-mix(in srgb, var(--accent, #4a9eff) 22%, transparent); }
+.pal-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pal-detail { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45%; }
