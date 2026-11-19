@@ -397,3 +397,6 @@
 "Красным — строки, которые есть только на диске; зелёным — только в вашем тексте." = "Red: lines only on disk; green: lines only in your text.";
 "Файл «%@» изменён на диске" = "“%@” changed on disk";
 "При объединении будет конфликтов: %d. Они отмечаются как <<<<<<< / ======= / >>>>>>>." = "Conflicts when merging: %d. They are marked <<<<<<< / ======= / >>>>>>>.";
+"Очистить список «Недавно открытые»?" = "Clear the “Recently Opened” list?";
+"Файлы на диске и в боковой панели не затрагиваются." = "Files on disk and in the sidebar are not affected.";
+"История очищена." = "History cleared.";

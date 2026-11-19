@@ -174,19 +174,20 @@ struct SidebarView: View {
         }
     }
 
+    /// The section (and its header with the Clear button) stays even when the list is empty: removing the section that
+    /// holds the button being clicked crashed the table view on macOS 13. The clearing itself runs after the click ends.
     @ViewBuilder
     private var recentContent: some View {
         let items = filtered(library.recents)
-        if !items.isEmpty {
-            Section {
-                ForEach(items) { entry in historyRow(entry) }
-            } header: {
-                HStack {
-                    Text("Недавно открытые")
-                    Spacer()
-                    Button("Очистить") { library.clearRecents() }
-                        .buttonStyle(.borderless)
-                }
+        Section {
+            ForEach(items) { entry in historyRow(entry) }
+        } header: {
+            HStack {
+                Text("Недавно открытые")
+                Spacer()
+                Button("Очистить") { DispatchQueue.main.async { state.clearHistory() } }
+                    .buttonStyle(.borderless)
+                    .disabled(library.recents.isEmpty)
             }
         }
     }

@@ -1049,6 +1049,20 @@ final class AppState: ObservableObject {
         notify(L("Убрано из боковой панели: %lld.", files + folders), symbol: "trash.fill")
     }
 
+    /// Empties the "Recently opened" list after a confirmation. Files, folders and tabs are not touched.
+    func clearHistory() {
+        guard !library.recents.isEmpty else { return }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = L("Очистить список «Недавно открытые»?")
+        alert.informativeText = L("Файлы на диске и в боковой панели не затрагиваются.")
+        alert.addButton(withTitle: L("Очистить"))
+        alert.addButton(withTitle: L("Отмена"))
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        library.clearRecents()
+        notify(L("История очищена."), symbol: "trash.fill")
+    }
+
     /// Removes a file from the library (the file on disk stays) and closes it if open.
     func removeFromLibrary(_ id: UUID) {
         if let doc = documents.first(where: { $0.libraryID == id }), !close(doc.id) { return }
