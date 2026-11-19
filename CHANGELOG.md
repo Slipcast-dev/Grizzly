@@ -3,7 +3,9 @@
 All notable changes are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [2.1.1] - 2026-11-19
+
+> A fix for the **macOS** app. The Windows build is version-aligned and unchanged.
 
 ### Fixed
 - **Recently opened → Clear** (macOS 13): the button no longer closes the app. The section with the button stays on screen, the clearing runs after the click ends, and it now asks for a confirmation like the *Files* list does.
