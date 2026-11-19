@@ -3,7 +3,7 @@
 All notable changes are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [2.1.0] - 2026-11-19
 
 > Everything below is in both apps: macOS and Windows.
 

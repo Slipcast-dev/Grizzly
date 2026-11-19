@@ -62,6 +62,20 @@ The line-number gutter can be turned off in Settings.
 
 Hits are highlighted in the text you are editing.
 
+The buttons on the right of the bar switch *Match case* (`Aa`), *Whole word* (`W`) and *Regular expression* (`.*`); an invalid pattern turns red. In a regular expression `^` and `$` match at every line, `\n` matches a line break, and the replacement may use `$1`, `$2`… The arrow on the left of the bar opens the **Replace** row (`⌘H` / `Ctrl+H` on Windows): *Replace* changes the current hit, *Replace All* every hit in the document. *Replace All* is a single step of *Undo*.
+
+## Outline
+
+The list button in the toolbar shows the headings of the open file (Markdown, TeX, INI, YAML, HTML) or its declarations (classes, functions, types in source code). A click scrolls to the line.
+
+## Command palette
+
+`⇧⌘P` / `Ctrl+Shift+P` opens one list for commands, open tabs, the headings of the open file and the files of the sidebar. Type a few words, pick with `↑` `↓`, run with `Return`.
+
+## Export
+
+*File → Export as HTML…* and *Export as PDF…* save the open document (with your unsaved edits) as a self-contained page or a paginated A4 PDF. Markdown is rendered, CSV becomes a table, other formats are exported as text. The export is always light, whatever theme the app uses.
+
 ## Select all and copy
 
 `⌘A` / `Ctrl+A` selects the whole document and `⌘C` / `Ctrl+C` copies all of it.
@@ -78,13 +92,15 @@ While you edit, Markdown, TXT, RTF and TeX files are checked in Russian and Engl
 
 ## Emoji
 
-The 😀 button in the toolbar opens the system emoji picker (`⌃⌘Space` on macOS, `Win+.` on Windows). If a file is in an 8-bit encoding (Windows-1251, ISO-8859-1) that cannot hold emoji, Grizzly offers to save it as UTF-8.
+The 😀 button in the toolbar opens the system emoji picker (`⌃⌘Space` on macOS, `Win+.` on Windows). If a file is in an 8-bit encoding (Windows-1251, KOI8-R, CP866, ISO-8859-1) that cannot hold emoji, Grizzly offers to save it as UTF-8.
 
 Tag names may contain emoji (`#🍕`). A tag typed into the text appears in the sidebar after a short pause, without saving.
 
 ## Unsaved changes
 
 Closing a tab or the window with unsaved edits asks whether to save, discard or cancel.
+
+**Crash recovery.** Unsaved text is copied to the app's data folder (`~/Library/Application Support/Grizzly/Recovery` on macOS, `Recovery` in the data folder on Windows) two seconds after you stop typing and is removed when you save or discard. If the app ended without saving, the next launch offers to restore it.
 
 ## Undo, Save and notifications
 
@@ -137,6 +153,8 @@ When a file changes on disk (a build script, a sync tool, an AI assistant), Griz
 `⌘R` / `Ctrl+R` to reload. With *auto reload* enabled in Settings the file refreshes itself; text you are editing is
 never overwritten without asking.
 
+If the file changed on disk while it has unsaved edits, the banner offers **Compare…**: a line diff between your text and the disk, and a three-way merge. *Merge* combines your edits with the changes on disk; lines changed on both sides are marked `<<<<<<< mine` / `=======` / `>>>>>>> disk` for you to resolve. *Use Disk Version* drops your edits, *Keep My Text* keeps them (the next save overwrites the disk).
+
 ## Appearance
 
 Open Settings (`⌘,` / `Ctrl+,`):
@@ -157,6 +175,8 @@ Open Settings (`⌘,` / `Ctrl+,`):
 | Open / Save / Close tab | `⌘O` / `⌘S` / `⌘W` | `Ctrl+O` / `Ctrl+S` / `Ctrl+W` |
 | Settings | `⌘,` | `Ctrl+,` |
 | Find / next / previous | `⌘F` / `⌘G` / `⇧⌘G` | `Ctrl+F` / `Ctrl+G` / `Ctrl+Shift+G` |
+| Find and replace | `⌘F`, then the arrow | `Ctrl+H` |
+| Command palette | `⇧⌘P` | `Ctrl+Shift+P` |
 | Next / previous tab | `⇧⌘]` / `⇧⌘[` | `Ctrl+Shift+]` / `[` (or `Ctrl+Tab`) |
 | Split view | `⌘\` | `Ctrl+\` |
 | User / Developer (Windows: Reading / Source / Edit) | `⌥⌘1` / `2` | `Ctrl+Alt+1` / `2` / `3` |
