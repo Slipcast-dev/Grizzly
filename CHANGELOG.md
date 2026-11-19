@@ -3,6 +3,18 @@
 All notable changes are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **Find and replace** (macOS): *Replace* and *Replace All*, *Match case*, *Whole word* and *Regular expression* (with `$1` groups in the replacement); an invalid pattern is shown in red.
+- **Outline** (macOS): a button with the headings of the open Markdown file; a click scrolls to the heading.
+- **Crash recovery** (macOS): unsaved text is copied to `~/Library/Application Support/Grizzly/Recovery` and offered back at the next launch.
+- **Encodings**: KOI8-R and CP866 are detected next to Windows-1251 (the reading that looks most like Russian wins) and written back unchanged.
+
+### Changed
+- Saving keeps symbolic links, permissions and Finder tags of the file (the file is replaced safely instead of re-created).
+- Files over 2 MB open without syntax colors; files over 200 MB are refused with a message instead of freezing the app.
+
 ## [2.0.0] - 2026-11-09
 
 > Major release: Grizzly is distributed under its own proprietary license (since 1.4.2), and the sidebar can be emptied in one step. The Windows build is version-aligned and gets the same *Clear* button.

@@ -47,10 +47,75 @@ final class AppState: ObservableObject {
     /// Open documents whose file changed on disk after they were read.
     @Published private(set) var changedOnDisk: Set<UUID> = []
     /// Edited text per open document, kept only while it differs from the file.
-    @Published private(set) var drafts: [UUID: String] = [:]
+    @Published private(set) var drafts: [UUID: String] = [:] { didSet { syncRecovery() } }
     /// Folded sections (Title and Heading lines) per open document, by `MarkdownParser.sectionKeys`.
     @Published private(set) var collapsedSections: [UUID: Set<String>] = [:]
     private var watcher: Timer?
+
+    // MARK: Crash recovery
+
+    private let recovery = DraftStore()
+    /// Paths that have a copy in the recovery folder, and a fingerprint of the text last written for each.
+    private var recoveryWritten: [String: Int] = [:]
+    private var recoveryWork: DispatchWorkItem?
+
+    /// Copies unsaved text to the recovery folder two seconds after the last change; a saved or discarded
+    /// draft is removed at once, so a clean quit leaves nothing behind.
+    private func syncRecovery() {
+        let live = Set(documents.compactMap { drafts[$0.id] == nil ? nil : $0.url.path })
+        for path in recoveryWritten.keys where !live.contains(path) {
+            recovery.remove(path: path)
+            recoveryWritten[path] = nil
+        }
+        recoveryWork?.cancel()
+        guard !live.isEmpty else { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            for doc in self.documents {
+                guard let text = self.drafts[doc.id] else { continue }
+                let path = doc.url.path
+                guard self.recoveryWritten[path] != text.hashValue else { continue }
+                self.recovery.save(path: path, text: text)
+                self.recoveryWritten[path] = text.hashValue
+            }
+        }
+        recoveryWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: work)
+    }
+
+    /// At launch: offers the text that was being edited when the app ended without saving.
+    private func offerRecovery() {
+        let fm = FileManager.default
+        var pending: [DraftStore.Entry] = []
+        for entry in recovery.entries() {
+            let url = URL(fileURLWithPath: entry.path)
+            guard fm.fileExists(atPath: entry.path), let current = try? FileLoader.read(url).text else {
+                recovery.remove(path: entry.path)
+                continue
+            }
+            if current.replacingOccurrences(of: "\r\n", with: "\n") == entry.text { recovery.remove(path: entry.path); continue }
+            pending.append(entry)
+        }
+        guard !pending.isEmpty else { return }
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = L("Найдены несохранённые правки (файлов: %d).", pending.count)
+        alert.informativeText = L("Приложение закрылось, не сохранив их. Восстановить?") + "\n\n"
+            + pending.map { "• " + URL(fileURLWithPath: $0.path).lastPathComponent }.joined(separator: "\n")
+        alert.addButton(withTitle: L("Восстановить"))
+        alert.addButton(withTitle: L("Удалить"))
+        if alert.runModal() == .alertFirstButtonReturn {
+            for entry in pending {
+                let url = URL(fileURLWithPath: entry.path)
+                open(urls: [url])
+                if let doc = documents.first(where: { $0.url.standardizedFileURL == url.standardizedFileURL }) {
+                    setDraft(entry.text, for: doc)
+                }
+            }
+        } else {
+            pending.forEach { recovery.remove(path: $0.path) }
+        }
+    }
 
     /// Polls open files once a second; called once the app has launched.
     func startWatching() {
@@ -63,6 +128,11 @@ final class AppState: ObservableObject {
     // Find
     @Published var isFindVisible = false
     @Published var findQuery = "" { didSet { recomputeMatches(reset: true) } }
+    @Published var findOptions = SearchOptions() {
+        didSet { Searcher.options = findOptions; recomputeMatches(reset: true) }
+    }
+    @Published var replaceText = ""
+    @Published var isReplaceVisible = false
     @Published private(set) var matches: [SearchMatch] = []
     @Published private(set) var matchIndex = 0
     @Published var findFocusToken = 0
@@ -105,6 +175,7 @@ final class AppState: ObservableObject {
         let queued = pendingExternal
         pendingExternal = []
         if !queued.isEmpty { open(urls: queued) }
+        offerRecovery()
     }
 
     /// Opens files from disk (Open panel, drag and drop, Finder) and adds them to the library.
@@ -274,6 +345,8 @@ final class AppState: ObservableObject {
             documents.append(doc)
             assign(doc.id, to: target)
             library.recordOpened(url)
+        } catch let error as CocoaError where error.code == .fileReadTooLarge {
+            errorMessage = L("Файл «%@» слишком большой (больше 200 МБ).", url.lastPathComponent)
         } catch {
             errorMessage = L("Не удалось открыть «%@».", url.lastPathComponent)
         }
@@ -716,6 +789,36 @@ final class AppState: ObservableObject {
         isFindVisible = true
         findFocusToken += 1
         recomputeMatches(reset: false)
+    }
+
+    /// Replaces the current hit with the replacement text, then moves to the next one.
+    func replaceCurrent() {
+        guard let doc = current, let m = currentMatch else { return }
+        var lines = text(for: doc).components(separatedBy: "\n")
+        guard lines.indices.contains(m.unit),
+              let line = TextSearch.replaceOne(findQuery, with: replaceText, in: lines[m.unit], index: m.occurrence, options: findOptions)
+        else { return }
+        lines[m.unit] = line
+        let index = matchIndex
+        setDraft(lines.joined(separator: "\n"), for: doc)
+        recomputeMatches(reset: false, reveal: false)
+        matchIndex = min(index, max(0, matches.count - 1))
+        revealCurrentMatch()
+    }
+
+    /// Replaces every hit in the focused document (one undo-less step: the draft is replaced as a whole).
+    func replaceAll() {
+        guard let doc = current, !findQuery.isEmpty else { return }
+        var total = 0
+        let lines = text(for: doc).components(separatedBy: "\n").map { line -> String in
+            let r = TextSearch.replaceAll(findQuery, with: replaceText, in: line, options: findOptions)
+            total += r.count
+            return r.text
+        }
+        guard total > 0 else { return }
+        setDraft(lines.joined(separator: "\n"), for: doc)
+        recomputeMatches(reset: true, reveal: false)
+        notify(L("Заменено: %d", total), symbol: "arrow.left.arrow.right")
     }
 
     func hideFind() {

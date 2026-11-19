@@ -374,5 +374,55 @@ if shell("/usr/bin/hdiutil", ["create", "-quiet", "-srcfolder", peek.path, "-for
     check(!String(decoding: info, as: UTF8.self).contains("sample.dmg"), "the dmg is detached again")
 } else { print("skip: hdiutil cannot create an image here") }
 
+// Encodings: detection of 8-bit Cyrillic and byte-for-byte round trips
+let russian = "Привет, мир! Это обычный русский текст для проверки кодировки."
+for enc in ["Windows-1251", "KOI8-R", "CP866"] {
+    let url = dir.appendingPathComponent("enc.txt")
+    try FileLoader.write(russian, to: url, encoding: enc)
+    let back = try FileLoader.read(url)
+    check(back.text == russian && back.encoding == enc, "\(enc) is detected and round-trips")
+}
+for (name, bytes) in [("utf8", Array("a\r\nб\n".utf8)), ("utf8-bom", [0xEF, 0xBB, 0xBF] + Array("x\r\ny".utf8)),
+                      ("utf16", [0xFF, 0xFE, 0x61, 0x00, 0x0D, 0x00, 0x0A, 0x00])] {
+    let url = dir.appendingPathComponent("golden.txt")
+    try Data(bytes).write(to: url)
+    let loaded = try FileLoader.read(url)
+    try FileLoader.write(loaded.text, to: url, encoding: loaded.encoding)
+    check(Array(try Data(contentsOf: url)) == bytes, "\(name): open and save without changes keeps every byte")
+}
+
+// Saving keeps the file's identity: symbolic link and permissions
+let real = dir.appendingPathComponent("real.txt")
+let link = dir.appendingPathComponent("link.txt")
+try "one".write(to: real, atomically: true, encoding: .utf8)
+try? FileManager.default.removeItem(at: link)
+try FileManager.default.createSymbolicLink(at: link, withDestinationURL: real)
+try FileManager.default.setAttributes([.posixPermissions: 0o640], ofItemAtPath: real.path)
+try FileLoader.write("two", to: link, encoding: "UTF-8")
+check((try? FileManager.default.destinationOfSymbolicLink(atPath: link.path)) != nil, "saving through a symlink keeps the link")
+check((try? String(contentsOf: real)) == "two", "the link target got the new text")
+let perms = (try? FileManager.default.attributesOfItem(atPath: real.path))?[.posixPermissions] as? Int
+check(perms == 0o640, "saving keeps file permissions")
+
+// Crash recovery store
+let drafts = DraftStore(directory: dir.appendingPathComponent("recovery"))
+drafts.save(path: "/a/b.md", text: "draft")
+check(drafts.entries().map(\.text) == ["draft"], "draft is stored")
+drafts.remove(path: "/a/b.md")
+check(drafts.entries().isEmpty, "draft is removed")
+
+// Search options, regular expressions and replace
+let hello = "Hello hello HELLO world"
+check(TextSearch.ranges(of: "hello", in: hello).count == 3, "default search ignores case")
+check(TextSearch.ranges(of: "hello", in: hello, options: SearchOptions(caseSensitive: true)).count == 1, "match case")
+check(TextSearch.ranges(of: "wor", in: hello, options: SearchOptions(wholeWord: true)).isEmpty, "whole word rejects a part of a word")
+check(TextSearch.ranges(of: "world", in: hello, options: SearchOptions(wholeWord: true)).count == 1, "whole word finds a word")
+check(TextSearch.ranges(of: "h.llo", in: hello, options: SearchOptions(regex: true)).count == 3, "regular expression")
+check(!TextSearch.isValid("(", SearchOptions(regex: true)) && TextSearch.isValid("(", SearchOptions()), "invalid pattern is detected only in regex mode")
+check(TextSearch.ranges(of: "x*", in: "abc", options: SearchOptions(regex: true)).isEmpty, "empty matches are ignored")
+check(TextSearch.replaceAll("hello", with: "bye", in: hello).text == "bye bye bye world", "replace all")
+check(TextSearch.replaceAll("(\\w+) (\\w+)", with: "$2 $1", in: "ab cd", options: SearchOptions(regex: true)).text == "cd ab", "regex replace with groups")
+check(TextSearch.replaceOne("hello", with: "X", in: hello, index: 1) == "Hello X HELLO world", "replace one")
+
 try? FileManager.default.removeItem(at: dir)
 exit(failures == 0 ? 0 : 1)

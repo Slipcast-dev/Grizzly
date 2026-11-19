@@ -48,6 +48,7 @@ struct ContentView: View {
                     .help("Найти (⌘F)")
                     .disabled(state.documents.isEmpty)
 
+                OutlineButton()
                 BookmarksButton()
 
                 Button { prefs.resizeFont(by: -1) } label: { Image(systemName: "textformat.size.smaller") }

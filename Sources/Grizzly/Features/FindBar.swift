@@ -5,27 +5,53 @@ struct FindBar: View {
     @Environment(\.theme) private var theme
     @FocusState private var focused: Bool
 
+    private var invalid: Bool { !TextSearch.isValid(state.findQuery, state.findOptions) }
+
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass").foregroundColor(theme.secondary)
+        VStack(spacing: 6) {
+            HStack(spacing: 8) {
+                Button { state.isReplaceVisible.toggle() } label: {
+                    Image(systemName: state.isReplaceVisible ? "chevron.down" : "chevron.right")
+                }
+                .help("Заменить")
+                Image(systemName: "magnifyingglass").foregroundColor(theme.secondary)
 
-            TextField("Найти в документе", text: $state.findQuery)
-                .textFieldStyle(.plain)
-                .focused($focused)
-                .onSubmit { state.stepMatch(NSEvent.modifierFlags.contains(.shift) ? -1 : 1) }
-                .onExitCommand { state.hideFind() }
+                TextField("Найти в документе", text: $state.findQuery)
+                    .textFieldStyle(.plain)
+                    .foregroundColor(invalid ? .red : theme.text)
+                    .focused($focused)
+                    .onSubmit { state.stepMatch(NSEvent.modifierFlags.contains(.shift) ? -1 : 1) }
+                    .onExitCommand { state.hideFind() }
 
-            Text(countLabel)
-                .font(AppFont.caption)
-                .foregroundColor(theme.secondary)
-                .monospacedDigit()
+                toggle("textformat", on: $state.findOptions.caseSensitive, help: "Учитывать регистр")
+                toggle("text.word.spacing", on: $state.findOptions.wholeWord, help: "Слово целиком")
+                toggle("asterisk", on: $state.findOptions.regex, help: "Регулярное выражение")
 
-            Button { state.stepMatch(-1) } label: { Image(systemName: "chevron.up") }
-                .help("Предыдущее совпадение (⌘⇧G)")
-            Button { state.stepMatch(1) } label: { Image(systemName: "chevron.down") }
-                .help("Следующее совпадение (⌘G)")
-            Button("Готово") { state.hideFind() }
-                .buttonStyle(.hoverText)
+                Text(countLabel)
+                    .font(AppFont.caption)
+                    .foregroundColor(invalid ? .red : theme.secondary)
+                    .monospacedDigit()
+
+                Button { state.stepMatch(-1) } label: { Image(systemName: "chevron.up") }
+                    .help("Предыдущее совпадение (⌘⇧G)")
+                Button { state.stepMatch(1) } label: { Image(systemName: "chevron.down") }
+                    .help("Следующее совпадение (⌘G)")
+                Button("Готово") { state.hideFind() }
+                    .buttonStyle(.hoverText)
+            }
+            if state.isReplaceVisible {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.left.arrow.right").foregroundColor(theme.secondary)
+                    TextField("Заменить на", text: $state.replaceText)
+                        .textFieldStyle(.plain)
+                        .onSubmit { state.replaceCurrent() }
+                        .onExitCommand { state.hideFind() }
+                    Button("Заменить") { state.replaceCurrent() }
+                        .disabled(state.currentMatch == nil)
+                    Button("Заменить все") { state.replaceAll() }
+                        .disabled(state.matches.isEmpty)
+                }
+            }
         }
         .buttonStyle(.hover)
         .padding(.horizontal, 12)
@@ -36,8 +62,18 @@ struct FindBar: View {
         .onChange(of: state.findFocusToken) { _ in focused = true }
     }
 
+    private func toggle(_ symbol: String, on: Binding<Bool>, help: LocalizedStringKey) -> some View {
+        Button { on.wrappedValue.toggle() } label: {
+            Image(systemName: symbol)
+                .padding(3)
+                .background(RoundedRectangle(cornerRadius: 4).fill(on.wrappedValue ? theme.match : .clear))
+        }
+        .help(help)
+    }
+
     private var countLabel: String {
         if state.findQuery.isEmpty { return "" }
+        if invalid { return L("Неверное выражение") }
         if state.matches.isEmpty { return L("Нет совпадений") }
         return L("%d из %d", state.matchIndex + 1, state.matches.count)
     }
@@ -115,5 +151,58 @@ struct BookmarksButton: View {
             .help("Убрать закладку")
         }
         .padding(.vertical, 3)
+    }
+}
+
+/// Headings of the open document; a click scrolls the editor to the heading.
+struct OutlineButton: View {
+    @EnvironmentObject private var state: AppState
+    @Environment(\.theme) private var theme
+    @State private var shown = false
+
+    private var headings: [(line: Int, level: Int, title: String)] {
+        guard let doc = state.current, doc.type == .markdown else { return [] }
+        var inFence = false
+        var result: [(Int, Int, String)] = []
+        for (i, raw) in state.text(for: doc).components(separatedBy: "\n").enumerated() {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("```") || line.hasPrefix("~~~") { inFence.toggle(); continue }
+            guard !inFence, line.hasPrefix("#") else { continue }
+            let level = line.prefix { $0 == "#" }.count
+            guard level <= 6, line.dropFirst(level).first == " " else { continue }
+            let title = line.dropFirst(level).trimmingCharacters(in: .whitespaces)
+            if !title.isEmpty { result.append((i, level, title)) }
+        }
+        return result
+    }
+
+    var body: some View {
+        Button { shown.toggle() } label: { Image(systemName: "list.bullet.indent") }
+            .buttonStyle(.hover)
+            .help("Оглавление")
+            .disabled(headings.isEmpty)
+            .popover(isPresented: $shown, arrowEdge: .bottom) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(headings, id: \.line) { h in
+                            Button {
+                                shown = false
+                                state.scrollTarget = ScrollTarget(unit: h.line)
+                            } label: {
+                                Text(h.title)
+                                    .lineLimit(1)
+                                    .padding(.leading, CGFloat(h.level - 1) * 12)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.vertical, 3)
+                        }
+                    }
+                    .padding(14)
+                }
+                .frame(width: 300)
+                .frame(maxHeight: 360)
+            }
     }
 }

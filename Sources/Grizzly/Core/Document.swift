@@ -16,6 +16,9 @@ struct Document: Identifiable, Hashable {
     /// Modification date of the file when it was read; used to notice outside changes.
     var modified: Date?
 
+    /// Syntax colors are skipped for very large files.
+    var isLarge: Bool { text.utf8.count > FileLoader.highlightLimit }
+
     var name: String { url.lastPathComponent }
     var wordCount: Int { text.split { $0.isWhitespace || $0.isNewline }.count }
 
@@ -29,7 +32,7 @@ struct Document: Identifiable, Hashable {
         self.lines = normalized.components(separatedBy: "\n")
         self.modified = Document.modificationDate(url)
         let lines = self.lines
-        self.syntaxStates = SyntaxEngine.states(lines, type: type)
+        self.syntaxStates = loaded.text.utf8.count > FileLoader.highlightLimit ? [] : SyntaxEngine.states(lines, type: type)
         self.csv = type == .csv
             ? CSVTable(lines: lines, delimiter: CSVTable.detectDelimiter(url: url, lines: lines))
             : nil

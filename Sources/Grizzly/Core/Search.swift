@@ -19,16 +19,11 @@ struct ScrollTarget: Equatable {
 }
 
 enum Searcher {
+    /// The options of the Find bar; set by `AppState`, read wherever hits are painted.
+    static var options = SearchOptions()
+
     static func ranges(of query: String, in text: String) -> [Range<String.Index>] {
-        guard !query.isEmpty else { return [] }
-        var result: [Range<String.Index>] = []
-        var start = text.startIndex
-        while start < text.endIndex,
-              let r = text.range(of: query, options: [.caseInsensitive], range: start..<text.endIndex) {
-            result.append(r)
-            start = r.upperBound > r.lowerBound ? r.upperBound : text.index(after: start)
-        }
-        return result
+        TextSearch.ranges(of: query, in: text, options: options)
     }
 
     /// Hits in plain lines (the text being edited), one unit per line.

@@ -362,3 +362,17 @@
 "Подходящих файлов пока нет." = "No matching files yet.";
 "Настроить смарт-папку…" = "Smart Folder Settings…";
 "Документ" = "Document";
+"Заменить" = "Replace";
+"Заменить все" = "Replace All";
+"Заменить на" = "Replace with";
+"Учитывать регистр" = "Match case";
+"Слово целиком" = "Whole word";
+"Регулярное выражение" = "Regular expression";
+"Неверное выражение" = "Invalid expression";
+"Заменено: %d" = "Replaced: %d";
+"Найдены несохранённые правки (файлов: %d)." = "Unsaved changes found (files: %d).";
+"Приложение закрылось, не сохранив их. Восстановить?" = "The app closed before saving them. Restore?";
+"Восстановить" = "Restore";
+"Удалить" = "Delete";
+"Файл «%@» слишком большой (больше 200 МБ)." = "“%@” is too large (over 200 MB).";
+"Оглавление" = "Outline";

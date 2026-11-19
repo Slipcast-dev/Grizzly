@@ -52,7 +52,7 @@ struct EditorView: View {
                 textColor: NSColor(theme.text),
                 type: doc.type,
                 live: isLive,
-                highlightOn: prefs.highlights(doc.type),
+                highlightOn: prefs.highlights(doc.type) && !doc.isLarge,
                 spellCheck: prefs.spellCheck && EditorView.isProse(doc.type),
                 theme: theme,
                 background: NSColor(theme.background).withAlphaComponent(surface),
@@ -449,7 +449,7 @@ private struct EditorTextView: NSViewRepresentable {
             let query = parent.find?.query ?? ""
             let text = view.string
             let current = parent.find?.current
-            let key = "\(query)|\(current.map { "\($0.unit):\($0.occurrence)" } ?? "-")|\(text.hashValue)"
+            let key = "\(query)|\(Searcher.options.key)|\(current.map { "\($0.unit):\($0.occurrence)" } ?? "-")|\(text.hashValue)"
 
             if key != paintedKey {
                 paintedKey = key
