@@ -207,56 +207,6 @@ let linkEdit = RichFormat.linkEdit(("", "https://example.com"), text: "see docs 
 check(linkEdit.map { ("see docs here" as NSString).replacingCharacters(in: $0.range, with: $0.text) } == "see [docs](https://example.com) here", "selected text becomes a link")
 check(RichFormat.insertBlock("![a](b.png)", text: "text", selection: NSRange(location: 2, length: 0)).text == "\n\n![a](b.png)\n", "attachment goes after a blank line")
 
-// Binary delta and update patches
-var oldBytes = Data((0..<20_000).map { UInt8(truncatingIfNeeded: $0 &* 31 &+ ($0 >> 5)) })
-var newBytes = oldBytes
-newBytes.replaceSubrange(5_000..<5_040, with: Data(repeating: 7, count: 100))
-newBytes.append(Data("tail".utf8))
-newBytes.insert(contentsOf: Data("head".utf8), at: 0)
-let delta = BinaryDelta.make(old: oldBytes, new: newBytes)
-check((try? BinaryDelta.apply(old: oldBytes, delta: delta)) == newBytes && delta.count < newBytes.count / 4, "delta rebuilds the new file and is much smaller")
-check((try? BinaryDelta.apply(old: Data(), delta: BinaryDelta.make(old: Data(), new: Data("abc".utf8)))) == Data("abc".utf8), "delta against an empty file")
-check((try? BinaryDelta.apply(old: oldBytes, delta: Data(delta.dropLast(3)))) == nil, "a truncated delta is refused")
-
-func makeApp(_ root: URL, version: String, files: [String: String]) throws {
-    try FileManager.default.createDirectory(at: root.appendingPathComponent("Contents/MacOS"), withIntermediateDirectories: true)
-    let plist = ["CFBundleIdentifier": "app.grizzly.Grizzly", "CFBundleShortVersionString": version] as NSDictionary
-    plist.write(to: root.appendingPathComponent("Contents/Info.plist"), atomically: true)
-    for (path, body) in files {
-        let url = root.appendingPathComponent(path)
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try body.write(to: url, atomically: true, encoding: .utf8)
-    }
-    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root.appendingPathComponent("Contents/MacOS/Grizzly").path)
-}
-do {
-    let big = String(repeating: "grizzly binary content ", count: 3000)
-    let oldApp = dir.appendingPathComponent("old/Grizzly.app"), newApp = dir.appendingPathComponent("new/Grizzly.app")
-    try makeApp(oldApp, version: "1.0.0", files: ["Contents/MacOS/Grizzly": big, "Contents/Resources/a.txt": "same", "Contents/Resources/gone.txt": "bye"])
-    try makeApp(newApp, version: "1.1.0", files: ["Contents/MacOS/Grizzly": big + "new code", "Contents/Resources/a.txt": "same", "Contents/Resources/fresh.txt": "hello"])
-    let patch = dir.appendingPathComponent("patch.zip")
-    try AppPatch.build(oldApp: oldApp, newApp: newApp, output: patch)
-    let work = dir.appendingPathComponent("work")
-    try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
-    let staged = try AppPatch.apply(patch: patch, to: oldApp, from: "1.0.0", to: "1.1.0", bundleID: "app.grizzly.Grizzly", work: work)
-    let a = try AppPatch.listFiles(in: staged), b = try AppPatch.listFiles(in: newApp)
-    check(a == b, "patched app has exactly the files of the new version")
-    check(try a.allSatisfy { try Data(contentsOf: staged.appendingPathComponent($0)) == Data(contentsOf: newApp.appendingPathComponent($0)) }, "patched files are identical to the new build")
-    check((try FileManager.default.attributesOfItem(atPath: staged.appendingPathComponent("Contents/MacOS/Grizzly").path))[.posixPermissions] as? Int == 0o755, "executable bit survives the patch")
-    check((try? Data(contentsOf: patch).count) ?? Int.max < big.utf8.count / 3, "the patch is much smaller than the app")
-    let other = dir.appendingPathComponent("other/Grizzly.app")
-    try makeApp(other, version: "1.0.0", files: ["Contents/MacOS/Grizzly": big + "tampered", "Contents/Resources/a.txt": "same"])
-    check((try? AppPatch.apply(patch: patch, to: other, from: "1.0.0", to: "1.1.0", bundleID: "app.grizzly.Grizzly", work: dir.appendingPathComponent("work2"))) == nil, "a patch does not apply to a changed installation")
-    check((try? AppPatch.apply(patch: patch, to: oldApp, from: "0.9.0", to: "1.1.0", bundleID: "app.grizzly.Grizzly", work: dir.appendingPathComponent("work3"))) == nil, "a patch for another version is refused")
-    check(!AppPatch.isSafe("../x") && !AppPatch.isSafe("/etc/passwd") && AppPatch.isSafe("Contents/Info.plist"), "patch paths must stay inside the app")
-} catch {
-    check(false, "patch round trip: \(error)")
-}
-let withPatch = "{\"tag_name\":\"v1.3.0\",\"body\":\"\(String(repeating: "c", count: 64)) Grizzly-patch-1.2.2-to-1.3.0-arm64.zip\\n\(String(repeating: "d", count: 64)) Grizzly-1.3.0-arm64.dmg\",\"assets\":[{\"name\":\"Grizzly-patch-1.2.2-to-1.3.0-arm64.zip\",\"browser_download_url\":\"https://github.com/Slipcast-dev/Grizzly/releases/download/v1.3.0/Grizzly-patch-1.2.2-to-1.3.0-arm64.zip\"},{\"name\":\"Grizzly-1.3.0-arm64.dmg\",\"browser_download_url\":\"https://github.com/Slipcast-dev/Grizzly/releases/download/v1.3.0/Grizzly-1.3.0-arm64.dmg\"}]}"
-let withPatchInfo = try UpdateCheck.parse(Data(withPatch.utf8), assetSuffix: "-arm64.dmg", patchFrom: ("1.2.2", "arm64"))
-check(withPatchInfo?.patch?.name == "Grizzly-patch-1.2.2-to-1.3.0-arm64.zip" && withPatchInfo?.patch?.sha256 == String(repeating: "c", count: 64), "the release patch for the installed version is found")
-check(try UpdateCheck.parse(Data(withPatch.utf8), assetSuffix: "-arm64.dmg", patchFrom: ("1.2.0", "arm64"))?.patch == nil, "no patch for another installed version")
-
 // Big folders: one import step, counts and tags stay right
 let bigLib = LibraryStore(storeURL: dir.appendingPathComponent("big.json"))
 let bigRoot = dir.appendingPathComponent("big")

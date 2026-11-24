@@ -4,6 +4,7 @@
 
 - `⌘O` / `Ctrl+O`, or drag files onto the window or the Dock / taskbar icon.
 - **From Finder (macOS)**: double-click a file or use *Open With → Grizzly*. If Grizzly is not running it starts with the file; if it is, the file opens as a tab in the existing window (never a second window or a second copy of the app). To make it the default app, see *Settings → File types*.
+- The sidebar has one header: the filter field with a **+** menu (new file, open, new folder, smart folder, save as) and the switch *Files · Recent · Favorites*. Tags are listed under the file list; click one to filter by it.
 - Several files open as tabs. `⇧⌘]` / `⇧⌘[` (`Ctrl+Shift+]` / `[`) cycle through them.
 - Supported extensions: `md markdown mdown txt text log json yaml yml csv tsv xml html htm ini conf toml tex rtf`,
   plus source code: `py pyw swift c h cpp cc cxx hpp hh hxx cs js mjs cjs jsx ts tsx css scss php`.

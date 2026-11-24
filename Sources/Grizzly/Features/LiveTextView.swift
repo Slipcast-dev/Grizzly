@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 
 /// The editor's text view: besides editing it takes clicks on the things User mode draws in the margin (folding arrows,
 /// check boxes) and adds the formatting commands to the right-click menu.
@@ -43,8 +44,18 @@ final class LiveTextView: NSTextView {
     private func handleAttachmentClick(_ event: NSEvent) -> Bool {
         guard let (info, _) = attachment(at: event), info.exists, let url = info.url else { return false }
         if info.kind == .image && event.clickCount < 2 { return false }
-        NSWorkspace.shared.open(url)
+        openAttachment(url)
         return true
+    }
+
+    /// A document must not be able to launch a program: applications and scripts are only revealed, never opened.
+    private func openAttachment(_ url: URL) {
+        if let type = (try? url.resourceValues(forKeys: [.contentTypeKey]))?.contentType,
+           type.conforms(to: .application) || type.conforms(to: .executable) || type.conforms(to: .shellScript) {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        } else {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     /// ⌘-click on a link to a web page opens it.
@@ -52,7 +63,8 @@ final class LiveTextView: NSTextView {
         guard let storage = textStorage, storage.length > 0 else { return false }
         let index = characterIndexForInsertion(at: convert(event.locationInWindow, from: nil))
         for i in [index, index - 1] where i >= 0 && i < storage.length {
-            if let address = storage.attribute(.grizzlyLink, at: i, effectiveRange: nil) as? String, let url = URL(string: address) {
+            if let address = storage.attribute(.grizzlyLink, at: i, effectiveRange: nil) as? String, let url = URL(string: address),
+               ["http", "https", "mailto"].contains(url.scheme?.lowercased() ?? "") {
                 NSWorkspace.shared.open(url)
                 return true
             }
@@ -129,7 +141,7 @@ final class LiveTextView: NSTextView {
             // The attachment under the pointer comes first in the menu.
             var items: [NSMenuItem] = []
             if info.exists, let url = info.url {
-                items.append(ClosureItem(L("Открыть вложение")) { NSWorkspace.shared.open(url) })
+                items.append(ClosureItem(L("Открыть вложение")) { [weak self] in self?.openAttachment(url) })
                 items.append(ClosureItem(L("Показать в Finder")) { NSWorkspace.shared.activateFileViewerSelecting([url]) })
             }
             items.append(ClosureItem(L("Удалить вложение")) { [weak self] in

@@ -3,6 +3,22 @@
 All notable changes are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [3.0.0] - 2026-11-24 — Forest
+
+> The first release of the **3.x «Forest»** line, in both apps: macOS and Windows. Every 3.x version carries the name *Forest*.
+
+### Changed
+- **One sidebar header.** The three icon tabs and the row of four action buttons are gone. The filter field has a **+** menu (new file, open, new folder, smart folder on macOS, save as), and a text switch *Files · Recent · Favorites* sits under it. The tag section starts folded (macOS); everything else is in the command palette.
+- **Tables in User mode stay on one line** (macOS): cells use the text font, a table wider than the pane is shrunk to fit and anything that still does not fit is cut off with “…” (Developer mode shows the full text). Rows no longer wrap and fall apart, which was most visible on macOS 13.
+- The installed version is shown with the line name: *3.0.0 Forest*.
+
+### Security
+- A ⌘-click on a link opens only `http`, `https` and `mailto` addresses; a click on an attachment never launches an application or a script, it only shows it in Finder.
+
+### Removed
+- **Update patches** (`AppPatch`, `BinaryDelta`, `make-patch`): the app is a few megabytes, so the updater always downloads the full image and verifies its SHA-256. Less code in the most sensitive part of the app.
+- Unused code: the old Markdown renderer view, `Syntax.highlight`, `highlightBlock`, `isStateful`, `showTag`, `tagExists`.
+
 ## [2.1.1] - 2026-11-19
 
 > A fix for the **macOS** app. The Windows build is version-aligned and unchanged.

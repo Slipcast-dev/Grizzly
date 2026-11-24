@@ -98,7 +98,6 @@ enum SyntaxEngine {
     private static let slashComments: [[UInt16]] = [Array("//".utf16)]
     private static let cBlock = Block("/*", "*/", .comment)
     private static let quotes2: [UInt16] = [34, 39]          // " '
-    private static let quotes3: [UInt16] = [34, 39, 96]      // " ' `
 
     private static let codeLangs: [FileType: CodeLang] = moreLangs.merging(baseLangs) { a, _ in a }
 
@@ -272,8 +271,6 @@ enum SyntaxEngine {
 
     static func hasHighlighting(_ type: FileType) -> Bool { rules[type] != nil || codeLangs[type] != nil }
 
-    /// True for languages whose comments or strings can span lines.
-    static func isStateful(_ type: FileType) -> Bool { codeLangs[type] != nil }
 
     /// The scanner state at the start of every line (0 = nothing open); empty for formats without carried state.
     static func states(_ lines: [String], type: FileType) -> [Int] {

@@ -446,12 +446,6 @@ final class AppState: ObservableObject {
         else { selectedTags.append(tag) }
     }
 
-    /// A click on a #tag inside a document: the sidebar lists the files with that tag.
-    func showTag(_ tag: String) {
-        selectedTags = [tag]
-        sidebarRevealToken += 1
-    }
-
     /// Files (and their locations) whose text contains the tag; RTF is left out because rewriting it would drop its formatting.
     private func filesWithTagInText(_ tag: String) -> [(LibraryFile, URL)] {
         library.allFiles

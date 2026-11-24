@@ -36,9 +36,9 @@ C/C++, C#, JavaScript, TypeScript, CSS, PHP, Go, Rust, Java, Kotlin, SQL, Shell 
 
 | Платформа | Файл | Примечание |
 |---|---|---|
-| macOS 13+, Apple Silicon | `Grizzly-2.1.1-arm64.dmg` | Перетащите *Grizzly* в *Программы* |
-| macOS 13+, Intel | `Grizzly-2.1.1-x64.dmg` | Перетащите *Grizzly* в *Программы* |
-| Windows 10/11, x64 | `Grizzly-2.1.1-portable.exe` | Без установки |
+| macOS 13+, Apple Silicon | `Grizzly-3.0.0-arm64.dmg` | Перетащите *Grizzly* в *Программы* |
+| macOS 13+, Intel | `Grizzly-3.0.0-x64.dmg` | Перетащите *Grizzly* в *Программы* |
+| Windows 10/11, x64 | `Grizzly-3.0.0-portable.exe` | Без установки |
 
 > [!IMPORTANT]
 > Сборки **не подписаны и не нотаризованы**. macOS (Gatekeeper) и Windows (SmartScreen) покажут предупреждение

@@ -24,6 +24,11 @@ final class UpdateManager: ObservableObject {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
     }
 
+    /// The name of the 3.x line ("Forest"), shown next to the version.
+    var codename: String {
+        Bundle.main.object(forInfoDictionaryKey: "GrizzlyCodename") as? String ?? ""
+    }
+
     private var archTag: String {
         #if arch(arm64)
         return "arm64"
@@ -47,7 +52,7 @@ final class UpdateManager: ObservableObject {
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
-            if let release = try UpdateCheck.parse(data, assetSuffix: assetSuffix, patchFrom: (currentVersion, archTag)),
+            if let release = try UpdateCheck.parse(data, assetSuffix: assetSuffix),
                UpdateCheck.isNewer(release.version, than: currentVersion) {
                 phase = .available(release)
                 if silent { sheetVisible = true }
@@ -71,20 +76,10 @@ final class UpdateManager: ObservableObject {
         task = Task { [weak self] in
             guard let self else { return }
             do {
-                var staged: URL?
-                // A patch carries only what changed since the installed version. Whatever goes wrong with it
-                // (not published, does not fit, damaged), the full disk image below is the way out.
-                if let patch = release.patch, let expected = patch.sha256 {
-                    do { staged = try await self.installFromPatch(patch, expected: expected, release: release) }
-                    catch is CancellationError { throw CancellationError() }
-                    catch { staged = nil; self.phase = .downloading(0) }
-                }
-                if staged == nil {
-                    let dmg = try await self.download(release.assetURL, name: release.assetName, sha256: release.sha256)
-                    self.phase = .installing
-                    staged = try await Task.detached { try Self.stage(dmg: dmg, expected: release.version) }.value
-                }
-                try self.replaceAndRelaunch(with: staged!)
+                let dmg = try await self.download(release.assetURL, name: release.assetName, sha256: release.sha256)
+                self.phase = .installing
+                let staged = try await Task.detached { try Self.stage(dmg: dmg, expected: release.version) }.value
+                try self.replaceAndRelaunch(with: staged)
             } catch is CancellationError {
                 self.phase = .idle
             } catch let error as UpdateError {
@@ -95,32 +90,13 @@ final class UpdateManager: ObservableObject {
         }
     }
 
-    /// Downloads the patch and builds the new application from the installed one.
-    private func installFromPatch(_ patch: PatchAsset, expected: String, release: ReleaseInfo) async throws -> URL {
-        let file = try await download(patch.url, name: patch.name, sha256: expected)
-        phase = .installing
-        let installed = Bundle.main.bundleURL
-        let from = currentVersion, to = release.version
-        let work = file.deletingLastPathComponent()
-        return try await Task.detached { () -> URL in
-            let staged = try AppPatch.apply(patch: file, to: installed, from: from, to: to, bundleID: "app.grizzly.Grizzly", work: work)
-            let info = NSDictionary(contentsOf: staged.appendingPathComponent("Contents/Info.plist"))
-            guard info?["CFBundleIdentifier"] as? String == "app.grizzly.Grizzly",
-                  UpdateCheck.normalized(info?["CFBundleShortVersionString"] as? String ?? "") == to else {
-                throw PatchError(message: "version")
-            }
-            _ = Self.run("/usr/bin/xattr", ["-dr", "com.apple.quarantine", staged.path], timeout: 30)
-            return staged
-        }.value
-    }
-
     // MARK: Download
 
     private struct UpdateError: Error { let message: String }
 
     private static let maxDownload: Int64 = 500 * 1024 * 1024
 
-    /// Downloads a release file (disk image or patch). A dropped connection is retried and continues where it stopped
+    /// Downloads a release file (the disk image). A dropped connection is retried and continues where it stopped
     /// (HTTP Range); the SHA-256 from the release notes is checked over the finished file.
     private func download(_ assetURL: URL, name: String, sha256 expectedHash: String?) async throws -> URL {
         // A release without a published SHA-256 is never installed.

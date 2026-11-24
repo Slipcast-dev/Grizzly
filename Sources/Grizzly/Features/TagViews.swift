@@ -56,7 +56,7 @@ struct TagPanel: View {
     @EnvironmentObject private var library: LibraryStore
     @Environment(\.theme) private var theme
     /// Folded to its title line, and the height of the chips area; both are remembered.
-    @AppStorage("tagsCollapsed") private var collapsed = false
+    @AppStorage("tagsCollapsed") private var collapsed = true
     @AppStorage("tagsHeight") private var height = 110.0
     @State private var dragStart: Double?
 

@@ -6,7 +6,7 @@
   applyTheme();
   await Library.load(info.platform === 'win32');
 
-  initUpdates(info.version);
+  initUpdates(info.version, info.codename);
   buildUI();
   App.render(['all']);
   App.startWatching();

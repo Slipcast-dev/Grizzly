@@ -54,50 +54,35 @@ struct SidebarView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Same 30 pt height and 7 pt corners as the filter field below, so the header controls line up.
-            HStack(spacing: 2) {
-                ForEach(SidebarSection.allCases) { s in
-                    Button { section = s } label: {
-                        Image(systemName: s.symbol).font(.system(size: 14))
+            // One header: the filter field with a "+" menu for everything that creates or opens, then the view filter
+            // (all files, recently opened, favorites). Tags sit under the list and filter it the same way.
+            HStack(spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass").foregroundColor(.secondary)
+                    TextField("Поиск файлов", text: $query)
+                        .textFieldStyle(.plain)
+                    if !query.isEmpty {
+                        Button { query = "" } label: { Image(systemName: "xmark.circle.fill") }
+                            .buttonStyle(.plain)
+                            .foregroundColor(.secondary)
                     }
-                    .buttonStyle(HoverButtonStyle(size: .row, selected: section == s))
-                    .help(s.title)
                 }
+                .padding(.horizontal, 10)
+                .frame(height: 30)
+                .background(RoundedRectangle(cornerRadius: 7).fill(Color.primary.opacity(0.07)))
+                Button { popUpCreateMenu() } label: { Image(systemName: "plus") }
+                    .buttonStyle(SidebarIconButtonStyle())
+                    .frame(width: 30)
+                    .help("Создать или открыть")
             }
-            .padding(2)
-            .background(RoundedRectangle(cornerRadius: 9).fill(Color.primary.opacity(0.07)))
             .padding(.horizontal, 12)
-            .padding(.top, 8)
+            .padding(.top, 10)
 
-            HStack(spacing: 6) {
-                Image(systemName: "magnifyingglass").foregroundColor(.secondary)
-                TextField("Поиск файлов", text: $query)
-                    .textFieldStyle(.plain)
-                if !query.isEmpty {
-                    Button { query = "" } label: { Image(systemName: "xmark.circle.fill") }
-                        .buttonStyle(.plain)
-                        .foregroundColor(.secondary)
-                }
+            Picker("", selection: $section) {
+                ForEach(SidebarSection.allCases) { s in Text(s.title).tag(s) }
             }
-            .padding(.horizontal, 10)
-            .frame(height: 30)
-            .background(RoundedRectangle(cornerRadius: 7).fill(Color.primary.opacity(0.07)))
-            .padding(.horizontal, 12)
-            .padding(.top, 8)
-
-            // File actions in one row of equal buttons (they used to be split between the title bar and the list header).
-            HStack(spacing: 6) {
-                Button { state.presentNewFilePanel() } label: { Image(systemName: "doc.badge.plus") }
-                    .help("Новый файл (⌘N)")
-                Button { state.presentOpenPanel() } label: { Image(systemName: "folder") }
-                    .help("Открыть файл или папку (⌘O)")
-                Button { popUpNewFolderMenu() } label: { Image(systemName: "folder.badge.plus") }
-                    .help("Новая папка или смарт-папка")
-                Button { state.presentSaveAsPanel() } label: { Image(systemName: "square.and.arrow.down") }
-                    .help("Сохранить как… (⇧⌘S)")
-                    .disabled(state.current == nil)
-            }
-            .buttonStyle(SidebarIconButtonStyle())
+            .pickerStyle(.segmented)
+            .labelsHidden()
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
 
@@ -549,10 +534,13 @@ struct SidebarView: View {
         DispatchQueue.main.async { menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil) }
     }
 
-    private func popUpNewFolderMenu() {
+    private func popUpCreateMenu() {
         func icon(_ name: String) -> NSImage? { NSImage(systemSymbolName: name, accessibilityDescription: nil) }
         popUp([
-            ClosureItem(L("Новая папка"), image: icon("folder")) {
+            ClosureItem(L("Новый файл"), image: icon("doc.badge.plus")) { state.presentNewFilePanel() },
+            ClosureItem(L("Открыть файл или папку…"), image: icon("folder")) { state.presentOpenPanel() },
+            .separator(),
+            ClosureItem(L("Новая папка"), image: icon("folder.badge.plus")) {
                 section = .files
                 pendingMove = nil
                 beginNaming(in: nil)

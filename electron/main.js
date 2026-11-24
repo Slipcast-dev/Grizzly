@@ -367,6 +367,7 @@ ipcMain.handle('app:info', () => ({
   locale: resolveLocale(),
   language: languagePref,
   version: app.getVersion(),
+  codename: require('./package.json').codename || '',
   dataDir: app.getPath('userData'),
 }));
 

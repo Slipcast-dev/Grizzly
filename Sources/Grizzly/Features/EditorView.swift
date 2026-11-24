@@ -219,7 +219,8 @@ private struct EditorTextView: NSViewRepresentable {
         // Painting the whole text is the expensive part: it is done only when the text or a setting that changes
         // its look is different from last time (SwiftUI asks for an update on every change anywhere in the window).
         let key = [styleKey, "\(live)", "\(highlightOn)", "\(type)", collapsed.sorted().joined(separator: ","),
-                   documentURL.path, "\(view.string.hashValue)", "\(view.string.utf16.count)"].joined(separator: "|")
+                   documentURL.path, live && view.string.contains("|") ? "\(Int(view.bounds.width / 40))" : "",
+                   "\(view.string.hashValue)", "\(view.string.utf16.count)"].joined(separator: "|")
         guard key != coordinator.paintedStyleKey else { return }
         coordinator.paintedStyleKey = key
         view.font = font
@@ -229,13 +230,20 @@ private struct EditorTextView: NSViewRepresentable {
         view.needsDisplay = true
     }
 
+    /// The width a table row may take (the text column), or nil before the view has a size.
+    private func tableWidth(_ view: NSTextView) -> CGFloat? {
+        guard let container = view.textContainer else { return nil }
+        let w = view.bounds.width - view.textContainerInset.width * 2 - container.lineFragmentPadding * 2
+        return w > 100 ? w : nil
+    }
+
     /// Syntax colors for the whole text (skipped for very large files, where rescanning on every key would lag).
-    private func colorize(_ view: NSTextView) {
+    fileprivate func colorize(_ view: NSTextView) {
         if type == .markdown, let storage = view.textStorage, storage.length <= 150_000 {
             // Headings, bold, italic, highlights, lists and quotes show in the text as they will read.
             storage.beginEditing()
             if live {
-                LiveStyler.apply(to: storage, base: font, textColor: textColor, theme: theme, collapsed: collapsed, document: documentURL)
+                LiveStyler.apply(to: storage, base: font, textColor: textColor, theme: theme, collapsed: collapsed, document: documentURL, width: tableWidth(view))
             } else {
                 MarkdownStyler.apply(to: storage, base: font, textColor: textColor, theme: theme)
             }
@@ -279,7 +287,18 @@ private struct EditorTextView: NSViewRepresentable {
 
         deinit { NotificationCenter.default.removeObserver(self) }
 
-        @objc func frameChanged() { updateInset() }
+        private var tableBucket = -1
+
+        @objc func frameChanged() {
+            updateInset()
+            // Tables are fitted to the pane, so they are laid out again when its width changes noticeably.
+            guard parent.live, let view, view.string.contains("|") else { return }
+            let bucket = Int(view.bounds.width / 40)
+            guard bucket != tableBucket else { return }
+            tableBucket = bucket
+            parent.colorize(view)
+            view.needsDisplay = true
+        }
         @objc func attachmentReady() { view?.needsDisplay = true }
 
         /// Centers a column of at most `column` points in the pane; User mode also leaves room for the folding arrows.

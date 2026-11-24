@@ -194,7 +194,7 @@ struct SettingsView: View {
 
         case .updates:
             card("Обновления") {
-                row("Установленная версия") { Text(updater.currentVersion).monospacedDigit() }
+                row("Установленная версия") { Text(updater.codename.isEmpty ? updater.currentVersion : "\(updater.currentVersion) \(updater.codename)").monospacedDigit() }
                 HStack {
                     Button("Проверить обновления") { Task { await updater.check(silent: false) } }
                         .buttonStyle(.hoverFilled)

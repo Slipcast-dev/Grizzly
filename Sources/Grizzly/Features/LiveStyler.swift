@@ -47,7 +47,7 @@ enum LiveStyler {
     }
 
     static func apply(to storage: NSTextStorage, base: NSFont, textColor: NSColor, theme: Theme, collapsed: Set<String>,
-                      document: URL? = nil) {
+                      document: URL? = nil, width: CGFloat? = nil) {
         let ns = storage.string as NSString
         let full = NSRange(location: 0, length: ns.length)
         storage.setAttributes([.font: base, .foregroundColor: textColor], range: full)
@@ -163,7 +163,9 @@ enum LiveStyler {
                 continue
             }
             if let kind = tableKind[n] {
-                let cellFont = mono
+                // Cells use the text font, not the monospaced one: older systems fall back to another font for
+                // Cyrillic in the monospaced face, and its different widths broke the column alignment.
+                let cellFont = base
                 storage.addAttributes([.font: kind == 0 ? NSFontManager.shared.convert(cellFont, toHaveTrait: .boldFontMask) : cellFont,
                                        .grizzlyTableRow: kind, .paragraphStyle: paragraph(minHeight: size * 1.9)], range: l.full)
                 if kind == 1 {
@@ -334,14 +336,47 @@ enum LiveStyler {
                 let pipes = (c.location..<NSMaxRange(c)).filter { ns.character(at: $0) == 124 }
                 return zip(pipes, pipes.dropFirst()).map { NSRange(location: $0 + 1, length: $1 - $0 - 1) }
             }
-            var widths = [CGFloat](repeating: 0, count: grid.map(\.count).max() ?? 0)
-            for row in grid {
-                for (c, r) in row.enumerated() where r.length > 0 { widths[c] = max(widths[c], storage.attributedSubstring(from: r).size().width) }
+            func align() {
+                var widths = [CGFloat](repeating: 0, count: grid.map(\.count).max() ?? 0)
+                for row in grid {
+                    for (c, r) in row.enumerated() where r.length > 0 { widths[c] = max(widths[c], storage.attributedSubstring(from: r).size().width) }
+                }
+                for row in grid {
+                    for (c, r) in row.enumerated() where r.length > 0 {
+                        let extra = widths[c] - storage.attributedSubstring(from: r).size().width
+                        if extra > 0.5 { storage.addAttribute(.kern, value: extra, range: NSRange(location: NSMaxRange(r) - 1, length: 1)) }
+                    }
+                }
             }
-            for row in grid {
-                for (c, r) in row.enumerated() where r.length > 0 {
-                    let extra = widths[c] - storage.attributedSubstring(from: r).size().width
-                    if extra > 0.5 { storage.addAttribute(.kern, value: extra, range: NSRange(location: NSMaxRange(r) - 1, length: 1)) }
+            func rowWidth() -> CGFloat {
+                rows.map { storage.attributedSubstring(from: lines[$0].content).size().width }.max() ?? 0
+            }
+            align()
+            // A row is one line of text and cannot wrap into cells: a table wider than the pane is shrunk to fit,
+            // and what still does not fit is cut off at the edge (Developer mode shows the full text).
+            if let width, width > 100 {
+                var total = rowWidth()
+                if total > width {
+                    let scale = max(0.62, width / total * 0.97)
+                    let span = NSRange(location: lines[n].full.location, length: NSMaxRange(lines[k - 1].full) - lines[n].full.location)
+                    storage.removeAttribute(.kern, range: span)
+                    for r in rows {
+                        let f = lines[r].full
+                        storage.enumerateAttribute(.font, in: f) { value, sub, _ in
+                            guard let font = value as? NSFont, font.pointSize > 4 else { return }
+                            storage.addAttribute(.font, value: NSFontManager.shared.convert(font, toSize: font.pointSize * scale), range: sub)
+                        }
+                    }
+                    align()
+                    total = rowWidth()
+                    if total > width {
+                        for r in rows {
+                            let f = lines[r].full
+                            let style = ((storage.attribute(.paragraphStyle, at: f.location, effectiveRange: nil) as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
+                            style.lineBreakMode = .byTruncatingTail
+                            storage.addAttribute(.paragraphStyle, value: style, range: f)
+                        }
+                    }
                 }
             }
             n = k

@@ -597,7 +597,6 @@ final class LibraryStore: ObservableObject {
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
-    func tagExists(_ tag: String) -> Bool { tagCache().tagCounts[tag.lowercased()] != nil || allTags.contains { $0.caseInsensitiveCompare(tag) == .orderedSame } }
 
     /// Creates a tag (and returns its stored spelling); an existing tag is returned as it is. Nil for an empty name.
     @discardableResult

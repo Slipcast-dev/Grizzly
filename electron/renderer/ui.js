@@ -260,7 +260,6 @@ function renderToolbar() {
         onclick: () => { const ta = document.querySelector('textarea.editor-text'); if (ta) { ta.focus(); window.api.showEmojiPanel(); } },
       }, '😀')),
   );
-  if ($('side-actions')) renderSideActions();
 }
 
 /** Headings of the open document (declarations for code); a click scrolls to the line. */
@@ -350,17 +349,18 @@ const SECTIONS = [
 function buildSidebarFrame() {
   const side = $('sidebar');
   side.replaceChildren(
+    h('div', { class: 'side-top' },
+      h('div', { class: 'filter' },
+        icon('search', 14),
+        h('input', {
+          id: 'filter-input', type: 'text', placeholder: t('Поиск файлов'), spellcheck: false,
+          oninput: (e) => { SidebarUI.query = e.target.value; renderSidebarList(); renderFilterClear(); },
+        }),
+        h('button', { id: 'filter-clear', class: 'plain', hidden: true, onclick: () => {
+          SidebarUI.query = ''; $('filter-input').value = ''; renderSidebarList(); renderFilterClear();
+        } }, icon('xCircle', 14))),
+      h('button', { class: 'plain sq', id: 'side-add', title: t('Создать или открыть'), onclick: (e) => openCreateMenu(e.currentTarget) }, icon('plus', 17))),
     h('div', { class: 'side-seg', id: 'side-seg' }),
-    h('div', { class: 'filter' },
-      icon('search', 14),
-      h('input', {
-        id: 'filter-input', type: 'text', placeholder: t('Поиск файлов'), spellcheck: false,
-        oninput: (e) => { SidebarUI.query = e.target.value; renderSidebarList(); renderFilterClear(); },
-      }),
-      h('button', { id: 'filter-clear', class: 'plain', hidden: true, onclick: () => {
-        SidebarUI.query = ''; $('filter-input').value = ''; renderSidebarList(); renderFilterClear();
-      } }, icon('xCircle', 14))),
-    h('div', { class: 'side-actions', id: 'side-actions' }),
     h('div', { id: 'side-list', class: 'side-list' }),
     h('div', { id: 'tag-panel', class: 'tag-panel' }),
   );
@@ -376,24 +376,23 @@ function buildSidebarFrame() {
 
 function renderFilterClear() { $('filter-clear').hidden = !SidebarUI.query; }
 
-/** One row of equal buttons for the file actions (new, open, new folder, save as). */
-function renderSideActions() {
-  const noDocs = App.documents.length === 0;
-  const b = (name, title, onclick, disabled) => h('button', { class: 'sq', title, onclick, disabled: !!disabled }, icon(name, 17));
-  $('side-actions').replaceChildren(
-    b('docPlus', t('Новый файл (⌘N)'), () => runCommand('newFile')),
-    b('folder', t('Открыть файл (⌘O)'), () => openFiles()),
-    b('folderPlus', t('Новая папка'), () => { App.ui.sidebarSection = 'files'; SidebarUI.pendingMove = null; App.render(['sidebar']); beginNaming(); }),
-    b('download', t('Сохранить как… (Ctrl+Shift+S)'), () => runCommand('saveAs'), noDocs));
+/** The "+" menu: everything that creates or opens (it replaced a row of icon buttons). */
+function openCreateMenu(anchor) {
+  Menus.below(anchor, [
+    { label: t('Новый файл'), action: () => runCommand('newFile') },
+    { label: t('Открыть файл или папку…'), action: () => openFiles() },
+    { separator: true },
+    { label: t('Новая папка'), action: () => { App.ui.sidebarSection = 'files'; SidebarUI.pendingMove = null; App.render(['sidebar']); beginNaming(); } },
+    { label: t('Сохранить как… (Ctrl+Shift+S)'), disabled: App.documents.length === 0, action: () => runCommand('saveAs') },
+  ]);
 }
 
 function renderSidebar() {
-  renderSideActions();
   const seg = $('side-seg');
   seg.replaceChildren(...SECTIONS.map((s) => h('button', {
     class: App.ui.sidebarSection === s.id ? 'on' : '', title: s.title(),
     onclick: () => { App.ui.sidebarSection = s.id; SidebarUI.tags = []; cancelNaming(); App.render(['sidebar']); },
-  }, icon(s.icon, 17))));
+  }, s.title())));
   renderSidebarList();
   renderTagPanel();
 }
@@ -1847,7 +1846,7 @@ function updatesCard() {
     if (U.phase === 'installing') kids.push(h('div', null, t('Устанавливаем… Grizzly перезапустится.')));
     if (U.phase === 'failed') kids.push(h('div', { class: 'warn' }, U.message));
     box.replaceChildren(
-      h('div', { class: 'srow' }, h('div', { class: 'slabel' }, t('Установленная версия')), h('span', null, appVersion)),
+      h('div', { class: 'srow' }, h('div', { class: 'slabel' }, t('Установленная версия')), h('span', null, appCodename ? appVersion + ' ' + appCodename : appVersion)),
       h('div', { class: 'btn-row' }, h('button', { class: 'btn', disabled: busy, onclick: () => checkForUpdates(false) }, t('Проверить обновления'))),
       ...kids,
       h('div', { class: 'small muted' }, t('Grizzly проверяет GitHub при каждом запуске. Новая версия скачивается и устанавливается прямо из приложения.')));
@@ -1892,8 +1891,10 @@ function openUpdateDialog() {
 }
 
 let appVersion = '';
-function initUpdates(version) {
+let appCodename = '';
+function initUpdates(version, codename) {
   appVersion = version;
+  appCodename = codename || '';
   window.api.onUpdateProgress((p) => Update.set({ progress: p }));
 }
 

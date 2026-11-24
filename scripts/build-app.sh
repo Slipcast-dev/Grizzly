@@ -50,6 +50,7 @@ cat > "$APP/Contents/Info.plist" <<EOF
   <key>CFBundleExecutable</key><string>Grizzly</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$(tr -d "[:space:]" < VERSION)</string>
+  <key>GrizzlyCodename</key><string>$(tr -d "[:space:]" < CODENAME)</string>
   <key>CFBundleVersion</key><string>1</string>
   <key>NSHumanReadableCopyright</key><string>Copyright © 2026 Slipcast-dev. All rights reserved.</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
